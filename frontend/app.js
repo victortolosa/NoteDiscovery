@@ -33,6 +33,18 @@ const CONFIG = {
 /** Heroicons outline "share" (same d= as shared-note icon in the file tree) */
 const SHARE_ICON_PATH = 'M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z';
 
+// Accent colors for homepage folder icon tiles (picked deterministically per folder)
+const FOLDER_COLOR_PALETTE = [
+    { fg: '#60a5fa', bg: 'rgba(96, 165, 250, 0.10)' },   // blue
+    { fg: '#4ade80', bg: 'rgba(74, 222, 128, 0.10)' },   // green
+    { fg: '#c084fc', bg: 'rgba(192, 132, 252, 0.10)' },  // purple
+    { fg: '#fbbf24', bg: 'rgba(251, 191, 36, 0.10)' },   // amber
+    { fg: '#2dd4bf', bg: 'rgba(45, 212, 191, 0.10)' },   // teal
+    { fg: '#f87171', bg: 'rgba(248, 113, 113, 0.10)' },  // red
+    { fg: '#f472b6', bg: 'rgba(244, 114, 182, 0.10)' },  // pink
+    { fg: '#818cf8', bg: 'rgba(129, 140, 248, 0.10)' },  // indigo
+];
+
 // localStorage settings configuration - centralized definition of all persisted settings
 const LOCAL_SETTINGS = {
     // Boolean settings
@@ -502,6 +514,7 @@ function noteApp() {
         
         // Homepage state
         selectedHomepageFolder: '',
+        openFolderMenu: null,  // path of the folder card whose "..." menu is open (one at a time)
         _homepageCache: {
             folderPath: null,
             notes: null,
@@ -566,7 +579,8 @@ function noteApp() {
                     name: folder.name,
                     path: folder.path,
                     noteCount: folder.noteCount || 0,  // Use pre-calculated count
-                    starred: _starredSet.has(folder.path)
+                    starred: _starredSet.has(folder.path),
+                    color: this.folderColor(folder.path)
                 }))
                 .sort((a, b) => {
                     if (a.starred !== b.starred) return a.starred ? -1 : 1;
@@ -583,21 +597,11 @@ function noteApp() {
         // Deterministic accent color for a folder's icon tile, hashed from its
         // path so every folder keeps a stable color across renders and devices.
         folderColor(path) {
-            const palette = [
-                { fg: '#60a5fa', bg: 'rgba(96, 165, 250, 0.10)' },   // blue
-                { fg: '#4ade80', bg: 'rgba(74, 222, 128, 0.10)' },   // green
-                { fg: '#c084fc', bg: 'rgba(192, 132, 252, 0.10)' },  // purple
-                { fg: '#fbbf24', bg: 'rgba(251, 191, 36, 0.10)' },   // amber
-                { fg: '#2dd4bf', bg: 'rgba(45, 212, 191, 0.10)' },   // teal
-                { fg: '#f87171', bg: 'rgba(248, 113, 113, 0.10)' },  // red
-                { fg: '#f472b6', bg: 'rgba(244, 114, 182, 0.10)' },  // pink
-                { fg: '#818cf8', bg: 'rgba(129, 140, 248, 0.10)' },  // indigo
-            ];
             let hash = 0;
             for (let i = 0; i < path.length; i++) {
                 hash = (hash * 31 + path.charCodeAt(i)) >>> 0;
             }
-            return palette[hash % palette.length];
+            return FOLDER_COLOR_PALETTE[hash % FOLDER_COLOR_PALETTE.length];
         },
 
         homepageBreadcrumb() {
@@ -2528,6 +2532,9 @@ function noteApp() {
             } else {
                 this.starredFolders = this.starredFolders.filter(p => p !== path);
             }
+            // Invalidate the cached homepage folder list so the grid re-sorts
+            // and the star indicator updates without a folder navigation
+            this._homepageCache.folders = null;
             this.saveFavorites();
         },
 

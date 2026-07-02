@@ -24,7 +24,8 @@
     "saving": "Saving...",
     "copied": "Copied!",
     "copy_to_clipboard": "Copy to clipboard",
-    "failed": "Failed to {{action}}. Please try again."
+    "failed": "Failed to {{action}}. Please try again.",
+    "more_options": "More options"
   },
   "toast": {
     "region_label": "Notifications",
