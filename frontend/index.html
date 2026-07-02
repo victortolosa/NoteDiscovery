@@ -2808,12 +2808,9 @@
                     <!-- Grid View - Show when app has content -->
                     <template x-if="!isAppEmpty">
                         <div class="max-w-7xl mx-auto p-6 md:p-8">
-                            <!-- Header -->
-                            <div class="mb-6">
-                                <h1 class="text-3xl font-bold mb-2" style="color: var(--text-primary);" x-text="appName"></h1>
-                                <p class="text-lg" style="color: var(--text-secondary);" x-text="t('app.tagline')"></p>
-                                <!-- Demo Mode Warning Banner -->
-                                <div x-show="demoMode" class="mt-4 flex items-center px-4 py-2.5 text-sm rounded-lg" style="background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%); color: white; font-weight: 500;">
+                            <!-- Demo Mode Warning Banner -->
+                            <div>
+                                <div x-show="demoMode" class="mb-6 flex items-center px-4 py-2.5 text-sm rounded-lg" style="background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%); color: white; font-weight: 500;">
                                     <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                                     </svg>
@@ -2821,51 +2818,50 @@
                                 </div>
                             </div>
                             
-                            <!-- Breadcrumb Navigation -->
-                            <div class="mb-4 flex items-center gap-2 text-sm" style="color: var(--text-secondary);">
-                                <template x-if="Array.isArray(homepageBreadcrumb())">
-                                    <template x-for="(crumb, index) in homepageBreadcrumb()" :key="index">
-                                        <div class="flex items-center gap-2">
-                                            <span 
-                                                x-show="index > 0"
-                                                class="text-xs"
-                                                style="color: var(--text-tertiary);"
-                                            >/</span>
-                                            <span 
-                                                @click="goToHomepageFolder(crumb.path)"
-                                                class="cursor-pointer hover:underline"
-                                                :style="crumb.path === selectedHomepageFolder ? 'color: var(--accent-primary); font-weight: 600;' : 'color: var(--text-secondary);'"
-                                                x-text="crumb.name"
-                                            ></span>
-                </div>
-            </template>
-                                </template>
-                            </div>
-                            
-                            <!-- Stats Bar - Only show when there are notes or folders -->
-                            <template x-if="homepageNotes().length > 0 || homepageFolders().length > 0">
-                                <div class="mb-6 p-4 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-primary);">
-                                    <div class="flex flex-wrap items-center gap-4 text-sm" style="color: var(--text-secondary);">
-                                        <span class="font-semibold" style="color: var(--text-primary);">
-                                            <span x-text="homepageNotes().length"></span> 
-                                            <span x-text="homepageNotes().length === 1 ? t('homepage.note_singular') : t('homepage.note_plural')"></span>
-                                        </span>
-                                        <span x-show="homepageFolders().length > 0">
-                                            <span x-text="homepageFolders().length"></span> 
-                                            <span x-text="homepageFolders().length === 1 ? t('homepage.folder_singular') : t('homepage.folder_plural')"></span>
-                                        </span>
-                                        <button 
+                            <!-- Top bar: breadcrumbs left, counts + New right -->
+                            <div class="mb-6 flex items-center justify-between gap-4">
+                                <div class="flex items-center gap-2 text-sm min-w-0 flex-wrap" style="color: var(--text-secondary);">
+                                    <template x-if="Array.isArray(homepageBreadcrumb())">
+                                        <template x-for="(crumb, index) in homepageBreadcrumb()" :key="index">
+                                            <div class="flex items-center gap-2">
+                                                <span
+                                                    x-show="index > 0"
+                                                    class="text-xs"
+                                                    style="color: var(--text-tertiary);"
+                                                >/</span>
+                                                <span
+                                                    @click="goToHomepageFolder(crumb.path)"
+                                                    class="cursor-pointer hover:underline"
+                                                    :style="crumb.path === selectedHomepageFolder ? 'color: var(--accent-primary); font-weight: 600;' : 'color: var(--text-secondary);'"
+                                                    x-text="crumb.name"
+                                                ></span>
+                                            </div>
+                                        </template>
+                                    </template>
+                                </div>
+                                <template x-if="homepageNotes().length > 0 || homepageFolders().length > 0">
+                                    <div class="flex items-center gap-4 flex-shrink-0">
+                                        <div class="flex items-center gap-2 text-sm" style="color: var(--text-tertiary);">
+                                            <span class="font-semibold" style="color: var(--text-secondary);">
+                                                <span x-text="homepageNotes().length"></span>
+                                                <span x-text="homepageNotes().length === 1 ? t('homepage.note_singular') : t('homepage.note_plural')"></span>
+                                            </span>
+                                            <span x-show="homepageFolders().length > 0" style="opacity: 0.5;">•</span>
+                                            <span x-show="homepageFolders().length > 0">
+                                                <span x-text="homepageFolders().length"></span>
+                                                <span x-text="homepageFolders().length === 1 ? t('homepage.folder_singular') : t('homepage.folder_plural')"></span>
+                                            </span>
+                                        </div>
+                                        <button
                                             @click="dropdownTargetFolder = selectedHomepageFolder; toggleNewDropdown($event)"
-                                            class="ml-auto px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors"
-                                            style="background-color: var(--accent-primary);"
-                                            onmouseover="this.style.backgroundColor='var(--accent-hover)'"
-                                            onmouseout="this.style.backgroundColor='var(--accent-primary)'"
+                                            class="px-4 py-2 text-sm font-semibold rounded-lg transition-all hover:opacity-90"
+                                            style="background-color: var(--text-primary); color: var(--bg-primary);"
                                         >
                                             <span x-text="t('sidebar.new_button')"></span>
                                         </button>
                                     </div>
-                                </div>
-                            </template>
+                                </template>
+                            </div>
                             
                             <!-- Empty State (for folder view) -->
                             <template x-if="homepageNotes().length === 0 && homepageFolders().length === 0">
@@ -2887,106 +2883,130 @@
                                 </div>
                             </template>
                             
-                            <!-- Folders and Notes: two-column list layout -->
+                            <!-- Folders grid + Files list -->
                             <template x-if="homepageNotes().length > 0 || homepageFolders().length > 0">
                                 <div
-                                    class="flex flex-col xl:flex-row gap-6"
                                     x-data="{ hpFolders: [], hpNotes: [] }"
                                     x-init="hpFolders = homepageFolders(); hpNotes = homepageNotes()"
                                     x-effect="hpFolders = homepageFolders(); hpNotes = homepageNotes()"
                                 >
-                                    <div class="xl:w-1/2 min-w-0">
-                                        <div class="mb-3">
-                                            <h3 class="text-lg font-semibold" style="color: var(--text-primary)" x-text="t('homepage.folder_plural')"></h3>
-                                        </div>
-                                        <div class="space-y-2">
+                                    <!-- Folders: responsive card grid -->
+                                    <div x-show="hpFolders.length > 0" class="mb-8">
+                                        <h3 class="text-lg font-semibold mb-3" style="color: var(--text-primary)" x-text="t('homepage.folders_heading')"></h3>
+                                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                                             <template x-for="folder in hpFolders" :key="folder.path">
-                                                <div
-                                                    @click="goToHomepageFolder(folder.path)"
-                                                    class="group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:shadow-sm"
-                                                    style="background-color: var(--bg-secondary); border: 1px solid var(--border-primary);"
-                                                    onmouseover="this.style.backgroundColor = 'var(--bg-hover)'; this.style.borderColor = 'var(--accent-primary)'"
-                                                    onmouseout="this.style.backgroundColor = 'var(--bg-secondary)'; this.style.borderColor = 'var(--border-primary)'"
-                                                >
-                                                    <div class="flex items-center gap-2 flex-1 min-w-0">
-                                                        <svg class="w-5 h-5 flex-shrink-0" style="color: var(--accent-primary)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
-                                                        </svg>
-                                                        <span class="font-medium truncate" style="color: var(--text-primary)" x-text="folder.name"></span>
-                                                    </div>
-                                                    <div class="flex items-center gap-2 text-xs" style="color: var(--text-tertiary)">
-                                                        <span x-text="folder.noteCount + ' ' + (folder.noteCount === 1 ? t('homepage.note_singular') : t('homepage.note_plural'))"></span>
-                                                        <button
-                                                            @click.stop="toggleStarFolder(folder.path)"
-                                                            :style="{ color: folder.starred ? 'var(--warning, #eab308)' : 'var(--text-tertiary)' }"
-                                                            class="p-1 rounded"
-                                                            style="background-color: var(--bg-hover);"
-                                                            :title="folder.starred ? t('toolbar.unstar_folder') : t('toolbar.star_folder')"
+                                                <div class="relative" x-data="{ menuOpen: false }">
+                                                    <div
+                                                        @click="goToHomepageFolder(folder.path)"
+                                                        class="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all"
+                                                        style="background-color: var(--bg-secondary); border: 1px solid var(--border-primary);"
+                                                        onmouseover="this.style.backgroundColor = 'var(--bg-hover)'; this.style.borderColor = 'var(--border-secondary)'"
+                                                        onmouseout="this.style.backgroundColor = 'var(--bg-secondary)'; this.style.borderColor = 'var(--border-primary)'"
+                                                    >
+                                                        <div
+                                                            class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                                                            :style="{ backgroundColor: folderColor(folder.path).bg }"
                                                         >
-                                                            <svg class="w-4 h-4" viewBox="0 0 24 24" :fill="folder.starred ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                            <svg class="w-5 h-5" :style="{ color: folderColor(folder.path).fg }" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                                            </svg>
+                                                        </div>
+                                                        <div class="flex-1 min-w-0">
+                                                            <div class="flex items-center gap-1.5 min-w-0">
+                                                                <span class="font-semibold truncate" style="color: var(--text-primary)" x-text="folder.name"></span>
+                                                                <svg x-show="folder.starred" class="w-3.5 h-3.5 flex-shrink-0" style="color: var(--warning, #eab308)" viewBox="0 0 24 24" fill="currentColor">
+                                                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                                                                </svg>
+                                                            </div>
+                                                            <div class="text-xs mt-0.5" style="color: var(--text-tertiary)" x-text="folder.noteCount + ' ' + (folder.noteCount === 1 ? t('homepage.note_singular') : t('homepage.note_plural'))"></div>
+                                                        </div>
+                                                        <button
+                                                            @click.stop="menuOpen = !menuOpen"
+                                                            class="p-1.5 rounded-md flex-shrink-0 transition-colors"
+                                                            style="color: var(--text-tertiary);"
+                                                            onmouseover="this.style.backgroundColor = 'var(--bg-tertiary)'"
+                                                            onmouseout="this.style.backgroundColor = 'transparent'"
+                                                            title="More options"
+                                                        >
+                                                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                                                <circle cx="5" cy="12" r="1.6"></circle>
+                                                                <circle cx="12" cy="12" r="1.6"></circle>
+                                                                <circle cx="19" cy="12" r="1.6"></circle>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                    <!-- Folder card overflow menu -->
+                                                    <div
+                                                        x-show="menuOpen"
+                                                        @click.outside="menuOpen = false"
+                                                        x-transition:enter="transition ease-out duration-100"
+                                                        x-transition:enter-start="opacity-0 scale-95"
+                                                        x-transition:enter-end="opacity-100 scale-100"
+                                                        class="absolute right-2 top-full -mt-1 z-20 w-44 rounded-lg shadow-lg overflow-hidden"
+                                                        style="background-color: var(--bg-tertiary); border: 1px solid var(--border-primary);"
+                                                    >
+                                                        <button
+                                                            @click.stop="toggleStarFolder(folder.path); menuOpen = false"
+                                                            class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors"
+                                                            style="color: var(--text-primary);"
+                                                            onmouseover="this.style.backgroundColor = 'var(--bg-hover)'"
+                                                            onmouseout="this.style.backgroundColor = 'transparent'"
+                                                        >
+                                                            <svg class="w-4 h-4" style="color: var(--warning, #eab308)" viewBox="0 0 24 24" :fill="folder.starred ? 'none' : 'currentColor'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                                                             </svg>
+                                                            <span x-text="folder.starred ? t('toolbar.unstar_folder') : t('toolbar.star_folder')"></span>
                                                         </button>
                                                         <button
-                                                            @click.stop="deleteFolder(folder.path, folder.name)"
-                                                            class="p-1 rounded text-red-500"
-                                                            style="background-color: var(--bg-hover);"
-                                                            :title="t('common.delete')"
+                                                            @click.stop="menuOpen = false; deleteFolder(folder.path, folder.name)"
+                                                            class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors"
+                                                            style="color: var(--error, #ef4444);"
+                                                            onmouseover="this.style.backgroundColor = 'var(--bg-hover)'"
+                                                            onmouseout="this.style.backgroundColor = 'transparent'"
                                                         >
                                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                                             </svg>
+                                                            <span x-text="t('common.delete')"></span>
                                                         </button>
                                                     </div>
                                                 </div>
                                             </template>
-                                            <div x-show="hpFolders.length === 0" class="text-center py-8">
-                                                <span class="text-sm" style="color: var(--text-tertiary)">No folders</span>
-                                            </div>
                                         </div>
                                     </div>
-                                    <div class="xl:w-1/2 min-w-0">
-                                        <div class="mb-3">
-                                            <h3 class="text-lg font-semibold" style="color: var(--text-primary)" x-text="t('homepage.note_plural')"></h3>
-                                        </div>
-                                        <div class="space-y-2">
-                                            <template x-for="note in hpNotes.slice(0, HOMEPAGE_MAX_NOTES)" :key="note.path">
+
+                                    <!-- Files: full-width divided list -->
+                                    <div x-show="hpNotes.length > 0">
+                                        <h3 class="text-lg font-semibold mb-3" style="color: var(--text-primary)" x-text="t('homepage.files_heading')"></h3>
+                                        <div class="rounded-xl overflow-hidden" style="background-color: var(--bg-secondary); border: 1px solid var(--border-primary);">
+                                            <template x-for="(note, noteIdx) in hpNotes.slice(0, HOMEPAGE_MAX_NOTES)" :key="note.path">
                                                 <div
                                                     @click="openItem(note.path, note.type)"
-                                                    class="group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:shadow-sm"
-                                                    style="background-color: var(--bg-secondary); border: 1px solid var(--border-primary);"
-                                                    onmouseover="this.style.backgroundColor = 'var(--bg-hover)'; this.style.borderColor = 'var(--accent-primary)'"
-                                                    onmouseout="this.style.backgroundColor = 'var(--bg-secondary)'; this.style.borderColor = 'var(--border-primary)'"
+                                                    class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors"
+                                                    :style="noteIdx > 0 ? 'border-top: 1px solid var(--border-primary);' : ''"
+                                                    onmouseover="this.style.backgroundColor = 'var(--bg-hover)'"
+                                                    onmouseout="this.style.backgroundColor = 'transparent'"
                                                 >
-                                                    <div class="flex items-center gap-2 flex-1 min-w-0">
-                                                        <svg
-                                                            class="w-5 h-5 flex-shrink-0"
-                                                            :style="{ color: note.type === 'note' ? 'var(--text-secondary)' : 'var(--accent-primary)' }"
-                                                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                                                        >
-                                                            <path x-show="note.type === 'note'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                                            <path x-show="note.type !== 'note'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                                    <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style="background-color: var(--bg-tertiary);">
+                                                        <svg class="w-5 h-5" style="color: var(--text-secondary);" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                            <path x-show="note.type === 'note'" stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                            <path x-show="note.type !== 'note'" stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                                         </svg>
-                                                        <span class="font-medium truncate" style="color: var(--text-primary)" x-text="note.name"></span>
                                                     </div>
-                                                    <div class="flex items-center gap-2 text-xs" style="color: var(--text-tertiary)">
-                                                        <span x-text="note.type === 'note' ? formatDate(note.modified) : formatSize(note.size || 0)"></span>
-                                                        <button
-                                                            @click.stop="note.type !== 'note' ? deleteMedia(note.path) : deleteNote(note.path, note.name)"
-                                                            class="p-1 rounded text-red-500"
-                                                            style="background-color: var(--bg-hover);"
-                                                            :title="t('common.delete')"
-                                                        >
-                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                                            </svg>
-                                                        </button>
-                                                    </div>
+                                                    <span class="font-medium truncate flex-1 min-w-0" style="color: var(--text-primary)" x-text="note.name"></span>
+                                                    <span class="text-sm flex-shrink-0" style="color: var(--text-tertiary)" x-text="note.type === 'note' ? formatDate(note.modified) : formatSize(note.size || 0)"></span>
+                                                    <button
+                                                        @click.stop="note.type !== 'note' ? deleteMedia(note.path) : deleteNote(note.path, note.name)"
+                                                        class="p-2 rounded-lg flex-shrink-0 transition-all hover:brightness-125"
+                                                        style="background-color: rgba(239, 68, 68, 0.08); color: var(--error, #ef4444);"
+                                                        :title="t('common.delete')"
+                                                    >
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                        </svg>
+                                                    </button>
                                                 </div>
                                             </template>
-                                            <div x-show="hpNotes.length === 0" class="text-center py-8">
-                                                <span class="text-sm" style="color: var(--text-tertiary)">No files</span>
-                                            </div>
                                         </div>
                                     </div>
                                 </div>

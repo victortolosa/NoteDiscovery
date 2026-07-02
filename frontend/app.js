@@ -576,10 +576,30 @@ function noteApp() {
             // Cache the result
             this._homepageCache.folders = result;
             this._homepageCache.folderPath = this.selectedHomepageFolder;
-            
+
             return result;
         },
-        
+
+        // Deterministic accent color for a folder's icon tile, hashed from its
+        // path so every folder keeps a stable color across renders and devices.
+        folderColor(path) {
+            const palette = [
+                { fg: '#60a5fa', bg: 'rgba(96, 165, 250, 0.10)' },   // blue
+                { fg: '#4ade80', bg: 'rgba(74, 222, 128, 0.10)' },   // green
+                { fg: '#c084fc', bg: 'rgba(192, 132, 252, 0.10)' },  // purple
+                { fg: '#fbbf24', bg: 'rgba(251, 191, 36, 0.10)' },   // amber
+                { fg: '#2dd4bf', bg: 'rgba(45, 212, 191, 0.10)' },   // teal
+                { fg: '#f87171', bg: 'rgba(248, 113, 113, 0.10)' },  // red
+                { fg: '#f472b6', bg: 'rgba(244, 114, 182, 0.10)' },  // pink
+                { fg: '#818cf8', bg: 'rgba(129, 140, 248, 0.10)' },  // indigo
+            ];
+            let hash = 0;
+            for (let i = 0; i < path.length; i++) {
+                hash = (hash * 31 + path.charCodeAt(i)) >>> 0;
+            }
+            return palette[hash % palette.length];
+        },
+
         homepageBreadcrumb() {
             // Return cached result if folder hasn't changed
             if (this._homepageCache.folderPath === this.selectedHomepageFolder && this._homepageCache.breadcrumb) {
