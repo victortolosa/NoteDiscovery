@@ -299,6 +299,12 @@ function noteApp() {
         _staleCheckInFlight: false,
         _staleCheckInterval: null,
 
+        // Tab bar — horizontal tabs for open notes (persisted to localStorage)
+        openTabs: JSON.parse(localStorage.getItem('openTabs') || '[]'),
+        _maxTabs: 20,
+        _dragTabIndex: null,
+        _dragTabTarget: null,
+
         // Note lookup maps for O(1) wikilink resolution (built on loadNotes)
         _noteLookup: {
             byPath: new Map(),           // path -> true
@@ -350,9 +356,6 @@ function noteApp() {
         // Starred folders — shown first in the folder grid view and in the sidebar
         starredFolders: JSON.parse(localStorage.getItem('starredFolders') || '[]'),
         starredFoldersExpanded: localStorage.getItem('starredFoldersExpanded') !== 'false',
-
-        // Desktop sidebar collapsed state (synced across devices via /api/favorites)
-        sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true',
 
         // Tab key inserts tab character instead of changing focus
         tabInsertsTab: localStorage.getItem('tabInsertsTab') === 'true',
@@ -864,6 +867,27 @@ function noteApp() {
                         }
                     }
                     
+                    // Ctrl/Cmd + W to close active tab
+                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
+                        e.preventDefault();
+                        const idx = this.openTabs.findIndex(t => t.path === this.currentNote);
+                        if (idx !== -1) this.closeTab(idx);
+                        return;
+                    }
+
+                    // Ctrl+Tab / Ctrl+Shift+Tab to cycle tabs
+                    if (e.ctrlKey && e.key === 'Tab') {
+                        e.preventDefault();
+                        if (this.openTabs.length <= 1) return;
+                        const curIdx = this.openTabs.findIndex(t => t.path === this.currentNote);
+                        if (curIdx === -1) return;
+                        const next = e.shiftKey
+                            ? (curIdx - 1 + this.openTabs.length) % this.openTabs.length
+                            : (curIdx + 1) % this.openTabs.length;
+                        this.switchTab(next);
+                        return;
+                    }
+
                     // Ctrl/Cmd + Alt + P for Quick Switcher
                     if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'p') {
                         e.preventDefault();
@@ -2047,10 +2071,11 @@ function noteApp() {
                     // Set cursor position and scroll
                     textarea.focus();
                     textarea.setSelectionRange(charPos, charPos);
-                    
-                    // Calculate scroll position (approximate)
+
+                    const positions = this.getEditorHeadingMetrics();
                     const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 24;
-                    const scrollTop = (heading.line - 1) * lineHeight - textarea.clientHeight / 3;
+                    const headingTop = positions?.get(heading);
+                    const scrollTop = (headingTop ?? ((heading.line - 1) * lineHeight)) - textarea.clientHeight / 3;
                     textarea.scrollTop = Math.max(0, scrollTop);
                 }
             }
@@ -2170,7 +2195,7 @@ function noteApp() {
             const snapshot = {
                 notes: [...this.favorites],
                 folders: [...this.starredFolders],
-                preferences: { sidebarCollapsed: this.sidebarCollapsed }
+                preferences: {}
             };
             this._saveFavoritesTimer = setTimeout(() => {
                 fetch('/api/favorites', {
@@ -2195,7 +2220,6 @@ function noteApp() {
 
                 const serverNotes = Array.isArray(data) ? data : (data.notes ?? []);
                 const serverFolders = Array.isArray(data) ? [] : (data.folders ?? []);
-                const serverPrefs = (!Array.isArray(data) && data.preferences) ? data.preferences : {};
 
                 const hasServerData = serverNotes.length > 0 || serverFolders.length > 0;
                 const hasLocalData = this.favorites.length > 0 || this.starredFolders.length > 0;
@@ -2204,7 +2228,7 @@ function noteApp() {
                     fetch('/api/favorites', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ notes: this.favorites, folders: this.starredFolders, preferences: { sidebarCollapsed: this.sidebarCollapsed } })
+                        body: JSON.stringify({ notes: this.favorites, folders: this.starredFolders, preferences: {} })
                     }).catch(e => console.warn('Could not migrate favorites to server:', e));
                     return;
                 }
@@ -2212,10 +2236,6 @@ function noteApp() {
                 this.favorites = serverNotes;
                 this.favoritesSet = new Set(serverNotes);
                 this.starredFolders = serverFolders;
-                if (typeof serverPrefs.sidebarCollapsed === 'boolean') {
-                    this.sidebarCollapsed = serverPrefs.sidebarCollapsed;
-                    localStorage.setItem('sidebarCollapsed', serverPrefs.sidebarCollapsed.toString());
-                }
                 try {
                     localStorage.setItem('noteFavorites', JSON.stringify(serverNotes));
                     localStorage.setItem('starredFolders', JSON.stringify(serverFolders));
@@ -2223,6 +2243,186 @@ function noteApp() {
             } catch (e) {
                 console.warn('Could not load favorites from server, using local cache:', e);
             }
+        },
+
+        // --- Tab bar methods ---
+
+        _tabDragStart(index) {
+            this._dragTabIndex = index;
+        },
+
+        _tabDragOver(e, index) {
+            e.preventDefault();
+            this._dragTabTarget = index;
+        },
+
+        _tabDrop(index) {
+            if (this._dragTabIndex === null || this._dragTabIndex === index) {
+                this._dragTabTarget = null;
+                return;
+            }
+            const tabs = [...this.openTabs];
+            const [moved] = tabs.splice(this._dragTabIndex, 1);
+            tabs.splice(index, 0, moved);
+            this.openTabs = tabs;
+            this._persistTabs();
+            this._dragTabIndex = null;
+            this._dragTabTarget = null;
+        },
+
+        _tabDragEnd() {
+            this._dragTabIndex = null;
+            this._dragTabTarget = null;
+        },
+
+        // Add a note to the tab bar (or switch to it if already open)
+        addTab(notePath) {
+            const existing = this.openTabs.findIndex(t => t.path === notePath);
+            if (existing !== -1) {
+                // Already open — just ensure we're looking at it
+                this._persistTabs();
+                return;
+            }
+            const name = notePath.split('/').pop().replace('.md', '');
+            // Evict oldest non-active tab if at capacity
+            if (this.openTabs.length >= this._maxTabs) {
+                const evictIdx = this.openTabs.findIndex(t => t.path !== this.currentNote);
+                if (evictIdx !== -1) {
+                    this.openTabs.splice(evictIdx, 1);
+                }
+            }
+            this.openTabs.push({ path: notePath, name });
+            this._persistTabs();
+        },
+
+        // Close a tab by index; load an adjacent tab or go home
+        closeTab(index) {
+            const tab = this.openTabs[index];
+            if (!tab) return;
+            const wasActive = tab.path === this.currentNote;
+            this.openTabs.splice(index, 1);
+            this._persistTabs();
+            if (wasActive) {
+                if (this.openTabs.length > 0) {
+                    // Switch to the nearest tab (prefer right, then left)
+                    const newIdx = Math.min(index, this.openTabs.length - 1);
+                    this.loadNote(this.openTabs[newIdx].path);
+                } else {
+                    // No tabs left — go home
+                    this.currentNote = '';
+                    this.noteContent = '';
+                    this.currentNoteName = '';
+                    this._lastRenderedContent = '';
+                    this._cachedRenderedHTML = '';
+                    document.title = this.appName;
+                    window.history.replaceState({ homepageFolder: this.selectedHomepageFolder || '' }, '', '/');
+                }
+            }
+        },
+
+        // Close all tabs except the one at the given index
+        closeOtherTabs(index) {
+            const keep = this.openTabs[index];
+            if (!keep) return;
+            this.openTabs = [keep];
+            this._persistTabs();
+            if (keep.path !== this.currentNote) {
+                this.loadNote(keep.path);
+            }
+        },
+
+        // Close all tabs to the right of the given index
+        closeTabsToRight(index) {
+            this.openTabs = this.openTabs.slice(0, index + 1);
+            this._persistTabs();
+            // If active tab was removed, load the rightmost remaining
+            if (this.currentNote && !this.openTabs.find(t => t.path === this.currentNote)) {
+                const last = this.openTabs[this.openTabs.length - 1];
+                if (last) this.loadNote(last.path);
+                else {
+                    this.currentNote = '';
+                    this.noteContent = '';
+                    this.currentNoteName = '';
+                    document.title = this.appName;
+                    window.history.replaceState({ homepageFolder: this.selectedHomepageFolder || '' }, '', '/');
+                }
+            }
+        },
+
+        // Switch to a tab (load its note)
+        switchTab(index) {
+            const tab = this.openTabs[index];
+            if (!tab || tab.path === this.currentNote) return;
+            this.loadNote(tab.path);
+        },
+
+        // Remove a tab by note path (used by delete/rename)
+        _removeTabByPath(notePath) {
+            const idx = this.openTabs.findIndex(t => t.path === notePath);
+            if (idx !== -1) {
+                this.openTabs.splice(idx, 1);
+                this._persistTabs();
+            }
+        },
+
+        // Update a tab's path and name (used by rename)
+        _updateTabPath(oldPath, newPath) {
+            const tab = this.openTabs.find(t => t.path === oldPath);
+            if (tab) {
+                tab.path = newPath;
+                tab.name = newPath.split('/').pop().replace('.md', '');
+                this._persistTabs();
+            }
+        },
+
+        // Persist tabs to localStorage
+        _persistTabs() {
+            try {
+                localStorage.setItem('openTabs', JSON.stringify(this.openTabs));
+            } catch (e) { /* ignore */ }
+        },
+
+        // Save note content to localStorage for instant tab switching (stale-while-revalidate)
+        _saveTabCache(notePath, data) {
+            try {
+                localStorage.setItem('tabContent:' + notePath, JSON.stringify({
+                    content: data.content,
+                    backlinks: data.backlinks || [],
+                    ts: Date.now()
+                }));
+            } catch (e) { /* quota exceeded or private mode */ }
+        },
+
+        // Read note content from localStorage; returns null if missing or older than 1 hour
+        _loadTabCache(notePath) {
+            try {
+                const raw = localStorage.getItem('tabContent:' + notePath);
+                if (!raw) return null;
+                const cached = JSON.parse(raw);
+                if (Date.now() - cached.ts > 3600000) {
+                    localStorage.removeItem('tabContent:' + notePath);
+                    return null;
+                }
+                return cached;
+            } catch (e) { return null; }
+        },
+
+        // Background revalidation after a cache hit — keeps cache warm and triggers the stale
+        // banner if the server version differs from what the user currently sees.
+        async _revalidateTabBackground(notePath) {
+            try {
+                const response = await fetch(`/api/notes/${notePath}`);
+                if (!response.ok) return;
+                const data = await response.json();
+                this._saveTabCache(notePath, data);
+                if (this.currentNote !== notePath) return;
+                const sig = response.headers.get('etag') || response.headers.get('last-modified') || '';
+                if (sig) this._staleServerSignature = sig;
+                if (data.content !== this._savedContent) {
+                    this.staleServerContent = data.content;
+                    this.staleContent = true;
+                }
+            } catch (e) { /* network error */ }
         },
 
         // Toggle star state for a folder (starred folders appear first in the grid view and in the sidebar)
@@ -2606,6 +2806,7 @@ function noteApp() {
             const path = el.dataset.path;
             if (path !== this.currentNote && path !== this.currentMedia) {
                 el.style.backgroundColor = isEnter ? 'var(--bg-hover)' : 'transparent';
+                el.style.color = isEnter ? 'white' : 'var(--text-primary)';
             }
             // Prefetch note content after a brief hover delay (notes only, not media)
             const type = el.dataset.type;
@@ -2758,7 +2959,7 @@ function noteApp() {
                     ondragend="window.$root.onItemDragEnd()"
                     onclick="window.$root.handleItemClick(this)"
                     class="note-item px-2 py-1 text-sm relative"
-                    style="${isCurrent ? 'background-color: var(--accent-light); color: var(--accent-primary);' : 'color: var(--text-primary);'} ${isMediaFile ? 'opacity: 0.85;' : ''} cursor: pointer;"
+                    style="${isCurrent ? 'background-color: var(--accent-primary); color: white;' : 'color: var(--text-primary);'} ${isMediaFile ? 'opacity: 0.85;' : ''} cursor: pointer;"
                     onmouseover="window.$root.handleItemHover(this, true)"
                     onmouseout="window.$root.handleItemHover(this, false)"
                 >
@@ -4519,33 +4720,61 @@ function noteApp() {
         // Load a specific note
         async loadNote(notePath, updateHistory = true, searchQuery = '') {
             try {
-                // Close mobile sidebar when a note is selected
-                this.mobileSidebarOpen = false;
-                this.loadingNote = true;
-
-                const response = await fetch(`/api/notes/${notePath}`);
-
-                // Check if note exists
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        // Note not found - silently redirect to home
-                        window.history.replaceState({ homepageFolder: this.selectedHomepageFolder || '' }, '', '/');
-                        this.currentNote = '';
-                        this.noteContent = '';
-                        if (this.currentMediaType === 'drawing') {
-                            this._drawingDisconnectResizeObserver();
-                        }
-                        this.currentMedia = '';
-                        this.loadingNote = false;
-                        document.title = this.appName;
-                        return;
-                    }
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                // Flush any pending autosave for the note we're leaving
+                if (this.saveTimeout) {
+                    clearTimeout(this.saveTimeout);
+                    this.saveTimeout = null;
+                    await this.saveNote();
                 }
 
-                this._staleServerSignature = response.headers.get('etag') || response.headers.get('last-modified') || '';
-                const data = await response.json();
-                this.loadingNote = false;
+                // Close mobile sidebar when a note is selected
+                this.mobileSidebarOpen = false;
+
+                // Use prefetch cache if available and fresh (30-second TTL)
+                const _cached = this._noteCache.get(notePath);
+                let data;
+                if (_cached && (Date.now() - _cached.timestamp < 30000)) {
+                    this._noteCache.delete(notePath);
+                    this._noteCache.set(notePath, _cached); // refresh LRU order
+                    this._staleServerSignature = _cached.signature || '';
+                    this._saveTabCache(notePath, _cached.data);
+                    data = _cached.data;
+                } else {
+                    // Check localStorage tab cache for instant display (stale-while-revalidate)
+                    const _tabCached = this._loadTabCache(notePath);
+                    if (_tabCached) {
+                        data = { content: _tabCached.content, backlinks: _tabCached.backlinks };
+                        this._staleServerSignature = '';
+                        // Always revalidate in background to keep cache fresh and detect server changes
+                        this._revalidateTabBackground(notePath);
+                    } else {
+                        this.loadingNote = true;
+                        const response = await fetch(`/api/notes/${notePath}`);
+
+                        // Check if note exists
+                        if (!response.ok) {
+                            if (response.status === 404) {
+                                // Note not found - silently redirect to home
+                                window.history.replaceState({ homepageFolder: this.selectedHomepageFolder || '' }, '', '/');
+                                this.currentNote = '';
+                                this.noteContent = '';
+                                if (this.currentMediaType === 'drawing') {
+                                    this._drawingDisconnectResizeObserver();
+                                }
+                                this.currentMedia = '';
+                                this.loadingNote = false;
+                                document.title = this.appName;
+                                return;
+                            }
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+
+                        this._staleServerSignature = response.headers.get('etag') || response.headers.get('last-modified') || '';
+                        data = await response.json();
+                        this._saveTabCache(notePath, data);
+                        this.loadingNote = false;
+                    }
+                }
 
                 this.currentNote = notePath;
                 this._lastRenderedContent = ''; // Clear render cache for new note
@@ -4623,7 +4852,10 @@ function noteApp() {
                 
                 // Expand folder tree to show the loaded note
                 this.expandFolderForNote(notePath);
-                
+
+                // Add to tab bar (or switch to existing tab)
+                this.addTab(notePath);
+
                 // Use $nextTick twice to ensure Alpine.js has time to:
                 // 1. First tick: expand folders and update DOM
                 // 2. Second tick: highlight the note and setup everything else
@@ -6006,6 +6238,7 @@ function noteApp() {
                         this.saveFavorites();
                     }
                     
+                    this._updateTabPath(oldPath, newPath);
                     this.currentNote = newPath;
                     await this.loadNotes();
                 } else {
@@ -6045,6 +6278,9 @@ function noteApp() {
                         this.saveFavorites();
                     }
                     
+                    // Remove from tab bar
+                    this._removeTabByPath(notePath);
+
                     // If the deleted note is currently open, clear it
                     if (this.currentNote === notePath) {
                         this.currentNote = '';
@@ -6710,7 +6946,11 @@ function noteApp() {
                     this.isScrolling = false;
                     return;
                 }
-                
+
+                if (this.viewMode === 'edit' || this.viewMode === 'split') {
+                    this.scheduleStickyHeadingForScroll('editor');
+                }
+
                 const scrollableHeight = editor.scrollHeight - editor.clientHeight;
                 if (scrollableHeight <= 0) return; // No scrolling needed
                 
@@ -6736,7 +6976,11 @@ function noteApp() {
                     this.isScrolling = false;
                     return;
                 }
-                
+
+                if (this.viewMode === 'preview') {
+                    this.scheduleStickyHeadingForScroll('preview');
+                }
+
                 const scrollableHeight = preview.scrollHeight - preview.clientHeight;
                 if (scrollableHeight <= 0) return; // No scrolling needed
                 
@@ -6752,9 +6996,10 @@ function noteApp() {
                 if (editorScrollableHeight > 0) {
                     this.isScrolling = true;
                     editor.scrollTop = scrollPercentage * editorScrollableHeight;
+                    this.scheduleStickyHeadingForScroll('editor');
                 }
             };
-            
+
             // Attach new listeners
             editor.addEventListener('scroll', this._editorScrollHandler);
             preview.addEventListener('scroll', this._previewScrollHandler);
