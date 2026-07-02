@@ -293,7 +293,12 @@ function noteApp() {
         favoritesSet: new Set(), // For O(1) lookups
         favoritesExpanded: true,
         saveTimeout: null,
-        
+        staleContent: false,
+        staleServerContent: '',
+        _staleServerSignature: '',
+        _staleCheckInFlight: false,
+        _staleCheckInterval: null,
+
         // Note lookup maps for O(1) wikilink resolution (built on loadNotes)
         _noteLookup: {
             byPath: new Map(),           // path -> true
@@ -788,7 +793,22 @@ function noteApp() {
             
             // Setup mobile view mode handler
             this.setupMobileViewMode();
-            
+
+            // Detect when another device has modified the currently open note
+            this._savedContent = '';
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible' && this.currentNote) {
+                    this.checkNoteStale();
+                }
+            });
+
+            // Poll for external changes every 30 seconds while a note is open
+            this._staleCheckInterval = setInterval(() => {
+                if (this.currentNote && document.visibilityState === 'visible') {
+                    this.checkNoteStale();
+                }
+            }, 30000);
+
             // Watch view mode changes and auto-save
             this.$watch('viewMode', (newValue) => {
                 this.saveViewMode();
@@ -4523,6 +4543,7 @@ function noteApp() {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
+                this._staleServerSignature = response.headers.get('etag') || response.headers.get('last-modified') || '';
                 const data = await response.json();
                 this.loadingNote = false;
 
@@ -4532,6 +4553,10 @@ function noteApp() {
                 this._cachedRenderedHTML = '';
                 this._initializedVideoSources = new Set(); // Clear video cache for new note
                 this.noteContent = data.content;
+                this._savedContent = data.content;
+                this.staleContent = false;
+                this.staleServerContent = '';
+                this._staleCheckInFlight = false;
                 // Note: scroll restoration happens later in the post-$nextTick block below
                 // (where the existing scrollToTop call used to live), via _restoreNoteScroll().
                 // Doing it there means a single, unified restore path instead of two racing
@@ -5815,19 +5840,22 @@ function noteApp() {
         // Save current note
         async saveNote() {
             if (!this.currentNote) return;
-            
+            if (this.staleContent) return; // Don't overwrite while conflict banner is showing
+
             this.isSaving = true;
-            
+
             try {
                 const response = await fetch(`/api/notes/${this.currentNote}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: this.noteContent })
                 });
-                
+
                 if (response.ok) {
                     this.lastSaved = true;
-                    
+                    this._savedContent = this.noteContent;
+                    this._staleServerSignature = '';
+
                     // Update only the modified timestamp for the current note (no full reload needed)
                     const note = this.notes.find(n => n.path === this.currentNote);
                     if (note) {
@@ -5859,7 +5887,69 @@ function noteApp() {
                 this.isSaving = false;
             }
         },
-        
+
+        // Check if the current note was modified on another device since we last loaded/saved it
+        async checkNoteStale() {
+            const notePath = this.currentNote; // snapshot before async gap
+            if (!notePath || this._staleCheckInFlight) return;
+
+            this._staleCheckInFlight = true;
+            try {
+                const response = await fetch(`/api/notes/${notePath}`);
+                if (!response.ok) return;
+
+                if (this.currentNote !== notePath) return;
+
+                const responseSignature = response.headers.get('etag') || response.headers.get('last-modified') || '';
+                if (responseSignature && this._staleServerSignature && responseSignature === this._staleServerSignature) {
+                    return; // signature unchanged — skip content parse
+                }
+
+                const data = await response.json();
+                const serverContent = data.content;
+
+                // User navigated away while the request was in-flight — discard result
+                if (this.currentNote !== notePath) return;
+
+                this._staleServerSignature = responseSignature || this._staleServerSignature;
+
+                if (serverContent === this._savedContent) return; // no remote change
+
+                // Always show the conflict banner when the server version differs
+                this.staleServerContent = serverContent;
+                this.staleContent = true;
+            } catch (_) {
+                // Network error — ignore
+            } finally {
+                this._staleCheckInFlight = false;
+            }
+        },
+
+        // Replace editor content with the server version
+        reloadFromServer() {
+            if (this.saveTimeout) {
+                clearTimeout(this.saveTimeout);
+                this.saveTimeout = null;
+            }
+            this.noteContent = this.staleServerContent;
+            this._savedContent = this.staleServerContent;
+            this._staleServerSignature = '';
+            this.extractOutline(this.staleServerContent);
+            // Reset undo history so Ctrl+Z can't walk back to the conflicting local version
+            this.undoHistory = [{ content: this.staleServerContent, cursorPos: 0 }];
+            this.redoHistory = [];
+            this.hasPendingHistoryChanges = false;
+            this.staleContent = false;
+            this.staleServerContent = '';
+        },
+
+        // Save local version to server, discarding the remote change
+        keepMyVersion() {
+            this.staleContent = false;
+            this.staleServerContent = '';
+            this.saveNote();
+        },
+
         // Rename current note
         async renameNote() {
             if (!this.currentNote) return;
