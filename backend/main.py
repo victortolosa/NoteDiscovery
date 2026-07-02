@@ -57,7 +57,7 @@ from .share import (
     update_token_path,
     get_all_shared_paths,
 )
-from .favorites import load_favorites, save_favorites, normalize_favorites, has_only_strings
+from .favorites import load_favorites, save_favorites, normalize_favorites, has_only_strings, is_within_limits
 from .export import generate_export_html, embed_images_as_base64, convert_wikilinks_to_html, strip_frontmatter
 
 # Load configuration
@@ -1904,6 +1904,8 @@ async def post_favorites(request: Request):
                 status_code=400,
                 detail="Expected { notes: string[], folders: string[], preferences?: object }"
             )
+        if not is_within_limits(payload['notes']) or not is_within_limits(payload['folders']):
+            raise HTTPException(status_code=413, detail="Too many favorites entries")
 
         notes_dir = config['storage']['notes_dir']
         if not save_favorites(notes_dir, payload):

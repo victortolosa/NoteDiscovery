@@ -1981,7 +1981,7 @@
                                     <div
                                         @click="goToHomepageFolder(starred.path)"
                                         class="hover-accent flex items-center justify-between px-2 py-1.5 cursor-pointer group"
-                                        :style="'color: var(--text-secondary);'"
+                                        style="color: var(--text-secondary);"
                                         :title="starred.path"
                                     >
                                         <div class="flex items-center gap-1.5 min-w-0 flex-1">
@@ -1993,7 +1993,7 @@
                                         <button
                                             @click.stop="toggleStarFolder(starred.path)"
                                             class="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-opacity"
-                                            title="Unstar folder"
+                                            :title="t('toolbar.unstar_folder')"
                                             @mouseenter="$el.style.backgroundColor = 'var(--bg-secondary)'"
                                             @mouseleave="$el.style.backgroundColor = 'transparent'"
                                         >
@@ -2924,7 +2924,7 @@
                                                             :style="{ color: folder.starred ? 'var(--warning, #eab308)' : 'var(--text-tertiary)' }"
                                                             class="p-1 rounded"
                                                             style="background-color: var(--bg-hover);"
-                                                            :title="folder.starred ? 'Unstar folder' : 'Star folder'"
+                                                            :title="folder.starred ? t('toolbar.unstar_folder') : t('toolbar.star_folder')"
                                                         >
                                                             <svg class="w-4 h-4" viewBox="0 0 24 24" :fill="folder.starred ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>

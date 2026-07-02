@@ -4863,7 +4863,8 @@ function noteApp() {
                         // Check if note exists
                         if (!response.ok) {
                             if (response.status === 404) {
-                                // Note not found - silently redirect to home
+                                // Note not found - remove any tab pointing at it, then redirect home
+                                this._removeTabByPath(notePath);
                                 window.history.replaceState({ homepageFolder: this.selectedHomepageFolder || '' }, '', '/');
                                 this.currentNote = '';
                                 this.noteContent = '';

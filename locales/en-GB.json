@@ -124,7 +124,9 @@
     "print_preview": "Print preview",
     "copy_link": "Copy link to clipboard",
     "add_favorite": "Add to favourites",
-    "remove_favorite": "Remove from favourites"
+    "remove_favorite": "Remove from favourites",
+    "star_folder": "Star folder",
+    "unstar_folder": "Unstar folder"
   },
   "zen_mode": {
     "title": "Zen Mode",

@@ -1,7 +1,7 @@
 """
 Favorites and Starred Folders Sync for NoteDiscovery
-Persists favorited notes, starred folders, and small UI preferences (e.g.
-sidebar-collapsed state) to a single JSON file so they sync across devices.
+Persists favorited notes, starred folders, and small synced UI preferences
+to a single JSON file so they sync across devices.
 """
 
 import json
@@ -11,6 +11,10 @@ from typing import Any, Dict
 
 # Thread lock for safe concurrent access
 _lock = threading.Lock()
+
+# Upper bound on notes/folders entries per payload, to keep a buggy or
+# misbehaving client from growing .favorites.json without limit.
+MAX_ENTRIES = 20000
 
 
 def get_favorites_file_path(data_dir: str) -> Path:
@@ -42,6 +46,10 @@ def normalize_favorites(value: Any) -> Dict[str, Any]:
 
 def has_only_strings(items: Any) -> bool:
     return isinstance(items, list) and all(isinstance(item, str) for item in items)
+
+
+def is_within_limits(items: Any) -> bool:
+    return isinstance(items, list) and len(items) <= MAX_ENTRIES
 
 
 def load_favorites(data_dir: str) -> Dict[str, Any]:
