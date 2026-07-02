@@ -164,6 +164,34 @@
             flex-shrink: 0;
             opacity: 0.5;
         }
+        /* Files panel tab switcher */
+        .files-tab-switcher {
+            display: flex;
+            gap: 2px;
+            padding: 2px;
+            border-radius: 6px;
+            background-color: var(--bg-primary);
+        }
+        .files-tab-btn {
+            padding: 2px 10px;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-tertiary);
+            border-radius: 4px;
+            transition: color 0.15s, background-color 0.15s;
+            cursor: pointer;
+            line-height: 1.6;
+        }
+        .files-tab-btn:hover {
+            color: var(--text-secondary);
+        }
+        .files-tab-btn.files-tab-active {
+            color: var(--text-primary);
+            background-color: var(--bg-secondary);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        }
         /* Tab bar */
         .sidebar-topbar {
             min-height: 42px;
@@ -1509,6 +1537,13 @@
                 min-height: 140px;
             }
         }
+
+        /* Table wrapper */
+        .markdown-preview .table-wrapper {
+            overflow-x: auto;
+            margin-bottom: 1.5rem;
+            -webkit-overflow-scrolling: touch;
+        }
     </style>
     <!-- Obsidian theme defaults (patch) -->
     <script>
@@ -1547,7 +1582,12 @@
         }
     </style>
 </head>
-<body x-data="noteApp()" x-init="init()" style="background-color: var(--bg-primary);" :class="{'zen-mode-active': zenMode}">
+<body x-data="noteApp()" x-init="init()" style="background-color: var(--bg-primary);" :class="{'zen-mode-active': zenMode}"
+    @dragenter.window="onUploadDragEnter($event)"
+    @dragleave.window="onUploadDragLeave($event)"
+    @dragover.window.prevent=""
+    @drop.window="onUploadDrop($event)"
+>
     
     <!-- Zen Mode Exit Button -->
     <button 
@@ -1830,26 +1870,39 @@
                 
                 <!-- ==================== FILES PANEL ==================== -->
                 <div x-show="activePanel === 'files'" x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" class="flex flex-col h-full">
-                    <!-- Header with + New -->
-                    <div class="flex-shrink-0 px-2 py-2 border-b flex items-center justify-between sidebar-topbar" style="border-color: var(--border-primary);">
-                        <span class="text-xs font-semibold uppercase tracking-wide" style="color: var(--text-tertiary);" x-text="t('sidebar.files')"></span>
-                <button 
-                    @click="dropdownTargetFolder = ''; toggleNewDropdown($event)"
-                            class="px-2 py-1 text-xs font-medium text-white rounded focus:outline-none flex items-center gap-1"
-                    style="background-color: var(--accent-primary);"
-                    onmouseover="this.style.backgroundColor='var(--accent-hover)'"
-                    onmouseout="this.style.backgroundColor='var(--accent-primary)'"
-                >
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                    </svg>
-                            New
-                </button>
-            </div>
-            
+                    <!-- Header with ALL/RECENT tabs + New -->
+                    <div class="flex-shrink-0 border-b sidebar-topbar" style="border-color: var(--border-primary);">
+                        <div class="flex items-center justify-between px-2 py-1.5">
+                            <div class="files-tab-switcher">
+                                <button
+                                    @click="filesTab = 'all'; localStorage.setItem('filesTab', 'all')"
+                                    class="files-tab-btn"
+                                    :class="{'files-tab-active': filesTab === 'all'}"
+                                >All</button>
+                                <button
+                                    @click="filesTab = 'recent'; localStorage.setItem('filesTab', 'recent')"
+                                    class="files-tab-btn"
+                                    :class="{'files-tab-active': filesTab === 'recent'}"
+                                >Recent</button>
+                            </div>
+                            <button
+                                @click="dropdownTargetFolder = ''; toggleNewDropdown($event)"
+                                class="px-2 py-1 text-xs font-medium text-white rounded focus:outline-none flex items-center gap-1"
+                                style="background-color: var(--accent-primary);"
+                                onmouseover="this.style.backgroundColor='var(--accent-hover)'"
+                                onmouseout="this.style.backgroundColor='var(--accent-primary)'"
+                            >
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                                New
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Folder Tree -->
-                    <div class="flex-1 overflow-y-auto custom-scrollbar p-2">
-                        
+                    <div x-show="filesTab === 'all'" class="flex-1 overflow-y-auto custom-scrollbar p-2">
+
                         <!-- Favorites Section -->
                         <div x-show="favoriteNotes.length > 0" class="mb-3">
                             <div 
@@ -1971,6 +2024,46 @@
                             <div class="px-3 py-4 text-sm text-center" style="color: var(--text-tertiary);">
                                 <span x-text="t('sidebar.no_notes_yet')"></span><br>
                                 <span x-text="t('sidebar.create_first')"></span>
+                            </div>
+                        </template>
+                    </div>
+                    <!-- RECENT files panel -->
+                    <div
+                        x-show="filesTab === 'recent'"
+                        class="flex-1 overflow-y-auto custom-scrollbar p-2"
+                        x-data="{ recentGroups: [] }"
+                        x-init="recentGroups = recentNotesGrouped()"
+                        x-effect="recentGroups = recentNotesGrouped()"
+                    >
+                        <template x-for="group in recentGroups" :key="group.label">
+                            <div class="mb-3">
+                                <div
+                                    class="text-xs font-semibold uppercase tracking-wide px-2 py-1 mb-1"
+                                    style="color: var(--text-tertiary)"
+                                    x-text="group.label"
+                                ></div>
+                                <template x-for="note in group.notes" :key="note.path">
+                                    <div
+                                        @click="loadNote(note.path)"
+                                        @mouseenter="schedulePrefetch(note.path); if (currentNote !== note.path) $el.style.backgroundColor = 'var(--bg-hover)'"
+                                        @mouseleave="cancelPrefetch(); if (currentNote !== note.path) $el.style.backgroundColor = 'transparent'"
+                                        class="flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-colors"
+                                        :style="currentNote === note.path ? 'background-color: var(--accent-primary); color: white;' : 'color: var(--text-secondary);'"
+                                        :title="note.path.replace('.md', '')"
+                                    >
+                                        <span class="text-xs truncate mr-2" x-text="note.name"></span>
+                                        <span
+                                            class="text-xs flex-shrink-0"
+                                            :style="currentNote === note.path ? 'color: rgba(255,255,255,0.7);' : 'color: var(--text-tertiary);'"
+                                            x-text="relativeTime(note.modified)"
+                                        ></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="recentGroups.length === 0">
+                            <div class="px-3 py-4 text-xs text-center" style="color: var(--text-tertiary)">
+                                No notes yet
                             </div>
                         </template>
                     </div>
@@ -2747,83 +2840,108 @@
                                 </div>
                             </template>
                             
-                            <!-- Folders and Notes Grid -->
+                            <!-- Folders and Notes: two-column list layout -->
                             <template x-if="homepageNotes().length > 0 || homepageFolders().length > 0">
-                                <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
-                                    <!-- Folders First -->
-                                    <template x-for="folder in homepageFolders()" :key="folder.path">
-                                        <div 
-                                            @click="goToHomepageFolder(folder.path)"
-                                            class="homepage-card p-2 sm:p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-lg"
-                                            style="background-color: var(--bg-secondary); border-color: var(--accent-primary); display: flex; flex-direction: column; border-width: 2px; position: relative;"
-                                            onmouseover="this.style.borderColor='var(--accent-hover)'; this.style.transform='translateY(-2px)'; this.querySelector('.card-delete-btn').style.opacity='1';"
-                                            onmouseout="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(0)'; this.querySelector('.card-delete-btn').style.opacity='0';"
-                                        >
-                                            <!-- Delete Button -->
-                                            <button 
-                                                @click.stop="deleteFolder(folder.path, folder.name)"
-                                                class="card-delete-btn hidden sm:block"
-                                                style="position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity 0.2s; color: var(--error); padding: 4px; border-radius: 4px; background-color: var(--bg-secondary);"
-                                                onmouseover="this.style.backgroundColor='var(--bg-hover)'"
-                                                onmouseout="this.style.backgroundColor='var(--bg-secondary)'"
-                                                :title="t('common.delete')"
-                                            >
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                                </svg>
-                                            </button>
-                                            
-                                            <!-- Folder Icon -->
-                                            <div class="mb-1 sm:mb-2 flex items-center gap-1 sm:gap-2">
-                                                <svg class="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" style="color: var(--accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
-                                                </svg>
-                                                <h3 class="font-semibold text-sm sm:text-base" style="color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" x-text="folder.name"></h3>
-                                            </div>
-                                            
-                                            <!-- Folder Metadata -->
-                                            <div class="flex items-center justify-between text-xs mt-auto pt-1 sm:pt-2" style="color: var(--text-tertiary);">
-                                                <span x-text="folder.noteCount + ' ' + (folder.noteCount === 1 ? t('homepage.note_singular') : t('homepage.note_plural'))"></span>
-                                                <svg class="w-4 h-4 hidden sm:block" style="color: var(--accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                                                </svg>
+                                <div
+                                    class="flex flex-col xl:flex-row gap-6"
+                                    x-data="{ hpFolders: [], hpNotes: [] }"
+                                    x-init="hpFolders = homepageFolders(); hpNotes = homepageNotes()"
+                                    x-effect="hpFolders = homepageFolders(); hpNotes = homepageNotes()"
+                                >
+                                    <div class="xl:w-1/2 min-w-0">
+                                        <div class="mb-3">
+                                            <h3 class="text-lg font-semibold" style="color: var(--text-primary)" x-text="t('homepage.folder_plural')"></h3>
+                                        </div>
+                                        <div class="space-y-2">
+                                            <template x-for="folder in hpFolders" :key="folder.path">
+                                                <div
+                                                    @click="goToHomepageFolder(folder.path)"
+                                                    class="group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:shadow-sm"
+                                                    style="background-color: var(--bg-secondary); border: 1px solid var(--border-primary);"
+                                                    onmouseover="this.style.backgroundColor = 'var(--bg-hover)'; this.style.borderColor = 'var(--accent-primary)'"
+                                                    onmouseout="this.style.backgroundColor = 'var(--bg-secondary)'; this.style.borderColor = 'var(--border-primary)'"
+                                                >
+                                                    <div class="flex items-center gap-2 flex-1 min-w-0">
+                                                        <svg class="w-5 h-5 flex-shrink-0" style="color: var(--accent-primary)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                                        </svg>
+                                                        <span class="font-medium truncate" style="color: var(--text-primary)" x-text="folder.name"></span>
+                                                    </div>
+                                                    <div class="flex items-center gap-2 text-xs" style="color: var(--text-tertiary)">
+                                                        <span x-text="folder.noteCount + ' ' + (folder.noteCount === 1 ? t('homepage.note_singular') : t('homepage.note_plural'))"></span>
+                                                        <button
+                                                            @click.stop="toggleStarFolder(folder.path)"
+                                                            :style="{ color: folder.starred ? 'var(--warning, #eab308)' : 'var(--text-tertiary)' }"
+                                                            class="p-1 rounded"
+                                                            style="background-color: var(--bg-hover);"
+                                                            :title="folder.starred ? 'Unstar folder' : 'Star folder'"
+                                                        >
+                                                            <svg class="w-4 h-4" viewBox="0 0 24 24" :fill="folder.starred ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                                                            </svg>
+                                                        </button>
+                                                        <button
+                                                            @click.stop="deleteFolder(folder.path, folder.name)"
+                                                            class="p-1 rounded text-red-500"
+                                                            style="background-color: var(--bg-hover);"
+                                                            :title="t('common.delete')"
+                                                        >
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <div x-show="hpFolders.length === 0" class="text-center py-8">
+                                                <span class="text-sm" style="color: var(--text-tertiary)">No folders</span>
                                             </div>
                                         </div>
-                                    </template>
-                                    
-                                    <!-- Notes -->
-                                    <template x-for="note in homepageNotes().slice(0, HOMEPAGE_MAX_NOTES)" :key="note.path">
-                                        <div 
-                                            @click="openItem(note.path, note.type)"
-                                            class="homepage-card p-2 sm:p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-lg"
-                                            style="background-color: var(--bg-secondary); border-color: var(--border-primary); display: flex; flex-direction: column; position: relative;"
-                                            onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(-2px)'; this.querySelector('.card-delete-btn').style.opacity='1';"
-                                            onmouseout="this.style.borderColor='var(--border-primary)'; this.style.transform='translateY(0)'; this.querySelector('.card-delete-btn').style.opacity='0';"
-                                        >
-                                            <!-- Delete Button -->
-                                            <button 
-                                                @click.stop="note.type !== 'note' ? deleteMedia(note.path) : deleteNote(note.path, note.name)"
-                                                class="card-delete-btn hidden sm:block"
-                                                style="position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity 0.2s; color: var(--error); padding: 4px; border-radius: 4px; background-color: var(--bg-secondary);"
-                                                onmouseover="this.style.backgroundColor='var(--bg-hover)'"
-                                                onmouseout="this.style.backgroundColor='var(--bg-secondary)'"
-                                                :title="note.type === 'note' ? t('toolbar.delete_note') : (note.type === 'drawing' ? t('toolbar.delete_drawing') : t('toolbar.delete_image'))"
-                                            >
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                                </svg>
-                                            </button>
-                                            
-                                            <!-- Note Title -->
-                                            <h3 class="font-semibold text-sm sm:text-base mb-1 sm:mb-2" style="color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" x-text="note.name"></h3>
-                                            
-                                            <!-- Metadata -->
-                                            <div class="flex items-center justify-between text-xs mt-auto pt-1 sm:pt-2" style="color: var(--text-tertiary);">
-                                                <span x-text="formatDate(note.modified)"></span>
-                                                <span class="hidden sm:inline" x-text="formatSize(note.size)"></span>
+                                    </div>
+                                    <div class="xl:w-1/2 min-w-0">
+                                        <div class="mb-3">
+                                            <h3 class="text-lg font-semibold" style="color: var(--text-primary)" x-text="t('homepage.note_plural')"></h3>
+                                        </div>
+                                        <div class="space-y-2">
+                                            <template x-for="note in hpNotes.slice(0, HOMEPAGE_MAX_NOTES)" :key="note.path">
+                                                <div
+                                                    @click="openItem(note.path, note.type)"
+                                                    class="group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all hover:shadow-sm"
+                                                    style="background-color: var(--bg-secondary); border: 1px solid var(--border-primary);"
+                                                    onmouseover="this.style.backgroundColor = 'var(--bg-hover)'; this.style.borderColor = 'var(--accent-primary)'"
+                                                    onmouseout="this.style.backgroundColor = 'var(--bg-secondary)'; this.style.borderColor = 'var(--border-primary)'"
+                                                >
+                                                    <div class="flex items-center gap-2 flex-1 min-w-0">
+                                                        <svg
+                                                            class="w-5 h-5 flex-shrink-0"
+                                                            :style="{ color: note.type === 'note' ? 'var(--text-secondary)' : 'var(--accent-primary)' }"
+                                                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                                        >
+                                                            <path x-show="note.type === 'note'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                            <path x-show="note.type !== 'note'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                                        </svg>
+                                                        <span class="font-medium truncate" style="color: var(--text-primary)" x-text="note.name"></span>
+                                                    </div>
+                                                    <div class="flex items-center gap-2 text-xs" style="color: var(--text-tertiary)">
+                                                        <span x-text="note.type === 'note' ? formatDate(note.modified) : formatSize(note.size || 0)"></span>
+                                                        <button
+                                                            @click.stop="note.type !== 'note' ? deleteMedia(note.path) : deleteNote(note.path, note.name)"
+                                                            class="p-1 rounded text-red-500"
+                                                            style="background-color: var(--bg-hover);"
+                                                            :title="t('common.delete')"
+                                                        >
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <div x-show="hpNotes.length === 0" class="text-center py-8">
+                                                <span class="text-sm" style="color: var(--text-tertiary)">No files</span>
                                             </div>
                                         </div>
-                                    </template>
+                                    </div>
                                 </div>
                             </template>
                             
@@ -2864,7 +2982,7 @@
                                 @blur="if (currentNote) renameNote()"
                                 :readonly="!currentNote"
                                 class="text-xl font-semibold border-none focus:outline-none focus:ring-2 rounded px-3 py-1.5"
-                                :style="'background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary); min-width: 150px; max-width: 300px;' + (!currentNote ? ' cursor: default; opacity: 0.9;' : '')"
+                                :style="'background-color: transparent; color: var(--text-primary); border: 1px solid transparent; min-width: 0; flex-grow: 1; max-width: 600px;' + (!currentNote ? ' cursor: default; opacity: 0.9;' : '')"
                             >
                             <!-- Undo Button (note history or drawing strokes when viewing a drawing) -->
                             <button 
@@ -2954,101 +3072,167 @@
                                 </button>
                             </div>
                             
-                            <!-- Note Actions Toolbar -->
-                            <div 
+                            <!-- Favorite star (stays visible) -->
+                            <button
                                 x-show="currentNote"
-                                class="flex items-center rounded overflow-hidden"
-                                style="background-color: var(--bg-tertiary); border: 1px solid var(--border-primary);"
+                                @click="toggleFavorite()"
+                                class="p-2 rounded transition"
+                                :title="isFavorite(currentNote) ? t('toolbar.remove_favorite') : t('toolbar.add_favorite')"
+                                :style="'background-color: var(--bg-tertiary); border: 1px solid var(--border-primary); color: ' + (isFavorite(currentNote) ? 'var(--warning, #eab308)' : 'var(--text-secondary)') + ';'"
+                                @mouseenter="$el.style.backgroundColor = 'var(--bg-hover)'"
+                                @mouseleave="$el.style.backgroundColor = 'var(--bg-tertiary)'"
                             >
-                                <button 
-                                    @click="toggleFavorite()"
-                                    class="p-2 transition"
-                                    :title="isFavorite(currentNote) ? t('toolbar.remove_favorite') : t('toolbar.add_favorite')"
-                                    :style="'color: ' + (isFavorite(currentNote) ? 'var(--warning, #eab308)' : 'var(--text-secondary)') + ';'"
-                                    @mouseenter="$el.style.backgroundColor = 'var(--bg-secondary)'"
-                                    @mouseleave="$el.style.backgroundColor = 'transparent'"
+                                <!-- Filled star (favorited) -->
+                                <svg x-show="isFavorite(currentNote)" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                                </svg>
+                                <!-- Empty star (not favorited) -->
+                                <svg x-show="!isFavorite(currentNote)" x-cloak class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+                                </svg>
+                            </button>
+
+                            <!-- More options dropdown -->
+                            <div
+                                x-show="currentNote"
+                                x-data="{ open: false }"
+                                @click.outside="open = false"
+                                class="relative"
+                            >
+                                <button
+                                    @click="open = !open"
+                                    class="p-2 rounded transition"
+                                    style="color: var(--text-secondary); background-color: var(--bg-tertiary); border: 1px solid var(--border-primary);"
+                                    @mouseenter="$el.style.backgroundColor = 'var(--bg-hover)'"
+                                    @mouseleave="$el.style.backgroundColor = 'var(--bg-tertiary)'"
+                                    title="More options"
                                 >
-                                    <!-- Filled star (favorited) -->
-                                    <svg x-show="isFavorite(currentNote)" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-                                    </svg>
-                                    <!-- Empty star (not favorited) -->
-                                    <svg x-show="!isFavorite(currentNote)" x-cloak class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z"/>
                                     </svg>
                                 </button>
-                                <div style="width: 1px; height: 20px; background-color: var(--border-primary);"></div>
-                                <button 
-                                    @click="exportToHTML()"
-                                    class="p-2 transition"
-                                    style="color: var(--text-secondary);"
-                                    :title="t('toolbar.export_html')"
-                                    @mouseenter="$el.style.backgroundColor = 'var(--bg-secondary)'"
-                                    @mouseleave="$el.style.backgroundColor = 'transparent'"
+                                <div
+                                    x-show="open"
+                                    x-cloak
+                                    class="absolute right-0 top-full mt-1 rounded-lg z-50 overflow-hidden"
+                                    style="background-color: var(--bg-secondary); border: 1px solid var(--border-primary); min-width: 200px; box-shadow: 0 4px 16px rgba(0,0,0,0.35);"
                                 >
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                    </svg>
-                                </button>
-                                <button 
-                                    @click="printPreview()"
-                                    class="p-2 transition"
-                                    style="color: var(--text-secondary);"
-                                    :title="t('toolbar.print_preview')"
-                                    @mouseenter="$el.style.backgroundColor = 'var(--bg-secondary)'"
-                                    @mouseleave="$el.style.backgroundColor = 'transparent'"
-                                >
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
-                                    </svg>
-                                </button>
-                                <div style="width: 1px; height: 20px; background-color: var(--border-primary);"></div>
-                                <button 
-                                    @click="copyNoteLink()"
-                                    class="p-2 transition hover:bg-opacity-80"
-                                    :title="linkCopied ? t('common.copied') : t('toolbar.copy_link')"
-                                    :style="'color: ' + (linkCopied ? 'var(--success, #22c55e)' : 'var(--text-secondary)') + ';'"
-                                    @mouseenter="$el.style.backgroundColor = 'var(--bg-secondary)'"
-                                    @mouseleave="$el.style.backgroundColor = 'transparent'"
-                                >
-                                    <!-- Link icon (default) -->
-                                    <svg x-show="!linkCopied" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
-                                    </svg>
-                                    <!-- Checkmark icon (after copy) -->
-                                    <svg x-show="linkCopied" x-cloak class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                                    </svg>
-                                </button>
-                                <div style="width: 1px; height: 20px; background-color: var(--border-primary);"></div>
-                                <!-- Share button -->
-                                <button 
-                                    @click="openShareModal()"
-                                    class="p-2 transition hover:bg-opacity-80"
-                                    :title="t('share.button_tooltip')"
-                                    style="color: var(--text-secondary);"
-                                    @mouseenter="$el.style.backgroundColor = 'var(--bg-secondary)'"
-                                    @mouseleave="$el.style.backgroundColor = 'transparent'"
-                                >
-                                    <!-- Share/Globe icon -->
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
-                                    </svg>
-                                </button>
-                                <div style="width: 1px; height: 20px; background-color: var(--border-primary);"></div>
-                                <button 
-                                    @click="toggleZenMode()"
-                                    class="p-2 transition"
-                                    style="color: var(--text-secondary);"
-                                    :title="t('zen_mode.tooltip')"
-                                    @mouseenter="$el.style.backgroundColor = 'var(--bg-secondary)'"
-                                    @mouseleave="$el.style.backgroundColor = 'transparent'"
-                                >
-                                    <!-- Expand/Focus icon -->
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
-                                    </svg>
-                                </button>
+                                    <!-- Font size -->
+                                    <div class="flex items-center gap-1 px-3 py-2">
+                                        <span class="text-sm flex-1" style="color: var(--text-secondary);">Font size</span>
+                                        <button
+                                            @click="decreaseFontSize()"
+                                            :disabled="fontSizeScale <= 0.75"
+                                            class="p-1 rounded transition"
+                                            :style="fontSizeScale <= 0.75 ? 'color: var(--text-tertiary); cursor: not-allowed; opacity: 0.4;' : 'color: var(--text-secondary);'"
+                                            @mouseenter="if (fontSizeScale > 0.75) $el.style.backgroundColor = 'var(--bg-hover)'"
+                                            @mouseleave="$el.style.backgroundColor = 'transparent'"
+                                        >
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+                                        </button>
+                                        <span class="text-xs tabular-nums w-8 text-center" style="color: var(--text-tertiary);" x-text="Math.round(fontSizeScale * 100) + '%'"></span>
+                                        <button
+                                            @click="increaseFontSize()"
+                                            :disabled="fontSizeScale >= 1.5"
+                                            class="p-1 rounded transition"
+                                            :style="fontSizeScale >= 1.5 ? 'color: var(--text-tertiary); cursor: not-allowed; opacity: 0.4;' : 'color: var(--text-secondary);'"
+                                            @mouseenter="if (fontSizeScale < 1.5) $el.style.backgroundColor = 'var(--bg-hover)'"
+                                            @mouseleave="$el.style.backgroundColor = 'transparent'"
+                                        >
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                        </button>
+                                    </div>
+                                    <div style="height: 1px; background-color: var(--border-primary); margin: 2px 0;"></div>
+                                    <!-- Copy Link -->
+                                    <button
+                                        @click="copyNoteLink()"
+                                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition"
+                                        :title="linkCopied ? t('common.copied') : t('toolbar.copy_link')"
+                                        :style="'color: ' + (linkCopied ? 'var(--success, #22c55e)' : 'var(--text-secondary)') + ';'"
+                                        @mouseenter="$el.style.backgroundColor = 'var(--bg-hover)'"
+                                        @mouseleave="$el.style.backgroundColor = 'transparent'"
+                                    >
+                                        <svg x-show="!linkCopied" class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                                        </svg>
+                                        <svg x-show="linkCopied" x-cloak class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                        </svg>
+                                        <span x-text="linkCopied ? t('common.copied') : t('toolbar.copy_link')"></span>
+                                    </button>
+                                    <!-- Zen Mode -->
+                                    <button
+                                        @click="toggleZenMode(); open = false"
+                                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition"
+                                        style="color: var(--text-secondary);"
+                                        :title="t('zen_mode.tooltip')"
+                                        @mouseenter="$el.style.backgroundColor = 'var(--bg-hover)'"
+                                        @mouseleave="$el.style.backgroundColor = 'transparent'"
+                                    >
+                                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                                        </svg>
+                                        <span x-text="t('zen_mode.tooltip')"></span>
+                                    </button>
+                                    <div style="height: 1px; background-color: var(--border-primary); margin: 2px 0;"></div>
+                                    <!-- Export Markdown -->
+                                    <button
+                                        @click="exportToMarkdown(); open = false"
+                                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition"
+                                        style="color: var(--text-secondary);"
+                                        title="Export Markdown"
+                                        @mouseenter="$el.style.backgroundColor = 'var(--bg-hover)'"
+                                        @mouseleave="$el.style.backgroundColor = 'transparent'"
+                                    >
+                                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                        </svg>
+                                        <span>Export Markdown</span>
+                                    </button>
+                                    <!-- Export HTML -->
+                                    <button
+                                        @click="exportToHTML(); open = false"
+                                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition"
+                                        style="color: var(--text-secondary);"
+                                        :title="t('toolbar.export_html')"
+                                        @mouseenter="$el.style.backgroundColor = 'var(--bg-hover)'"
+                                        @mouseleave="$el.style.backgroundColor = 'transparent'"
+                                    >
+                                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                        </svg>
+                                        <span x-text="t('toolbar.export_html')"></span>
+                                    </button>
+                                    <!-- Print Preview -->
+                                    <button
+                                        @click="printPreview(); open = false"
+                                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition"
+                                        style="color: var(--text-secondary);"
+                                        :title="t('toolbar.print_preview')"
+                                        @mouseenter="$el.style.backgroundColor = 'var(--bg-hover)'"
+                                        @mouseleave="$el.style.backgroundColor = 'transparent'"
+                                    >
+                                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                                        </svg>
+                                        <span x-text="t('toolbar.print_preview')"></span>
+                                    </button>
+                                    <div style="height: 1px; background-color: var(--border-primary); margin: 2px 0;"></div>
+                                    <!-- Share -->
+                                    <button
+                                        @click="openShareModal(); open = false"
+                                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition"
+                                        style="color: var(--text-secondary);"
+                                        :title="t('share.button_tooltip')"
+                                        @mouseenter="$el.style.backgroundColor = 'var(--bg-hover)'"
+                                        @mouseleave="$el.style.backgroundColor = 'transparent'"
+                                    >
+                                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path>
+                                        </svg>
+                                        <span x-text="t('share.button_tooltip')"></span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3820,7 +4004,25 @@
                 <span class="text-lg">📄</span>
                 <span x-text="t('sidebar.new_from_template')"></span>
             </button>
-            <button 
+            <button
+                @click.stop="$refs.mdUploadInput.click(); showNewDropdown = false"
+                class="w-full px-4 py-2.5 text-sm text-left flex items-center gap-3 transition-colors"
+                style="color: var(--text-primary);"
+                onmouseover="this.style.backgroundColor='var(--bg-hover)'"
+                onmouseout="this.style.backgroundColor='transparent'"
+            >
+                <span class="text-lg">&#x2B06;&#xFE0F;</span>
+                <span>Upload notes</span>
+            </button>
+            <input
+                type="file"
+                x-ref="mdUploadInput"
+                accept=".md"
+                multiple
+                class="hidden"
+                @change="handleFileUploadDrop($event.target.files, false); $event.target.value = ''"
+            >
+            <button
                 @click="createNewDrawing()"
                 class="w-full px-4 py-2.5 text-sm text-left flex items-center gap-3 transition-colors"
                 style="color: var(--text-primary);"
@@ -4392,6 +4594,84 @@
             });
         }
     </script>
+
+    <!-- MD file drag-and-drop overlay — primary drop target, no pointer-events-none -->
+    <div
+        x-show="uploadDragActive"
+        x-cloak
+        class="fixed inset-0 flex items-center justify-center"
+        style="z-index: 2000; background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);"
+        @dragover.prevent=""
+        @drop="onUploadDrop($event)"
+    >
+        <div class="rounded-xl p-10 text-center" style="background: var(--bg-secondary); border: 2px dashed var(--border-primary);">
+            <div class="text-4xl mb-3">📄</div>
+            <div class="text-lg font-medium" style="color: var(--text-primary)">Drop .md files to upload</div>
+            <div class="text-sm mt-1" style="color: var(--text-secondary)"
+                 x-text="'Files will be added to: ' + (selectedHomepageFolder || 'root')"></div>
+        </div>
+    </div>
+
+    <!-- MD upload confirmation modal -->
+    <div
+        x-show="showUploadModal"
+        x-cloak
+        @keydown.escape.window="if (showUploadModal && !uploadInProgress) { showUploadModal = false; uploadQueue = []; }"
+        class="fixed inset-0 flex items-center justify-center"
+        style="z-index: 2000; background: rgba(0,0,0,0.5);"
+    >
+        <div class="rounded-xl shadow-xl w-full max-w-md mx-4 p-6" style="background: var(--bg-secondary);">
+            <h2 class="text-lg font-semibold mb-1" style="color: var(--text-primary)">Upload notes</h2>
+            <p class="text-sm mb-4" style="color: var(--text-secondary)" x-text="
+                uploadQueue.length + ' file(s)' + (
+                    uploadQueue.filter(i => i.conflict).length
+                        ? ' — ' + uploadQueue.filter(i => i.conflict).length + ' conflict(s), choose how to handle each.'
+                        : ' — no conflicts.'
+                )
+            "></p>
+
+            <div class="space-y-2 max-h-64 overflow-y-auto mb-6 pr-1">
+                <template x-for="(item, i) in uploadQueue" :key="i">
+                    <div class="flex items-center gap-3 text-sm">
+                        <span
+                            class="shrink-0 text-xs px-1.5 py-0.5 rounded font-medium"
+                            :style="item.conflict ? 'background:#7c3a00; color:#fbbf24' : 'background:#14532d; color:#4ade80'"
+                            x-text="item.conflict ? 'conflict' : 'new'"
+                        ></span>
+                        <span class="flex-1 truncate" style="color: var(--text-primary)" x-text="item.filename"></span>
+                        <select
+                            x-show="item.conflict"
+                            x-model="uploadQueue[i].resolution"
+                            class="text-xs rounded px-1 py-0.5 shrink-0"
+                            style="background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary);"
+                        >
+                            <option value="overwrite">Overwrite</option>
+                            <option value="rename">Rename</option>
+                            <option value="skip">Skip</option>
+                        </select>
+                    </div>
+                </template>
+            </div>
+
+            <div class="flex gap-3 justify-end">
+                <button
+                    @click="if (!uploadInProgress) { showUploadModal = false; uploadQueue = []; }"
+                    :disabled="uploadInProgress"
+                    class="px-4 py-2 text-sm rounded"
+                    style="color: var(--text-secondary)"
+                >Cancel</button>
+                <button
+                    @click="commitUploads()"
+                    :disabled="uploadInProgress"
+                    class="px-4 py-2 text-sm rounded font-medium"
+                    :style="'background: var(--color-accent, #6366f1); color: white;' + (uploadInProgress ? ' opacity: 0.6' : '')"
+                >
+                    <span x-show="!uploadInProgress">Upload</span>
+                    <span x-show="uploadInProgress">Uploading…</span>
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
 

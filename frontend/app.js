@@ -365,7 +365,11 @@ function noteApp() {
 
         // Icon rail / panel state
         activePanel: 'files', // 'files', 'search', 'tags', 'outline', 'backlinks', 'shared', 'settings'
-        
+
+        // FILES panel sub-tab: 'all' (tree view) or 'recent' (sorted by modified)
+        filesTab: localStorage.getItem('filesTab') || 'all',
+        _recentNotesCache: { notesRef: null, hideUnderscoreFolders: null, locale: null, value: [] },
+
         // Folder state
         folderTree: [],
         allFolders: [],
@@ -478,6 +482,13 @@ function noteApp() {
         _sharedNotePaths: new Set(),  // O(1) lookup for shared note indicators
         _sharedNotePathsList: [], // sorted paths, mirrors Set for reactive sidebar panel
         
+        // MD file upload state
+        uploadDragActive: false,
+        uploadDragCounter: 0,
+        showUploadModal: false,
+        uploadQueue: [],        // [{ filename, path, content, conflict, resolution }]
+        uploadInProgress: false,
+
         // Quick Switcher state (Ctrl+Alt+P)
         showQuickSwitcher: false,
         quickSwitcherQuery: '',
@@ -2425,6 +2436,70 @@ function noteApp() {
             } catch (e) { /* network error */ }
         },
 
+        // Compact relative timestamp string for the recent-files list
+        relativeTime(isoString) {
+            if (!isoString) return '';
+            const diff = Date.now() - new Date(isoString).getTime();
+            const mins = Math.floor(diff / 60000);
+            if (mins < 1) return 'now';
+            if (mins < 60) return mins + 'm';
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return hrs + 'h';
+            const days = Math.floor(hrs / 24);
+            if (days < 7) return days + 'd';
+            return new Date(isoString).toLocaleDateString(this.currentLocale, { month: 'short', day: 'numeric' });
+        },
+
+        // Return notes grouped by day bucket for the recent-files panel.
+        // Returns an array of { label, notes } objects.
+        recentNotesGrouped() {
+            if (
+                this._recentNotesCache.notesRef === this.notes &&
+                this._recentNotesCache.hideUnderscoreFolders === this.hideUnderscoreFolders &&
+                this._recentNotesCache.locale === this.currentLocale
+            ) {
+                return this._recentNotesCache.value;
+            }
+
+            const notes = (this.notes || [])
+                .filter(n => n.type === 'note' && n.modified &&
+                    (!this.hideUnderscoreFolders || !n.path.split('/').some(seg => seg.startsWith('_'))))
+                .sort((a, b) => new Date(b.modified) - new Date(a.modified))
+                .slice(0, 100);
+
+            const now = new Date();
+            const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterday = new Date(startOfDay); yesterday.setDate(yesterday.getDate() - 1);
+            const weekAgo = new Date(startOfDay); weekAgo.setDate(weekAgo.getDate() - 7);
+            const monthAgo = new Date(startOfDay); monthAgo.setMonth(monthAgo.getMonth() - 1);
+
+            const buckets = [
+                { label: 'Today', notes: [] },
+                { label: 'Yesterday', notes: [] },
+                { label: 'This week', notes: [] },
+                { label: 'This month', notes: [] },
+                { label: 'Older', notes: [] },
+            ];
+
+            for (const note of notes) {
+                const mod = new Date(note.modified);
+                if (mod >= startOfDay) buckets[0].notes.push(note);
+                else if (mod >= yesterday) buckets[1].notes.push(note);
+                else if (mod >= weekAgo) buckets[2].notes.push(note);
+                else if (mod >= monthAgo) buckets[3].notes.push(note);
+                else buckets[4].notes.push(note);
+            }
+
+            const grouped = buckets.filter(b => b.notes.length > 0);
+            this._recentNotesCache = {
+                notesRef: this.notes,
+                hideUnderscoreFolders: this.hideUnderscoreFolders,
+                locale: this.currentLocale,
+                value: grouped
+            };
+            return grouped;
+        },
+
         // Toggle star state for a folder (starred folders appear first in the grid view and in the sidebar)
         toggleStarFolder(path) {
             const idx = this.starredFolders.indexOf(path);
@@ -3193,12 +3268,31 @@ function noteApp() {
             event.preventDefault();
             this.dropTarget = null;
             
-            // Check if files are being dropped (media from file system)
+            // Check if files are being dropped (from file system)
             if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
-                await this.handleMediaDrop(event);
+                const files = Array.from(event.dataTransfer.files);
+                const mdFiles = files.filter(f => /\.md$/i.test(f.name));
+                const mediaFiles = files.filter(f => !/\.md$/i.test(f.name));
+
+                // Handle each type independently so a mixed drop works correctly
+                if (mdFiles.length) {
+                    const dt = new DataTransfer();
+                    mdFiles.forEach(f => dt.items.add(f));
+                    await this.handleFileUploadDrop(dt.files, true);
+                }
+                if (mediaFiles.length) {
+                    const dt = new DataTransfer();
+                    mediaFiles.forEach(f => dt.items.add(f));
+                    await this.handleMediaDrop({
+                        dataTransfer: dt,
+                        target: event.target,
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                    });
+                }
                 return;
             }
-            
+
             // Otherwise, handle note/media link drop from sidebar
             if (!this.draggedItem) return;
             
@@ -5410,6 +5504,167 @@ function noteApp() {
             }
         },
         
+        // --- MD file upload ---
+
+        // Compute the full note path for an uploaded file given a base filename.
+        // Returns null if the filename fails validation (non-.md extension, reserved name,
+        // forbidden chars, or an invalid targetFolder path).
+        resolveUploadPath(filename, targetFolder) {
+            // Reject anything that isn't a .md file (case-insensitive)
+            if (!/\.md$/i.test(filename)) return null;
+            const nameWithoutExt = filename.slice(0, -3);
+            const validation = FilenameValidator.validateFilename(nameWithoutExt);
+            if (!validation.valid) return null;
+            // Validate the target folder path before interpolating it
+            if (targetFolder) {
+                if (!FilenameValidator.validatePath(targetFolder).valid) return null;
+            }
+            const base = `${validation.sanitized}.md`;
+            return targetFolder ? `${targetFolder}/${base}` : base;
+        },
+
+        // Find a non-conflicting path by appending -1, -2, … to the stem.
+        // reserved: Set of paths already committed in the current batch (prevents two
+        // files in the same drop from being renamed to the same candidate).
+        // Returns null if no candidate is found within 999 tries.
+        autoRename(path, reserved = new Set()) {
+            const stem = path.replace(/\.md$/, '');
+            let n = 1;
+            while (
+                n <= 999 &&
+                (this.notes.some(note => note.path === `${stem}-${n}.md`) ||
+                reserved.has(`${stem}-${n}.md`))
+            ) n++;
+            return n <= 999 ? `${stem}-${n}.md` : null;
+        },
+
+        // Entry point for both drag-and-drop and the file <input>.
+        // fromDragDrop=true: ignore dropdownTargetFolder (may be stale from a prior interaction).
+        // fromDragDrop=false (button): use dropdownTargetFolder set by the folder right-click context.
+        async handleFileUploadDrop(files, fromDragDrop = false) {
+            const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB per file
+            try {
+                const mdFiles = Array.from(files).filter(f => /\.md$/i.test(f.name));
+                if (!mdFiles.length) {
+                    this.toast('No .md files found in the selection.', { type: 'warning' });
+                    return;
+                }
+
+                // Folder targeting: drag-and-drop always uses the browsed homepage folder (or root).
+                // Button path preserves dropdownTargetFolder set when the dropdown was opened.
+                let targetFolder;
+                if (!fromDragDrop && this.dropdownTargetFolder !== null && this.dropdownTargetFolder !== undefined) {
+                    targetFolder = this.dropdownTargetFolder;
+                } else {
+                    targetFolder = this.selectedHomepageFolder || '';
+                }
+
+                const queue = [];
+                const rejected = []; // filenames that failed validation
+                for (const file of mdFiles) {
+                    if (file.size > MAX_FILE_BYTES) {
+                        rejected.push(`${file.name} (too large, max 5 MB)`);
+                        continue;
+                    }
+                    const path = this.resolveUploadPath(file.name, targetFolder);
+                    if (!path) {
+                        rejected.push(file.name);
+                        continue;
+                    }
+                    const content = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = e => resolve(e.target.result);
+                        reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+                        reader.readAsText(file, 'utf-8');
+                    });
+                    const conflict = this.notes.some(n => n.path === path);
+                    queue.push({ filename: file.name, path, content, conflict, resolution: 'overwrite' });
+                }
+
+                if (rejected.length) {
+                    this.toast(`${rejected.length} file(s) skipped: ${rejected.join(', ')}`, { type: 'warning' });
+                }
+                if (!queue.length) return;
+
+                this.uploadQueue = queue;
+                this.showUploadModal = true;
+            } catch (err) {
+                this.toast(`Could not read file: ${err.message}`, { type: 'error' });
+            }
+        },
+
+        // Called when the user clicks Upload in the confirmation modal.
+        async commitUploads() {
+            this.uploadInProgress = true;
+            const results = { success: [], skipped: [], errors: [] };
+            const committedPaths = new Set(); // prevents in-batch rename collisions
+
+            for (const item of this.uploadQueue) {
+                if (item.resolution === 'skip') {
+                    results.skipped.push(item.filename);
+                    continue;
+                }
+
+                const finalPath = item.resolution === 'rename'
+                    ? this.autoRename(item.path, committedPaths)
+                    : item.path;
+
+                if (!finalPath) {
+                    results.errors.push(item.filename);
+                    continue;
+                }
+
+                try {
+                    const response = await fetch(`/api/notes/${finalPath}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: item.content }),
+                    });
+                    if (response.ok) {
+                        results.success.push(finalPath);
+                        committedPaths.add(finalPath);
+                    } else {
+                        results.errors.push(item.filename);
+                    }
+                } catch {
+                    results.errors.push(item.filename);
+                }
+            }
+
+            if (results.success.length > 0) await this.loadNotes();
+            this.uploadInProgress = false;
+            this.showUploadModal = false;
+            this.uploadQueue = [];
+
+            if (results.errors.length) {
+                this.toast(`Uploaded ${results.success.length} note(s). Failed: ${results.errors.join(', ')}`, { type: 'warning' });
+            } else if (results.skipped.length && !results.success.length) {
+                this.toast('All files were skipped.', { type: 'info' });
+            }
+        },
+
+        // Drag event handlers — wired to window via x-on in index.html.
+        onUploadDragEnter(e) {
+            if (!e.dataTransfer || !e.dataTransfer.types.includes('Files')) return;
+            this.uploadDragCounter++;
+            this.uploadDragActive = true;
+        },
+
+        onUploadDragLeave() {
+            this.uploadDragCounter = Math.max(0, this.uploadDragCounter - 1);
+            if (this.uploadDragCounter === 0) this.uploadDragActive = false;
+        },
+
+        onUploadDrop(e) {
+            this.uploadDragCounter = 0;
+            this.uploadDragActive = false;
+            // Folder drops call stopPropagation so they never reach window.
+            // Editor drops call preventDefault but not stopPropagation — guard catches those.
+            if (e.defaultPrevented) return;
+            e.preventDefault();
+            this.handleFileUploadDrop(e.dataTransfer.files, true);
+        },
+
         async createFolder(parentPath = null) {
             const explicitTarget = parentPath !== null && parentPath !== undefined ? parentPath : undefined;
             this.openCreateNameModal('folder', explicitTarget);
@@ -6717,6 +6972,14 @@ function noteApp() {
                 }
             });
 
+            // Wrap tables in a scrollable container so wide tables can scroll horizontally
+            tempDiv.querySelectorAll('table').forEach(table => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'table-wrapper';
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            });
+
             // Upgrade PDF sentinels emitted by the wiki-embed pre-processor.
             // Must run AFTER DOMPurify because iframes are stripped by the sanitizer.
             tempDiv.querySelectorAll('span.md-pdf-embed').forEach(span => {
@@ -7550,6 +7813,36 @@ function noteApp() {
             }, CONFIG.SCROLL_SYNC_DELAY);
         },
         
+        // Export current note as raw Markdown (.md). Frontmatter preserved as-is.
+        async exportToMarkdown() {
+            if (!this.currentNote || !this.noteContent) {
+                this.toast(this.t('notes.no_content'), { type: 'info' });
+                return;
+            }
+
+            try {
+                const noteName = this.currentNoteName || 'note';
+                const filename = noteName.toLowerCase().endsWith('.md') ? noteName : noteName + '.md';
+
+                const blob = new Blob([this.noteContent], { type: 'text/markdown;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+
+                // Defer revoke so the browser has time to start the download
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (error) {
+                console.error('Markdown export failed:', error);
+                this.toast('Markdown export failed: ' + error.message, { type: 'error' });
+            }
+        },
+
         // Export current note as HTML via backend API
         async exportToHTML() {
             if (!this.currentNote || !this.noteContent) {
