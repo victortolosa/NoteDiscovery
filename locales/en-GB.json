@@ -43,6 +43,7 @@
     "new_drawing": "New Drawing",
     "rename_folder": "Rename folder",
     "delete_folder": "Delete folder",
+    "open_folder_view": "Open folder view",
     "search_placeholder": "Search notes...",
     "search_hint": "Type to search your notes",
     "clear_search": "Clear search",

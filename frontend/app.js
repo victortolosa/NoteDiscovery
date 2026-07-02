@@ -2914,6 +2914,13 @@ function noteApp() {
             event.stopPropagation();
             this.deleteFolder(el.dataset.path, el.dataset.name);
         },
+        handleOpenFolderViewClick(el, event) {
+            event.stopPropagation();
+            // goToHomepageFolder doesn't close the mobile drawer itself (its other
+            // callers already live in the main content area), so do it here
+            this.mobileSidebarOpen = false;
+            this.goToHomepageFolder(el.dataset.path);
+        },
         
         // Item (note/media) handlers - read from dataset
         handleItemClick(el) {
@@ -2988,7 +2995,18 @@ function noteApp() {
                             </span>
                         </div>
                         <div class="hover-buttons flex gap-1 transition-opacity absolute right-2 top-1/2 transform -translate-y-1/2" style="opacity: 0; pointer-events: none; background: linear-gradient(to right, transparent, var(--bg-hover) 20%, var(--bg-hover)); padding-left: 20px;" onclick="event.stopPropagation()">
-                            <button 
+                            <button
+                                data-path="${esc(folder.path)}"
+                                onclick="window.$root.handleOpenFolderViewClick(this, event)"
+                                class="px-1 py-0.5 text-xs rounded hover:brightness-110"
+                                style="background-color: var(--bg-tertiary); color: var(--text-secondary);"
+                                title="${esc(this.t('sidebar.open_folder_view'))}"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17L17 7m0 0H8m9 0v9"></path>
+                                </svg>
+                            </button>
+                            <button
                                 data-path="${esc(folder.path)}"
                                 onclick="window.$root.handleNewItemClick(this, event)"
                                 class="px-1.5 py-0.5 text-xs rounded hover:brightness-110"
