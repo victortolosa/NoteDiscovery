@@ -501,7 +501,7 @@ function noteApp() {
         uploadQueue: [],        // [{ filename, path, content, conflict, resolution }]
         uploadInProgress: false,
 
-        // Quick Switcher state (Ctrl+Alt+P)
+        // Quick Switcher state (Ctrl/Cmd+K)
         showQuickSwitcher: false,
         quickSwitcherQuery: '',
         quickSwitcherIndex: 0,
@@ -923,8 +923,8 @@ function noteApp() {
                         return;
                     }
 
-                    // Ctrl/Cmd + Alt + P for Quick Switcher
-                    if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'p') {
+                    // Ctrl/Cmd + K for Quick Switcher (Shift+K falls through to insert-link in the editor)
+                    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
                         e.preventDefault();
                         this.openQuickSwitcher();
                         return;
@@ -1000,8 +1000,8 @@ function noteApp() {
                             this.wrapSelection('*', '*', 'italic text');
                         }
                         
-                        // Ctrl/Cmd + K for link
-                        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                        // Ctrl/Cmd + Shift + K for link (plain Cmd+K opens the Quick Switcher)
+                        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
                             e.preventDefault();
                             this.insertLink();
                         }
@@ -8040,7 +8040,7 @@ function noteApp() {
         },
         
         // ============================================
-        // Quick Switcher (Ctrl+Alt+P)
+        // Quick Switcher (Ctrl/Cmd+K)
         // ============================================
         
         openQuickSwitcher() {
