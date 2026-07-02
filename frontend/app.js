@@ -463,6 +463,8 @@ function noteApp() {
         showShareModal: false,
         shareInfo: null,
         shareLoading: false,
+        loadingNote: false,    // covers note-to-note transitions
+        loadingInitial: true,  // covers initial app load until data is ready
         showShareQR: false,
         shareLinkCopied: false,
         _sharedNotePaths: new Set(),  // O(1) lookup for shared note indicators
@@ -716,6 +718,7 @@ function noteApp() {
             this.loadLocalSettings();
             document.documentElement.style.setProperty('--font-scale', this.fontSizeScale);
             await this.loadFavorites(); // override localStorage cache with server state
+            this.loadingInitial = false;
 
             // Parse URL and load specific note if provided
             this.loadItemFromURL();
@@ -4498,9 +4501,10 @@ function noteApp() {
             try {
                 // Close mobile sidebar when a note is selected
                 this.mobileSidebarOpen = false;
+                this.loadingNote = true;
 
                 const response = await fetch(`/api/notes/${notePath}`);
-                
+
                 // Check if note exists
                 if (!response.ok) {
                     if (response.status === 404) {
@@ -4512,13 +4516,15 @@ function noteApp() {
                             this._drawingDisconnectResizeObserver();
                         }
                         this.currentMedia = '';
+                        this.loadingNote = false;
                         document.title = this.appName;
                         return;
                     }
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                
+
                 const data = await response.json();
+                this.loadingNote = false;
 
                 this.currentNote = notePath;
                 this._lastRenderedContent = ''; // Clear render cache for new note
@@ -4627,10 +4633,11 @@ function noteApp() {
                 });
                 
             } catch (error) {
+                this.loadingNote = false;
                 ErrorHandler.handle('load note', error);
             }
         },
-        
+
         // Load item (note or media) from URL path
         loadItemFromURL() {
             // Get path from URL (e.g., /folder/note or /folder/image.png)

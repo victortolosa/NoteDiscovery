@@ -1486,10 +1486,23 @@
     
     <!-- Main Container -->
     <div class="flex h-screen overflow-hidden">
-        
+        <div
+            x-show="loadingInitial"
+            x-transition:leave="transition ease-in duration-200"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            class="fixed inset-0 z-50 flex items-center justify-center"
+            style="background-color: var(--bg-primary)"
+        >
+            <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24" style="color: var(--text-tertiary)">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </div>
+
         <!-- Sidebar with Icon Rail -->
-        <div 
-            class="flex mobile-sidebar zen-hide" 
+        <div
+            class="flex mobile-sidebar zen-hide"
             :class="{'mobile-sidebar-open': mobileSidebarOpen}"
             :style="sidebarPanelCollapsed
                 ? 'width: auto; background-color: var(--bg-secondary); min-width: 0; max-width: none;'
@@ -3014,8 +3027,24 @@
                     
                     <!-- Editor/Preview/Graph -->
                     <div class="flex-1 flex relative" style="min-height: 0;">
+                        <div
+                            x-show="loadingNote"
+                            x-transition:enter="transition ease-out duration-75"
+                            x-transition:enter-start="opacity-0"
+                            x-transition:enter-end="opacity-100"
+                            x-transition:leave="transition ease-in duration-150"
+                            x-transition:leave-start="opacity-100"
+                            x-transition:leave-end="opacity-0"
+                            class="absolute inset-0 z-20 flex items-center justify-center"
+                            style="background-color: var(--bg-primary)"
+                        >
+                            <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24" style="color: var(--text-tertiary)">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
                         <!-- Editor -->
-                        <div 
+                        <div
                             x-show="!currentMedia && (viewMode === 'edit' || viewMode === 'split')"
                             class="flex flex-col"
                             style="min-height: 0;"
