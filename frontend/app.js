@@ -2559,7 +2559,22 @@ function noteApp() {
                 console.error('Error saving favorites expanded state:', e);
             }
         },
-        
+
+        // Starred folders for the sidebar's collapsible "Starred Folders" section
+        get starredFolderList() {
+            return this.starredFolders
+                .map(path => ({ path, name: path.split('/').pop() }))
+                .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+        },
+
+        saveStarredFoldersExpanded() {
+            try {
+                localStorage.setItem('starredFoldersExpanded', this.starredFoldersExpanded.toString());
+            } catch (e) {
+                console.error('Error saving starred folders expanded state:', e);
+            }
+        },
+
         // Get current note's last modified time as relative string
         get lastEditedText() {
             if (!this.currentNote) return '';

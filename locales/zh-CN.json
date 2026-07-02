@@ -33,6 +33,7 @@
   "sidebar": {
     "title": "文件",
     "favorites_title": "收藏夹",
+    "starred_folders_title": "星标文件夹",
     "folders_and_notes": "文件夹和笔记",
     "new_button": "+ 新建",
     "new_note": "新建笔记",

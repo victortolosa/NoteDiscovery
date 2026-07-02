@@ -33,6 +33,7 @@
   "sidebar": {
     "title": "ФАЙЛЫ",
     "favorites_title": "Избранное",
+    "starred_folders_title": "Избранные папки",
     "folders_and_notes": "Папки и заметки",
     "new_button": "+ Создать",
     "new_note": "Новая заметка",

@@ -33,6 +33,7 @@
   "sidebar": {
     "title": "ARCHIVOS",
     "favorites_title": "Favoritos",
+    "starred_folders_title": "Carpetas destacadas",
     "folders_and_notes": "Carpetas y Notas",
     "new_button": "+ Nuevo",
     "new_note": "Nueva Nota",

@@ -33,6 +33,7 @@
   "sidebar": {
     "title": "FICHIERS",
     "favorites_title": "Favoris",
+    "starred_folders_title": "Dossiers favoris",
     "folders_and_notes": "Dossiers et Notes",
     "new_button": "+ Nouveau",
     "new_note": "Nouvelle Note",
