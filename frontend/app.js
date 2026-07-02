@@ -342,6 +342,13 @@ function noteApp() {
         // Read synchronously to prevent flash on initial render
         hideUnderscoreFolders: localStorage.getItem('hideUnderscoreFolders') === 'true',
 
+        // Starred folders — shown first in the folder grid view and in the sidebar
+        starredFolders: JSON.parse(localStorage.getItem('starredFolders') || '[]'),
+        starredFoldersExpanded: localStorage.getItem('starredFoldersExpanded') !== 'false',
+
+        // Desktop sidebar collapsed state (synced across devices via /api/favorites)
+        sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true',
+
         // Tab key inserts tab character instead of changing focus
         tabInsertsTab: localStorage.getItem('tabInsertsTab') === 'true',
 
@@ -532,13 +539,18 @@ function noteApp() {
             }
             
             // Map to simplified structure (note count already cached in folder node)
+            const _starredSet = new Set(this.starredFolders);
             const result = childFolders
                 .map(folder => ({
                     name: folder.name,
                     path: folder.path,
-                    noteCount: folder.noteCount || 0  // Use pre-calculated count
+                    noteCount: folder.noteCount || 0,  // Use pre-calculated count
+                    starred: _starredSet.has(folder.path)
                 }))
-                .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+                .sort((a, b) => {
+                    if (a.starred !== b.starred) return a.starred ? -1 : 1;
+                    return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                });
             
             // Cache the result
             this._homepageCache.folders = result;
@@ -703,7 +715,8 @@ function noteApp() {
             await this.checkStatsPlugin();
             this.loadLocalSettings();
             document.documentElement.style.setProperty('--font-scale', this.fontSizeScale);
-            
+            await this.loadFavorites(); // override localStorage cache with server state
+
             // Parse URL and load specific note if provided
             this.loadItemFromURL();
             
@@ -2120,15 +2133,86 @@ function noteApp() {
         
         // ==================== FAVORITES ====================
         
-        // Save favorites to localStorage
+        // Save favorites — persists to server (cross-device sync) and localStorage (cache).
+        // Debounced: rapid toggles coalesce into a single POST so writes don't race.
+        // Saves both note favorites and starred folders in a single request.
         saveFavorites() {
             try {
                 localStorage.setItem('noteFavorites', JSON.stringify(this.favorites));
+                localStorage.setItem('starredFolders', JSON.stringify(this.starredFolders));
             } catch (e) {
-                console.warn('Could not save favorites to localStorage');
+                console.warn('Could not cache favorites to localStorage');
+            }
+            clearTimeout(this._saveFavoritesTimer);
+            const snapshot = {
+                notes: [...this.favorites],
+                folders: [...this.starredFolders],
+                preferences: { sidebarCollapsed: this.sidebarCollapsed }
+            };
+            this._saveFavoritesTimer = setTimeout(() => {
+                fetch('/api/favorites', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(snapshot)
+                }).then(res => {
+                    if (!res.ok) console.warn('Server rejected favorites save:', res.status);
+                }).catch(e => console.warn('Could not sync favorites to server:', e));
+            }, 400);
+        },
+
+        // Load favorites from server (source of truth); falls back to localStorage cache.
+        // First-run migration: if the server file doesn't exist yet (returns []) but
+        // localStorage has favorites, push them to the server so they aren't lost.
+        async loadFavorites() {
+            try {
+                const res = await fetch('/api/favorites');
+                if (!res.ok) return;
+
+                const data = await res.json();
+
+                const serverNotes = Array.isArray(data) ? data : (data.notes ?? []);
+                const serverFolders = Array.isArray(data) ? [] : (data.folders ?? []);
+                const serverPrefs = (!Array.isArray(data) && data.preferences) ? data.preferences : {};
+
+                const hasServerData = serverNotes.length > 0 || serverFolders.length > 0;
+                const hasLocalData = this.favorites.length > 0 || this.starredFolders.length > 0;
+
+                if (!hasServerData && hasLocalData) {
+                    fetch('/api/favorites', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ notes: this.favorites, folders: this.starredFolders, preferences: { sidebarCollapsed: this.sidebarCollapsed } })
+                    }).catch(e => console.warn('Could not migrate favorites to server:', e));
+                    return;
+                }
+
+                this.favorites = serverNotes;
+                this.favoritesSet = new Set(serverNotes);
+                this.starredFolders = serverFolders;
+                if (typeof serverPrefs.sidebarCollapsed === 'boolean') {
+                    this.sidebarCollapsed = serverPrefs.sidebarCollapsed;
+                    localStorage.setItem('sidebarCollapsed', serverPrefs.sidebarCollapsed.toString());
+                }
+                try {
+                    localStorage.setItem('noteFavorites', JSON.stringify(serverNotes));
+                    localStorage.setItem('starredFolders', JSON.stringify(serverFolders));
+                } catch (e) { /* ignore */ }
+            } catch (e) {
+                console.warn('Could not load favorites from server, using local cache:', e);
             }
         },
-        
+
+        // Toggle star state for a folder (starred folders appear first in the grid view and in the sidebar)
+        toggleStarFolder(path) {
+            const idx = this.starredFolders.indexOf(path);
+            if (idx === -1) {
+                this.starredFolders = [...this.starredFolders, path];
+            } else {
+                this.starredFolders = this.starredFolders.filter(p => p !== path);
+            }
+            this.saveFavorites();
+        },
+
         // Check if a note is favorited (O(1) lookup)
         isFavorite(notePath) {
             return this.favoritesSet.has(notePath);
@@ -5224,7 +5308,14 @@ function noteApp() {
                         this.favoritesSet = new Set(newFavorites);
                         this.saveFavorites();
                     }
-                    
+
+                    // Remove from starred folders if starred
+                    const newStarred = this.starredFolders.filter(p => p !== folderPath && !p.startsWith(folderPrefix));
+                    if (newStarred.length !== this.starredFolders.length) {
+                        this.starredFolders = newStarred;
+                        this.saveFavorites();
+                    }
+
                     // Clear current note if it was in the deleted folder
                     if (this.currentNote && this.currentNote.startsWith(folderPrefix)) {
                         this.currentNote = '';

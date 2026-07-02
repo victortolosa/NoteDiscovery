@@ -57,6 +57,7 @@ from .share import (
     update_token_path,
     get_all_shared_paths,
 )
+from .favorites import load_favorites, save_favorites, normalize_favorites, has_only_strings
 from .export import generate_export_html, embed_images_as_base64, convert_wikilinks_to_html, strip_frontmatter
 
 # Load configuration
@@ -1867,6 +1868,52 @@ async def delete_share(request: Request, note_path: str):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=safe_error_message(e, "Failed to revoke share"))
+
+
+@api_router.get("/favorites", tags=["Favorites"])
+@limiter.limit("120/minute")
+async def get_favorites(request: Request):
+    """
+    Get favorited notes, starred folders, and synced preferences (source of
+    truth for cross-device sync; the frontend falls back to its localStorage
+    cache if this fails).
+    """
+    try:
+        notes_dir = config['storage']['notes_dir']
+        return load_favorites(notes_dir)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=safe_error_message(e, "Failed to load favorites"))
+
+
+@api_router.post("/favorites", tags=["Favorites"])
+@limiter.limit("60/minute")
+async def post_favorites(request: Request):
+    """
+    Save favorited notes, starred folders, and synced preferences.
+    Accepts { notes: string[], folders: string[], preferences?: object },
+    or a bare array of note paths for backwards compatibility.
+    """
+    try:
+        try:
+            data = await request.json()
+        except Exception:
+            data = None
+        payload = normalize_favorites(data)
+        if not has_only_strings(payload['notes']) or not has_only_strings(payload['folders']):
+            raise HTTPException(
+                status_code=400,
+                detail="Expected { notes: string[], folders: string[], preferences?: object }"
+            )
+
+        notes_dir = config['storage']['notes_dir']
+        if not save_favorites(notes_dir, payload):
+            raise HTTPException(status_code=500, detail="Failed to save favorites")
+
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=safe_error_message(e, "Failed to save favorites"))
 
 
 # ============================================================================
