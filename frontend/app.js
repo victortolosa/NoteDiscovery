@@ -58,6 +58,8 @@ const LOCAL_SETTINGS = {
     viewMode: { key: 'viewMode', type: 'string', default: 'split', valid: ['edit', 'split', 'preview'] },
     // JSON settings
     favorites: { key: 'noteFavorites', type: 'json', default: [] },
+    // Font size scale (1 = 100%)
+    fontSizeScale: { key: 'fontSizeScale', type: 'number', default: 1, min: 0.75, max: 1.5 },
 };
 
 // Centralized error handling
@@ -304,6 +306,12 @@ function noteApp() {
         // Media lookup map for O(1) media wikilink resolution (built on loadNotes)
         // Maps media filename (case-insensitive) -> full path
         _mediaLookup: new Map(),
+
+        // Prefetch cache — maps notePath -> { data, timestamp, signature } for near-instant note loads
+        _noteCache: new Map(),
+        _prefetchTimeout: null,
+        _prefetchController: null,
+        _maxNoteCacheEntries: 75,
         
         // Preview rendering debounce
         _previewDebounceTimeout: null,
@@ -415,6 +423,10 @@ function noteApp() {
         availableTemplates: [],
         selectedTemplate: '',
         newTemplateNoteName: '',
+        templateSearch: '',
+        templateDropdownOpen: false,
+        templateHighlightedIndex: -1,
+        customShortcuts: {},
         newButtonAction: 'chooser',
         autoFillNoteTitle: false,
         lastUsedTemplate: '',
@@ -454,6 +466,7 @@ function noteApp() {
         quickSwitcherQuery: '',
         quickSwitcherIndex: 0,
         quickSwitcherResults: [],
+        linkInsertCursorPos: null,  // cursor pos snapshot for Shift+Enter wikilink insert
         
         // Non-blocking notifications (replaces window.alert)
         toasts: [],
@@ -507,13 +520,14 @@ function noteApp() {
             if (!this.selectedHomepageFolder) {
                 // Root level: all top-level folders
                 childFolders = Object.entries(this.folderTree)
-                    .filter(([key]) => key !== '__root__')
+                    .filter(([key, folder]) => key !== '__root__' && (!this.hideUnderscoreFolders || !folder.name.startsWith('_')))
                     .map(([, folder]) => folder);
             } else {
                 // Inside a folder: get its children
                 const parentFolder = this.getFolderNode(this.selectedHomepageFolder);
                 if (parentFolder && parentFolder.children) {
-                    childFolders = Object.values(parentFolder.children);
+                    childFolders = Object.values(parentFolder.children)
+                        .filter(folder => !this.hideUnderscoreFolders || !folder.name.startsWith('_'));
                 }
             }
             
@@ -685,8 +699,10 @@ function noteApp() {
             await this.loadNotes();
             await this.loadSharedNotePaths();
             await this.loadTemplates();
+            await this.loadCustomShortcuts();
             await this.checkStatsPlugin();
             this.loadLocalSettings();
+            document.documentElement.style.setProperty('--font-scale', this.fontSizeScale);
             
             // Parse URL and load specific note if provided
             this.loadItemFromURL();
@@ -900,7 +916,13 @@ function noteApp() {
                             e.preventDefault();
                             this.insertTable();
                         }
-                        
+
+                        // Ctrl/Cmd + Alt/Option + A to prettify/align table
+                        if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'a') {
+                            e.preventDefault();
+                            this.prettifyTable();
+                        }
+
                         // Ctrl/Cmd + Alt/Option + Z for Zen mode
                         if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'z') {
                             e.preventDefault();
@@ -1057,11 +1079,28 @@ function noteApp() {
             this.readableLineLength = !this.readableLineLength;
             localStorage.setItem('readableLineLength', this.readableLineLength);
         },
+
+        // Note font size controls
+        increaseFontSize() {
+            this.fontSizeScale = Math.min(1.5, parseFloat((this.fontSizeScale + 0.125).toFixed(3)));
+            localStorage.setItem('fontSizeScale', this.fontSizeScale);
+            document.documentElement.style.setProperty('--font-scale', this.fontSizeScale);
+            this.scheduleStickyHeadingRefresh();
+        },
+
+        decreaseFontSize() {
+            this.fontSizeScale = Math.max(0.75, parseFloat((this.fontSizeScale - 0.125).toFixed(3)));
+            localStorage.setItem('fontSizeScale', this.fontSizeScale);
+            document.documentElement.style.setProperty('--font-scale', this.fontSizeScale);
+            this.scheduleStickyHeadingRefresh();
+        },
         
-        // Hide underscore folders toggle (hides _attachments, _templates, etc. from sidebar)
+        // Hide underscore folders toggle (hides _attachments, _templates, etc. from sidebar, folder view, and search)
         toggleHideUnderscoreFolders() {
             this.hideUnderscoreFolders = !this.hideUnderscoreFolders;
             localStorage.setItem('hideUnderscoreFolders', this.hideUnderscoreFolders);
+            // Bust the homepage cache so folder view re-filters immediately
+            this._homepageCache = { folderPath: null, notes: null, folders: null, breadcrumb: null };
         },
 
         // Tab inserts tab toggle (Tab key inserts tab character instead of changing focus)
@@ -1698,12 +1737,87 @@ function noteApp() {
             try {
                 const response = await fetch('/api/templates');
                 const data = await response.json();
-                this.availableTemplates = data.templates || [];
+                this.availableTemplates = (data.templates || []).filter(t => t.name !== '_shortcuts');
             } catch (error) {
                 ErrorHandler.handle('load templates', error, false); // Optional: no toast
             }
         },
         
+        // Load custom shortcuts from _templates/_shortcuts.md frontmatter
+        async loadCustomShortcuts() {
+            try {
+                const response = await fetch('/api/templates/_shortcuts');
+                if (!response.ok) return;
+                const data = await response.json();
+                const match = data.content.match(/^---\n([\s\S]*?)\n---/);
+                if (!match) return;
+                const shortcuts = {};
+                for (const line of match[1].split('\n')) {
+                    // Skip YAML comments and blank lines
+                    if (!line.trim() || line.trim().startsWith('#')) continue;
+                    const m = line.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
+                    if (m) shortcuts[m[1]] = m[2];
+                }
+                this.customShortcuts = shortcuts;
+            } catch (e) {
+                // Silent: shortcuts file is optional
+            }
+        },
+
+        // Returns the filtered template list based on current search
+        templateFilteredList() {
+            return this.availableTemplates.filter(t =>
+                t.name.toLowerCase().includes(this.templateSearch.toLowerCase())
+            );
+        },
+
+        // Move keyboard highlight up (-1) or down (+1) through filtered templates
+        templateMoveHighlight(dir) {
+            const list = this.templateFilteredList();
+            if (!list.length) return;
+            if (this.templateHighlightedIndex === -1 && dir === -1) return;
+            this.templateHighlightedIndex = Math.max(0, Math.min(
+                this.templateHighlightedIndex + dir,
+                list.length - 1
+            ));
+            this.$nextTick(() => {
+                const container = this.$refs.templateDropdownList;
+                if (!container) return;
+                const items = container.querySelectorAll('[data-template-item]');
+                items[this.templateHighlightedIndex]?.scrollIntoView({ block: 'nearest' });
+            });
+        },
+
+        // Confirm selection of the highlighted (or sole-match) template
+        templateSelectHighlighted() {
+            const list = this.templateFilteredList();
+            const target = this.templateHighlightedIndex >= 0
+                ? list[this.templateHighlightedIndex]
+                : list.length === 1 ? list[0] : null;
+            if (!target) return;
+            this.selectedTemplate = target.name;
+            this.templateSearch = '';
+            this.templateDropdownOpen = false;
+            this.templateHighlightedIndex = -1;
+            this.templateFetchFilename(target.name);
+        },
+
+        // Fetch a template's content and pre-fill the note name if it has a filename frontmatter field
+        async templateFetchFilename(name) {
+            try {
+                const response = await fetch(`/api/templates/${encodeURIComponent(name)}`);
+                if (!response.ok) return;
+                const data = await response.json();
+                const match = data.content.match(/^---\n([\s\S]*?)\n---/);
+                if (!match) return;
+                const filenameMatch = match[1].match(/^filename:\s*["']?(.+?)["']?\s*$/m);
+                if (!filenameMatch) return;
+                this.newTemplateNoteName = filenameMatch[1].trim();
+            } catch (e) {
+                // Silent: filename pre-fill is optional
+            }
+        },
+
         // Create a new note from a template
         async createNoteFromTemplate() {
             if (!this.selectedTemplate || !this.newTemplateNoteName.trim()) {
@@ -1929,8 +2043,10 @@ function noteApp() {
             // Case 2: Only tag filter → convert to flat list of matching notes
             if (hasTagFilter && !hasTextSearch) {
                 this.isSearching = false;
-                this.searchResults = this.notes.filter(note => 
-                    note.type === 'note' && this.noteMatchesTags(note)
+                this.searchResults = this.notes.filter(note =>
+                    note.type === 'note' &&
+                    this.noteMatchesTags(note) &&
+                    (!this.hideUnderscoreFolders || !note.path.split('/').some(seg => seg.startsWith('_')))
                 );
                 this.currentSearchHighlight = '';
                 this.clearSearchHighlights();
@@ -1953,8 +2069,15 @@ function noteApp() {
                         });
                     }
                     
+                    // Filter out notes inside system folders (_attachments, _templates, etc.)
+                    if (this.hideUnderscoreFolders) {
+                        results = results.filter(result =>
+                            !result.path.split('/').some(seg => seg.startsWith('_'))
+                        );
+                    }
+
                     this.searchResults = results;
-                    
+
                     // Highlight search term in current note if open
                     if (this.currentNote && this.noteContent) {
                         this.currentSearchHighlight = this.searchQuery;
@@ -2276,6 +2399,67 @@ function noteApp() {
         },
         
         // Folder handlers - read from dataset
+        _pruneNoteCache() {
+            const now = Date.now();
+            const ttl = 30000;
+            for (const [path, entry] of this._noteCache) {
+                if (!entry || (now - entry.timestamp) > ttl) {
+                    this._noteCache.delete(path);
+                }
+            }
+
+            while (this._noteCache.size > this._maxNoteCacheEntries) {
+                const oldest = this._noteCache.keys().next().value;
+                if (!oldest) break;
+                this._noteCache.delete(oldest);
+            }
+        },
+
+        schedulePrefetch(notePath) {
+            clearTimeout(this._prefetchTimeout);
+            this._prefetchTimeout = setTimeout(() => this.prefetchNote(notePath), 200);
+        },
+
+        cancelPrefetch() {
+            clearTimeout(this._prefetchTimeout);
+            if (this._prefetchController) {
+                this._prefetchController.abort();
+                this._prefetchController = null;
+            }
+        },
+
+        async prefetchNote(notePath) {
+            if (notePath === this.currentNote) return;
+
+            const cached = this._noteCache.get(notePath);
+            if (cached && (Date.now() - cached.timestamp < 30000)) {
+                // Refresh LRU order for a fresh cached entry
+                this._noteCache.delete(notePath);
+                this._noteCache.set(notePath, cached);
+                return;
+            }
+
+            this.cancelPrefetch();
+            const controller = new AbortController();
+            this._prefetchController = controller;
+
+            try {
+                const response = await fetch(`/api/notes/${notePath}`, { signal: controller.signal });
+                if (response.ok) {
+                    const signature = response.headers.get('etag') || response.headers.get('last-modified') || '';
+                    this._noteCache.set(notePath, { data: await response.json(), timestamp: Date.now(), signature });
+                    this._pruneNoteCache();
+                }
+            } catch (e) {
+                if (e?.name === 'AbortError') return;
+                // Silent — normal load will retry on click
+            } finally {
+                if (this._prefetchController === controller) {
+                    this._prefetchController = null;
+                }
+            }
+        },
+
         handleFolderClick(el) {
             this.toggleFolder(el.dataset.path);
         },
@@ -2315,6 +2499,12 @@ function noteApp() {
             const path = el.dataset.path;
             if (path !== this.currentNote && path !== this.currentMedia) {
                 el.style.backgroundColor = isEnter ? 'var(--bg-hover)' : 'transparent';
+            }
+            // Prefetch note content after a brief hover delay (notes only, not media)
+            const type = el.dataset.type;
+            if (!type || type === 'note') {
+                if (isEnter) this.schedulePrefetch(path);
+                else this.cancelPrefetch();
             }
         },
         handleDeleteItemClick(el, event) {
@@ -2494,7 +2684,19 @@ function noteApp() {
         
         // Toggle folder expansion
         toggleFolder(folderPath) {
-            if (this.expandedFolders.has(folderPath)) {
+            const isCollapsing = this.expandedFolders.has(folderPath);
+            if (isCollapsing) {
+                // Animate the contents out, then remove from DOM
+                const header = document.querySelector(`.folder-item[data-path="${CSS.escape(folderPath)}"]`);
+                const contents = header?.parentElement?.querySelector('.folder-contents');
+                if (contents) {
+                    contents.classList.add('folder-collapsing');
+                    setTimeout(() => {
+                        this.expandedFolders.delete(folderPath);
+                        this.expandedFolders = new Set(this.expandedFolders);
+                    }, 120);
+                    return;
+                }
                 this.expandedFolders.delete(folderPath);
             } else {
                 this.expandedFolders.add(folderPath);
@@ -5251,6 +5453,141 @@ function noteApp() {
             this.autoSave();
         },
         
+        // Prettify/align a markdown table at the cursor or selection
+        prettifyTable() {
+            const editor = document.getElementById('note-editor');
+            if (!editor) return;
+
+            const fullText = this.noteContent;
+            const cursor = editor.selectionStart;
+            const selEnd = editor.selectionEnd;
+
+            let tableStart, tableEnd;
+            const selectedText = fullText.substring(cursor, selEnd);
+
+            if (selEnd > cursor && selectedText.includes('\n')) {
+                // Multi-line selection -- snap to line boundaries
+                let ls = cursor;
+                while (ls > 0 && fullText[ls - 1] !== '\n') ls--;
+                let le = selEnd;
+                if (fullText[le - 1] === '\n') le--;
+                while (le < fullText.length && fullText[le] !== '\n') le++;
+                if (fullText[le] === '\n') le++;
+                tableStart = ls;
+                tableEnd = le;
+            } else {
+                // Auto-detect table block around cursor
+                const allLines = fullText.split('\n');
+                const isTableLine = (l) => l.trim().startsWith('|');
+
+                const offsets = [];
+                let off = 0;
+                for (const line of allLines) {
+                    offsets.push(off);
+                    off += line.length + 1;
+                }
+
+                let cursorLine = allLines.length - 1;
+                for (let i = 0; i < allLines.length; i++) {
+                    if (offsets[i] + allLines[i].length >= cursor) {
+                        cursorLine = i;
+                        break;
+                    }
+                }
+
+                if (!isTableLine(allLines[cursorLine])) {
+                    this.toast('Place the cursor inside a markdown table and try again.', { type: 'warning' });
+                    return;
+                }
+
+                let blockStart = cursorLine;
+                while (blockStart > 0 && isTableLine(allLines[blockStart - 1])) blockStart--;
+                let blockEnd = cursorLine;
+                while (blockEnd < allLines.length - 1 && isTableLine(allLines[blockEnd + 1])) blockEnd++;
+
+                tableStart = offsets[blockStart];
+                const lastLineEnd = offsets[blockEnd] + allLines[blockEnd].length;
+                tableEnd = fullText[lastLineEnd] === '\n' ? lastLineEnd + 1 : lastLineEnd;
+            }
+
+            const tableText = fullText.substring(tableStart, tableEnd);
+            const lines = tableText.split('\n').filter(l => l.trim() !== '');
+
+            if (lines.length < 2 || !lines[0].trim().startsWith('|')) {
+                this.toast('Place the cursor inside a markdown table and try again.', { type: 'warning' });
+                return;
+            }
+
+            const parseCells = (line) => {
+                const trimmed = line.trim();
+                const inner = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed;
+                const withoutTrailing = inner.endsWith('|') ? inner.slice(0, -1) : inner;
+                return withoutTrailing.split('|').map(c => c.trim());
+            };
+
+            const isSepRow = (line) => {
+                const t = line.trim();
+                return t.startsWith('|') && /^[\|:\-\s]+$/.test(t) && t.includes('-');
+            };
+            const sepIdx = lines.findIndex(isSepRow);
+
+            const parsed = lines.map(parseCells);
+            const numCols = Math.max(...parsed.map(r => r.length));
+
+            const parseAlign = (cell) => {
+                const c = cell.trim();
+                if (c.startsWith(':') && c.endsWith(':')) return 'center';
+                if (c.endsWith(':')) return 'right';
+                return 'left';
+            };
+
+            let alignments = Array(numCols).fill('left');
+            if (sepIdx >= 0) {
+                const sepAligns = parsed[sepIdx].map(parseAlign);
+                alignments = Array.from({length: numCols}, (_, i) => sepAligns[i] || 'left');
+            }
+
+            const colWidths = Array(numCols).fill(3);
+            parsed.forEach((row, ri) => {
+                if (ri === sepIdx) return;
+                row.forEach((cell, ci) => {
+                    if (ci < numCols) colWidths[ci] = Math.max(colWidths[ci], cell.length);
+                });
+            });
+
+            const renderRow = (cells) => {
+                const parts = Array.from({length: numCols}, (_, ci) => {
+                    return ' ' + (cells[ci] || '').padEnd(colWidths[ci]) + ' ';
+                });
+                return '|' + parts.join('|') + '|';
+            };
+
+            const renderSep = () => {
+                const parts = alignments.map((align, ci) => {
+                    const w = colWidths[ci];
+                    let inner;
+                    if (align === 'center') inner = ':' + '-'.repeat(Math.max(1, w - 2)) + ':';
+                    else if (align === 'right') inner = '-'.repeat(Math.max(1, w - 1)) + ':';
+                    else inner = '-'.repeat(w);
+                    return ' ' + inner + ' ';
+                });
+                return '|' + parts.join('|') + '|';
+            };
+
+            const outLines = lines.map((_, i) => i === sepIdx ? renderSep() : renderRow(parsed[i]));
+            if (sepIdx < 0) outLines.splice(1, 0, renderSep());
+
+            const prettified = outLines.join('\n') + '\n';
+            this.noteContent = fullText.substring(0, tableStart) + prettified + fullText.substring(tableEnd);
+
+            this.$nextTick(() => {
+                editor.setSelectionRange(tableStart, tableStart + prettified.length);
+                editor.focus();
+            });
+
+            this.autoSave();
+        },
+
         // Insert a markdown table placeholder
         insertTable() {
             const editor = document.getElementById('note-editor');
@@ -5328,6 +5665,9 @@ function noteApp() {
                     break;
                 case 'table':
                     this.insertTable();
+                    break;
+                case 'prettify-table':
+                    this.prettifyTable();
                     break;
             }
         },
@@ -5793,12 +6133,14 @@ function noteApp() {
                 /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,
                 (match, target, displayText) => {
                     const linkTarget = target.trim();
-                    const linkText = displayText ? displayText.trim() : linkTarget;
-                    
+
                     // Fast O(1) check using pre-built lookup maps
                     // Handle section anchors: extract base note path
                     const hashIndex = linkTarget.indexOf('#');
                     const basePath = hashIndex !== -1 ? linkTarget.substring(0, hashIndex) : linkTarget;
+                    const anchor = hashIndex !== -1 ? linkTarget.substring(hashIndex) : '';
+                    const defaultLinkText = `${basePath.split('/').pop()?.replace(/\.md$/i, '') || ''}${anchor}` || linkTarget;
+                    const linkText = displayText ? displayText.trim() : defaultLinkText;
                     const noteExists = basePath === '' || self.wikiLinkExists(basePath);
                     
                     // Escape special chars: href needs quote escaping, text needs HTML escaping
@@ -6915,11 +7257,18 @@ function noteApp() {
         // ============================================
         
         openQuickSwitcher() {
+            const textarea = document.getElementById('note-editor');
+            this.linkInsertCursorPos = (document.activeElement === textarea)
+                ? textarea.selectionStart
+                : null;
             this.showQuickSwitcher = true;
             this.quickSwitcherQuery = '';
             this.quickSwitcherIndex = 0;
-            // Populate initial results
-            this.quickSwitcherResults = (this.allNotes || []).slice(0, 10);
+            // Populate initial results (excluding system folders when setting is on)
+            const _allNotes = this.allNotes || [];
+            this.quickSwitcherResults = (this.hideUnderscoreFolders
+                ? _allNotes.filter(n => !(n.path || '').split('/').some(seg => seg.startsWith('_')))
+                : _allNotes).slice(0, 10);
             // Focus the input after the modal renders
             this.$nextTick(() => {
                 const input = document.getElementById('quickSwitcherInput');
@@ -6931,20 +7280,37 @@ function noteApp() {
             this.showQuickSwitcher = false;
             this.quickSwitcherQuery = '';
             this.quickSwitcherIndex = 0;
+            this.linkInsertCursorPos = null;
+        },
+
+        insertWikiLink(note) {
+            if (!note) return;
+            const linkPath = note.path.replace(/.md$/, '');
+            const wikilink = `[[${linkPath}]]`;
+            const textarea = document.getElementById('note-editor');
+            const pos = this.linkInsertCursorPos ?? textarea.value.length;
+            textarea.setRangeText(wikilink, pos, pos, 'end');
+            this.noteContent = textarea.value;
+            this.autoSave();
+            textarea.focus();
+            textarea.selectionStart = textarea.selectionEnd = pos + wikilink.length;
         },
         
         // Filter notes for quick switcher based on query
         filterQuickSwitcher(query) {
-            // Only include actual notes, not images
-            const notes = (this.notes || []).filter(n => n.type === 'note');
+            // Only include actual notes, not images; exclude system folders when setting is on
+            const notes = (this.notes || []).filter(n =>
+                n.type === 'note' &&
+                (!this.hideUnderscoreFolders || !n.path.split('/').some(seg => seg.startsWith('_')))
+            );
             if (!query || !query.trim()) {
                 // Show recent notes when no query
                 return notes.slice(0, 10);
             }
             const q = query.toLowerCase();
             return notes
-                .filter(n => 
-                    n.name.toLowerCase().includes(q) || 
+                .filter(n =>
+                    n.name.toLowerCase().includes(q) ||
                     n.path.toLowerCase().includes(q)
                 )
                 .slice(0, 10);
@@ -6966,7 +7332,11 @@ function noteApp() {
                 e.preventDefault();
                 const note = results[this.quickSwitcherIndex];
                 if (note) {
-                    this.loadNote(note.path);
+                    if (e.shiftKey) {
+                        this.insertWikiLink(note);
+                    } else {
+                        this.loadNote(note.path);
+                    }
                     this.closeQuickSwitcher();
                 }
             } else if (e.key === 'Escape') {

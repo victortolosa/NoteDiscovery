@@ -1,0 +1,73 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+/* Obsidian-inspired dark theme for NoteDiscovery */
+/* @theme-type: dark */
+:root,
+:root[data-theme="obsidian"],
+:root[data-theme="Obsidian"] {
+  /* Backgrounds */
+  --bg-primary: #202020;
+  --bg-secondary: #161616;
+  --bg-tertiary: #252525;
+  --bg-hover: #2a2a2a;
+  --bg-active: #2d2d2d;
+
+  /* Text */
+  --text-primary: #dcddde;
+  --text-secondary: #999999;
+  --text-tertiary: #5c5c5c;
+
+  /* Borders */
+  --border-primary: #333333;
+  --border-secondary: #2a2a2a;
+
+  /* Accent — monochromatic dark gray */
+  --accent-primary: #555555;
+  --accent-hover: #666666;
+  --accent-light: rgba(85, 85, 85, 0.15);
+
+  /* Status */
+  --success: #4caf69;
+  --error: #e05252;
+  --warning: #e0a050;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+
+  /* Editor syntax — blue highlight */
+  --accent-secondary: #4da6ff;
+  --link-color: #4da6ff;
+  --link-internal: #4da6ff;
+}
+
+/* Editor syntax highlighting — blue tones
+   Higher specificity than the inline style block to ensure override. */
+:root[data-theme="obsidian"] .syntax-overlay .md-heading,
+:root[data-theme="Obsidian"] .syntax-overlay .md-heading { color: #6ab8ff; font-weight: 600; }
+
+:root[data-theme="obsidian"] .syntax-overlay .md-list,
+:root[data-theme="Obsidian"] .syntax-overlay .md-list { color: #4da6ff; }
+
+:root[data-theme="obsidian"] .syntax-overlay .md-link,
+:root[data-theme="Obsidian"] .syntax-overlay .md-link { color: #4da6ff; }
+
+:root[data-theme="obsidian"] .syntax-overlay .md-wikilink,
+:root[data-theme="Obsidian"] .syntax-overlay .md-wikilink { color: #4da6ff; }
+
+:root[data-theme="obsidian"] .syntax-overlay .md-code,
+:root[data-theme="Obsidian"] .syntax-overlay .md-code { color: #82c4ff; }
+
+:root[data-theme="obsidian"] .syntax-overlay .md-codeblock,
+:root[data-theme="Obsidian"] .syntax-overlay .md-codeblock { color: #3d8fd4; }
+
+/* Editor font — Space Mono */
+:root[data-theme="obsidian"] .editor-textarea,
+:root[data-theme="Obsidian"] .editor-textarea,
+:root[data-theme="obsidian"] #note-editor,
+:root[data-theme="Obsidian"] #note-editor,
+:root[data-theme="obsidian"] #syntax-overlay,
+:root[data-theme="Obsidian"] #syntax-overlay {
+  font-family: 'Space Mono', ui-monospace, monospace;
+}
