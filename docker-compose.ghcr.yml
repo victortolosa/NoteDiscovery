@@ -1,6 +1,6 @@
 services:
   notediscovery:
-    image: ghcr.io/gamosoft/notediscovery:latest
+    image: ghcr.io/victortolosa/notediscovery:latest
     container_name: notediscovery
     ports:
       - "8000:8000"
