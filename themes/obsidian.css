@@ -62,6 +62,18 @@
 :root[data-theme="obsidian"] .syntax-overlay .md-codeblock,
 :root[data-theme="Obsidian"] .syntax-overlay .md-codeblock { color: #3d8fd4; }
 
+/* Preview hyperlinks — white with a visible underline (the dark-gray
+   --accent-primary default is too low-contrast on this background).
+   Wikilinks keep their blue --link-internal styling. */
+:root[data-theme="obsidian"] .markdown-preview a:not([data-wikilink]),
+:root[data-theme="Obsidian"] .markdown-preview a:not([data-wikilink]),
+:root[data-theme="obsidian"] .markdown-preview a:not([href^="http"]):not([href^="https"]):not([href^="//"]):not([href^="mailto:"]):not([data-wikilink]),
+:root[data-theme="Obsidian"] .markdown-preview a:not([href^="http"]):not([href^="https"]):not([href^="//"]):not([href^="mailto:"]):not([data-wikilink]) {
+  color: #ffffff;
+  text-decoration: underline;
+  text-decoration-color: #ffffff;
+}
+
 /* Editor font — Space Mono */
 :root[data-theme="obsidian"] .editor-textarea,
 :root[data-theme="Obsidian"] .editor-textarea,
