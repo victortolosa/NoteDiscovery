@@ -154,7 +154,7 @@
                       "id": "uahl6",
                       "name": "Favorites Header",
                       "width": "fill_container",
-                      "height": 7,
+                      "height": 13.567968781662701,
                       "fill": "#101010",
                       "gap": 4,
                       "alignItems": "center",
@@ -384,7 +384,7 @@
                       "id": "TABiL",
                       "name": "Starred Folders Header",
                       "width": "fill_container",
-                      "height": 7,
+                      "height": 13.567968781662701,
                       "fill": "#101010",
                       "gap": 4,
                       "alignItems": "center",
@@ -596,7 +596,7 @@
                   "id": "cmT3A",
                   "name": "Folders Notes Toolbar",
                   "width": "fill_container",
-                  "height": 10,
+                  "height": 19.47368421052632,
                   "fill": "#101010",
                   "gap": 8,
                   "alignItems": "center",
@@ -652,7 +652,7 @@
                   "id": "jhsIY",
                   "name": "Drag Move Box",
                   "width": "fill_container",
-                  "height": 19,
+                  "height": 37.00000000000001,
                   "fill": "#121212",
                   "cornerRadius": 2,
                   "stroke": "#272727",
@@ -2382,7 +2382,8 @@
           "width": "fill_container",
           "content": "Recommended: use lucide star for starred/favorite states and lucide folder for closed folders; folder-open works for active/open folder state.",
           "fontFamily": "Inter",
-          "fontSize": 11
+          "fontSize": 11,
+          "fontWeight": "normal"
         },
         {
           "type": "frame",
@@ -2458,7 +2459,8 @@
                       "fill": "#8f8f8f",
                       "content": "star",
                       "fontFamily": "Inter",
-                      "fontSize": 8
+                      "fontSize": 8,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -2504,7 +2506,8 @@
                       "fill": "#8f8f8f",
                       "content": "sparkles",
                       "fontFamily": "Inter",
-                      "fontSize": 8
+                      "fontSize": 8,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -2550,7 +2553,8 @@
                       "fill": "#8f8f8f",
                       "content": "bookmark",
                       "fontFamily": "Inter",
-                      "fontSize": 8
+                      "fontSize": 8,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -2596,7 +2600,8 @@
                       "fill": "#8f8f8f",
                       "content": "circle-play",
                       "fontFamily": "Inter",
-                      "fontSize": 8
+                      "fontSize": 8,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -2673,7 +2678,8 @@
                       "fill": "#8f8f8f",
                       "content": "folder",
                       "fontFamily": "Inter",
-                      "fontSize": 8
+                      "fontSize": 8,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -2719,7 +2725,8 @@
                       "fill": "#8f8f8f",
                       "content": "folder-open",
                       "fontFamily": "Inter",
-                      "fontSize": 8
+                      "fontSize": 8,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -2765,7 +2772,8 @@
                       "fill": "#8f8f8f",
                       "content": "folder-plus",
                       "fontFamily": "Inter",
-                      "fontSize": 8
+                      "fontSize": 8,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -2811,7 +2819,8 @@
                       "fill": "#8f8f8f",
                       "content": "folder-check",
                       "fontFamily": "Inter",
-                      "fontSize": 8
+                      "fontSize": 8,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -3038,7 +3047,7 @@
                       "id": "wshAK",
                       "name": "Favorites Header",
                       "width": "fill_container",
-                      "height": 7,
+                      "height": 13.567968781662701,
                       "fill": "#101010",
                       "gap": 4,
                       "alignItems": "center",
@@ -3268,7 +3277,7 @@
                       "id": "AFym9",
                       "name": "Starred Folders Header",
                       "width": "fill_container",
-                      "height": 7,
+                      "height": 13.567968781662701,
                       "fill": "#101010",
                       "gap": 4,
                       "alignItems": "center",
@@ -3480,7 +3489,7 @@
                   "id": "iYryW",
                   "name": "Folders Notes Toolbar",
                   "width": "fill_container",
-                  "height": 10,
+                  "height": 19.47368421052632,
                   "fill": "#101010",
                   "gap": 8,
                   "alignItems": "center",
@@ -3536,7 +3545,7 @@
                   "id": "i00ASF",
                   "name": "Drag Move Box",
                   "width": "fill_container",
-                  "height": 19,
+                  "height": 37.00000000000001,
                   "fill": "#121212",
                   "cornerRadius": 2,
                   "stroke": "#272727",
@@ -3983,7 +3992,8 @@
               "fill": "#a3a3a3",
               "content": "Your Self-Hosted Knowledge Base",
               "fontFamily": "Inter",
-              "fontSize": 10
+              "fontSize": 10,
+              "fontWeight": "normal"
             },
             {
               "type": "text",
@@ -3994,7 +4004,8 @@
               "fill": "#777777",
               "content": "Home",
               "fontFamily": "Inter",
-              "fontSize": 9
+              "fontSize": 9,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4030,7 +4041,8 @@
               "fill": "#8f8f8f",
               "content": "6 folders",
               "fontFamily": "Inter",
-              "fontSize": 9
+              "fontSize": 9,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4113,7 +4125,8 @@
               "fill": "#777777",
               "content": "13 notes",
               "fontFamily": "Inter",
-              "fontSize": 8
+              "fontSize": 8,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4186,7 +4199,8 @@
               "fill": "#777777",
               "content": "32 notes",
               "fontFamily": "Inter",
-              "fontSize": 8
+              "fontSize": 8,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4259,7 +4273,8 @@
               "fill": "#777777",
               "content": "0 notes",
               "fontFamily": "Inter",
-              "fontSize": 8
+              "fontSize": 8,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4332,7 +4347,8 @@
               "fill": "#777777",
               "content": "2 notes",
               "fontFamily": "Inter",
-              "fontSize": 8
+              "fontSize": 8,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4405,7 +4421,8 @@
               "fill": "#777777",
               "content": "37 notes",
               "fontFamily": "Inter",
-              "fontSize": 8
+              "fontSize": 8,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4478,7 +4495,8 @@
               "fill": "#777777",
               "content": "50 notes",
               "fontFamily": "Inter",
-              "fontSize": 8
+              "fontSize": 8,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4565,7 +4583,8 @@
               "fill": "#777777",
               "content": "71.5 KB",
               "fontFamily": "Inter",
-              "fontSize": 8
+              "fontSize": 8,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4640,7 +4659,8 @@
               "fill": "#777777",
               "content": "9.2 KB",
               "fontFamily": "Inter",
-              "fontSize": 8
+              "fontSize": 8,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4715,7 +4735,8 @@
               "fill": "#777777",
               "content": "2.4 KB",
               "fontFamily": "Inter",
-              "fontSize": 8
+              "fontSize": 8,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4790,7 +4811,8 @@
               "fill": "#777777",
               "content": "4.8 KB",
               "fontFamily": "Inter",
-              "fontSize": 8
+              "fontSize": 8,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -4865,7 +4887,8 @@
               "fill": "#777777",
               "content": "15 KB",
               "fontFamily": "Inter",
-              "fontSize": 8
+              "fontSize": 8,
+              "fontWeight": "normal"
             },
             {
               "type": "rectangle",
@@ -5049,7 +5072,7 @@
                       "id": "EQrIl",
                       "name": "Favorites Header",
                       "width": "fill_container",
-                      "height": 7,
+                      "height": 13.567968781662701,
                       "fill": "#101010",
                       "gap": 4,
                       "alignItems": "center",
@@ -5279,7 +5302,7 @@
                       "id": "FVF9l",
                       "name": "Starred Folders Header",
                       "width": "fill_container",
-                      "height": 7,
+                      "height": 13.567968781662701,
                       "fill": "#101010",
                       "gap": 4,
                       "alignItems": "center",
@@ -5491,7 +5514,7 @@
                   "id": "TZK4A",
                   "name": "Folders Notes Toolbar",
                   "width": "fill_container",
-                  "height": 10,
+                  "height": 19.47368421052632,
                   "fill": "#101010",
                   "gap": 8,
                   "alignItems": "center",
@@ -5547,7 +5570,7 @@
                   "id": "J4iyTc",
                   "name": "Drag Move Box",
                   "width": "fill_container",
-                  "height": 19,
+                  "height": 37.00000000000001,
                   "fill": "#121212",
                   "cornerRadius": 2,
                   "stroke": "#272727",
@@ -7227,20 +7250,6 @@
           ]
         }
       ]
-    },
-    {
-      "type": "rectangle",
-      "id": "NQgh8",
-      "x": -388,
-      "y": 595,
-      "fill": {
-        "type": "image",
-        "enabled": true,
-        "url": "image-3.png",
-        "mode": "fill"
-      },
-      "width": 1936,
-      "height": 1062
     }
   ],
   "fileToken": "30764466-9e7a-4e9e-8c22-3107334f769b"
