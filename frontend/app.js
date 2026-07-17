@@ -1328,6 +1328,7 @@ function noteApp() {
                     labels: {
                         taskComplete: this.t('editor.live_preview_task_complete'),
                         taskIncomplete: this.t('editor.live_preview_task_incomplete'),
+                        previewOnly: this.t('editor.mode_preview'),
                     },
                     onSourceCommand: (command, context) => (
                         this.runLivePreviewSourceCommand(command, context)

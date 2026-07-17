@@ -14,7 +14,41 @@ const inlineCodeDecoration = Decoration.mark({ class: 'cm-live-inline-code' });
 const linkDecoration = Decoration.mark({ class: 'cm-live-link' });
 const listMarkDecoration = Decoration.mark({ class: 'cm-live-list-mark' });
 const completedTaskDecoration = Decoration.mark({ class: 'cm-live-task-complete' });
+const previewOnlyLineDecoration = Decoration.line({ class: 'cm-live-preview-only-line' });
+const previewOnlyInlineDecoration = Decoration.mark({ class: 'cm-live-preview-only-inline' });
 const hiddenSyntaxDecoration = Decoration.replace({});
+
+const previewOnlyBlockNames = new Set([
+    'Blockquote',
+    'FencedCode',
+    'HorizontalRule',
+    'HTMLBlock',
+    'Table',
+]);
+
+class PreviewOnlyBadge extends WidgetType {
+    constructor(label) {
+        super();
+        this.label = label;
+    }
+
+    eq(other) {
+        return other.label === this.label;
+    }
+
+    toDOM() {
+        const badge = document.createElement('span');
+        badge.className = 'cm-live-preview-only-badge';
+        badge.textContent = this.label;
+        badge.setAttribute('aria-label', this.label);
+        badge.setAttribute('title', this.label);
+        return badge;
+    }
+
+    ignoreEvent() {
+        return true;
+    }
+}
 
 class CheckboxWidget extends WidgetType {
     constructor(from, checked, labels) {
@@ -115,7 +149,26 @@ function syntaxRange(node, state) {
     };
 }
 
-function buildDecorations(view, labels) {
+function findPreviewOnlySourceRanges(source) {
+    const ranges = [];
+    const frontmatter = source.match(/^---\r?\n[\s\S]*?\r?\n---(?=\r?\n|$)/);
+    if (frontmatter) {
+        ranges.push({ from: 0, to: frontmatter[0].length });
+    }
+    const displayMathPatterns = [
+        /^[ \t]*\$\$[ \t]*\r?\n[\s\S]*?^[ \t]*\$\$[ \t]*$/gm,
+        /^[ \t]*\\\[[ \t]*\r?\n[\s\S]*?^[ \t]*\\\][ \t]*$/gm,
+    ];
+    for (const pattern of displayMathPatterns) {
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+            ranges.push({ from: match.index, to: match.index + match[0].length });
+        }
+    }
+    return ranges;
+}
+
+function buildDecorations(view, labels, sourceRanges = []) {
     const decorations = [];
     const atomicRanges = [];
     const contexts = selectionContexts(view.state);
@@ -126,12 +179,64 @@ function buildDecorations(view, labels) {
         decorations.push(hiddenRange);
         atomicRanges.push(hiddenRange);
     };
+    const previewOnlyBlocks = new Set();
+    const previewOnlyLineStarts = new Set();
+    const previewOnlyCoveredRanges = [...sourceRanges];
+    const addPreviewOnlyBlock = (from, to) => {
+        const firstLine = view.state.doc.lineAt(from);
+        const lastLine = view.state.doc.lineAt(Math.max(from, to - 1));
+        const blockKey = `${firstLine.from}:${lastLine.to}`;
+        if (previewOnlyBlocks.has(blockKey)) return;
+        previewOnlyBlocks.add(blockKey);
+        for (const visible of view.visibleRanges) {
+            if (visible.from > lastLine.to || visible.to < firstLine.from) continue;
+            const visibleFirstLine = view.state.doc.lineAt(Math.max(from, visible.from)).number;
+            const visibleLastLine = view.state.doc.lineAt(Math.min(to, visible.to)).number;
+            for (let lineNumber = visibleFirstLine; lineNumber <= visibleLastLine; lineNumber++) {
+                const lineFrom = view.state.doc.line(lineNumber).from;
+                if (previewOnlyLineStarts.has(lineFrom)) continue;
+                previewOnlyLineStarts.add(lineFrom);
+                decorations.push(previewOnlyLineDecoration.range(lineFrom));
+            }
+        }
+        if (view.visibleRanges.some((visible) => (
+            visible.from <= firstLine.to && visible.to >= firstLine.from
+        ))) {
+            decorations.push(Decoration.widget({
+                widget: new PreviewOnlyBadge(labels.previewOnly),
+                side: 1,
+            }).range(firstLine.to));
+        }
+    };
+
+    for (const range of sourceRanges) {
+        if (!view.visibleRanges.some((visible) => (
+            visible.from <= range.to && visible.to >= range.from
+        ))) continue;
+        let syntaxNode = tree.resolve(range.from, 1);
+        let insideCode = false;
+        while (syntaxNode) {
+            if (syntaxNode.name === 'FencedCode' || syntaxNode.name === 'InlineCode') {
+                insideCode = true;
+                break;
+            }
+            syntaxNode = syntaxNode.parent;
+        }
+        if (!insideCode) addPreviewOnlyBlock(range.from, range.to);
+    }
 
     for (const visible of view.visibleRanges) {
         tree.iterate({
             from: visible.from,
             to: visible.to,
             enter(node) {
+                if (previewOnlyBlockNames.has(node.name)) {
+                    const covered = previewOnlyCoveredRanges.some((range) => (
+                        node.from >= range.from && node.to <= range.to
+                    ));
+                    if (!covered) addPreviewOnlyBlock(node.from, node.to);
+                }
+
                 const headingMatch = headingPattern.exec(node.name);
                 if (headingMatch) {
                     const line = view.state.doc.lineAt(node.from);
@@ -154,6 +259,11 @@ function buildDecorations(view, labels) {
 
                 if (node.name === 'InlineCode') {
                     decorations.push(inlineCodeDecoration.range(node.from, node.to));
+                    return;
+                }
+
+                if (node.name === 'Image') {
+                    decorations.push(previewOnlyInlineDecoration.range(node.from, node.to));
                     return;
                 }
 
@@ -228,6 +338,7 @@ function buildDecorations(view, labels) {
                 if (!['HeaderMark', 'EmphasisMark', 'CodeMark'].includes(node.name)) return;
 
                 const parent = node.node.parent;
+                if (node.name === 'CodeMark' && parent?.name !== 'InlineCode') return;
                 const activeFrom = parent?.from ?? node.from;
                 const activeTo = parent?.to ?? node.to;
                 if (isActiveRange(activeFrom, activeTo, contexts)) return;
@@ -240,6 +351,34 @@ function buildDecorations(view, labels) {
         });
     }
 
+    const decoratedWikilinkLines = new Set();
+    for (const visible of view.visibleRanges) {
+        const firstLine = view.state.doc.lineAt(visible.from).number;
+        const lastLine = view.state.doc.lineAt(visible.to).number;
+        for (let lineNumber = firstLine; lineNumber <= lastLine; lineNumber++) {
+            if (decoratedWikilinkLines.has(lineNumber)) continue;
+            decoratedWikilinkLines.add(lineNumber);
+            const line = view.state.doc.line(lineNumber);
+            const pattern = /!?\[\[[^\]\n]+\]\]/g;
+            let match;
+            while ((match = pattern.exec(line.text)) !== null) {
+                const from = line.from + match.index;
+                let syntaxNode = tree.resolve(from, 1);
+                let insideCode = false;
+                while (syntaxNode) {
+                    if (syntaxNode.name === 'FencedCode' || syntaxNode.name === 'InlineCode') {
+                        insideCode = true;
+                        break;
+                    }
+                    syntaxNode = syntaxNode.parent;
+                }
+                if (!insideCode) {
+                    decorations.push(previewOnlyInlineDecoration.range(from, from + match[0].length));
+                }
+            }
+        }
+    }
+
     return {
         decorations: Decoration.set(decorations, true),
         atomicRanges: Decoration.set(atomicRanges, true),
@@ -250,19 +389,24 @@ export function livePreviewDecorations(labels = {}) {
     const resolvedLabels = {
         taskComplete: labels.taskComplete || 'Mark task complete',
         taskIncomplete: labels.taskIncomplete || 'Mark task incomplete',
+        previewOnly: labels.previewOnly || 'Preview',
     };
 
     return ViewPlugin.fromClass(
         class {
             constructor(view) {
-                const built = buildDecorations(view, resolvedLabels);
+                this.sourceRanges = findPreviewOnlySourceRanges(view.state.doc.toString());
+                const built = buildDecorations(view, resolvedLabels, this.sourceRanges);
                 this.decorations = built.decorations;
                 this.atomicRanges = built.atomicRanges;
             }
 
             update(update) {
                 if (update.docChanged || update.selectionSet || update.viewportChanged) {
-                    const built = buildDecorations(update.view, resolvedLabels);
+                    if (update.docChanged) {
+                        this.sourceRanges = findPreviewOnlySourceRanges(update.state.doc.toString());
+                    }
+                    const built = buildDecorations(update.view, resolvedLabels, this.sourceRanges);
                     this.decorations = built.decorations;
                     this.atomicRanges = built.atomicRanges;
                 }

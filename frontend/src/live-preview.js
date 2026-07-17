@@ -6,7 +6,7 @@ import {
     Transaction,
 } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
-import { TaskList } from '@lezer/markdown';
+import { Table, TaskList } from '@lezer/markdown';
 import {
     drawSelection,
     Decoration,
@@ -101,7 +101,7 @@ export function createLivePreviewEditor({
             doc,
             extensions: [
                 history(),
-                markdown({ extensions: [TaskList] }),
+                markdown({ extensions: [Table, TaskList] }),
                 decorationsCompartment.of(livePreviewDecorations(editorLabels)),
                 searchField,
                 drawSelection(),
@@ -208,6 +208,28 @@ export function createLivePreviewEditor({
                     '.cm-live-task-complete': {
                         color: 'var(--text-tertiary)',
                         textDecoration: 'line-through',
+                    },
+                    '.cm-live-preview-only-line': {
+                        backgroundColor: 'var(--bg-tertiary)',
+                        boxShadow: 'inset 2px 0 0 var(--accent-primary)',
+                    },
+                    '.cm-live-preview-only-inline': {
+                        textDecoration: 'underline dotted var(--accent-primary)',
+                        textUnderlineOffset: '0.2em',
+                    },
+                    '.cm-live-preview-only-badge': {
+                        display: 'inline-block',
+                        marginLeft: '0.65rem',
+                        padding: '0.05rem 0.35rem',
+                        border: '1px solid var(--accent-primary)',
+                        borderRadius: '999px',
+                        color: 'var(--accent-primary)',
+                        fontFamily: 'inherit',
+                        fontSize: '0.65em',
+                        fontWeight: '600',
+                        lineHeight: '1.35',
+                        verticalAlign: '0.1em',
+                        userSelect: 'none',
                     },
                     '.cm-live-search-match': {
                         backgroundColor: 'var(--accent-light)',

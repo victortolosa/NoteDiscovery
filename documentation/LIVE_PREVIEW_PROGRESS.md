@@ -130,6 +130,7 @@ baseline; all other Markdown remains editable source.
 | 2026-07-17 | Stabilization | Disposable vault on port 8002 | View transitions | Pass | Live Preview remained mounted once across view transitions before Split was removed from its experimental UI |
 | 2026-07-17 | Session 5 | Frontend checks | Shared command unit tests and minified build | Pass | Fourteen tests passed; toolbar, indentation, task, table, and continuation commands are editor-independent |
 | 2026-07-17 | Session 5/6 | Disposable vault on port 8002 | Live and Classic editor smoke checks | Pass | Toolbar and shortcut formatting, Enter continuation, keyboard task toggle, search highlighting, F3 movement, and Classic fallback passed |
+| 2026-07-17 | Presentation cues | Disposable vault on port 8002 | Preview-only syntax styling | Pass | Frontmatter, tables, fences, display math, blockquotes, HTML, images, and wikilinks received non-document cues; fixture bytes remained identical |
 
 ## Decisions
 
@@ -229,6 +230,41 @@ parity work during the MVP.
   development workflow.
 
 ## Session log
+
+### 2026-07-17: preview-only syntax cues
+
+#### Objective
+
+Make source that receives additional formatting in Preview distinguishable from
+syntax rendered directly in Live Preview.
+
+#### Completed
+
+- Added a restrained tertiary background, accent rail, and one localized
+  `Preview` badge to preview-only block constructs.
+- Covered frontmatter, tables, fenced code and Mermaid, display math,
+  blockquotes and callouts, HTML blocks, and horizontal rules.
+- Added dotted cues for Markdown images and wikilinks.
+- Kept cue widgets outside the document and limited line decorations to visible
+  ranges.
+- Kept fenced-code markers visible instead of treating them as inline-code
+  delimiters.
+
+#### Verification
+
+- Seventeen frontend tests and the minified bundle build passed.
+- Dark-theme visual inspection passed after reducing the initial background
+  strength.
+- Copied source was 301 bytes, matching the fixture exactly.
+- Untouched disposable fixtures remained byte-for-byte identical.
+
+#### Issues
+
+- Inline math remains plain source; block display math receives the cue.
+
+#### Next step
+
+Collect daily-use feedback on cue density before adding more syntax categories.
 
 ### 2026-07-17: shared commands and search integration
 

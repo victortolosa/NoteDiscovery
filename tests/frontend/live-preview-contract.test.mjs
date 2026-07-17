@@ -79,3 +79,18 @@ test('the Live Preview cursor uses the active theme text color', async () => {
     assert.match(source, /'\.cm-cursor, \.cm-dropCursor'/);
     assert.match(source, /borderLeftColor: 'var\(--text-primary\)'/);
 });
+
+test('preview-only Markdown uses non-document decorations', async () => {
+    const editor = await readFile(new URL('frontend/src/live-preview.js', root), 'utf8');
+    const decorations = await readFile(
+        new URL('frontend/src/live-preview-decorations.js', root),
+        'utf8'
+    );
+    assert.match(editor, /markdown\(\{ extensions: \[Table, TaskList\] \}\)/);
+    assert.match(decorations, /class: 'cm-live-preview-only-line'/);
+    assert.match(decorations, /class: 'cm-live-preview-only-inline'/);
+    assert.match(decorations, /new PreviewOnlyBadge\(labels\.previewOnly\)/);
+    assert.match(decorations, /'Blockquote'/);
+    assert.match(decorations, /'FencedCode'/);
+    assert.match(decorations, /'Table'/);
+});
