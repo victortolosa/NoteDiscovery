@@ -248,15 +248,7 @@ Time already invested is not a reason to proceed.
 
 ## Work after a go decision
 
-Full parity and interactive elements require a separate plan. Likely areas are:
-
-- Toolbar and formatting commands.
-- List, task, and indentation behavior.
-- Links and wikilinks.
-- Images and attachments.
-- Search and outline navigation.
-- Drag, drop, and paste handling.
-- Per-note cursor and scroll restoration.
-- Readable width, Zen mode, and responsive refinements.
-- Broader browser and regression testing.
-- Controlled staging rollout.
+Full parity and interactive elements are defined in
+[LIVE_PREVIEW_PARITY_PLAN.md](LIVE_PREVIEW_PARITY_PLAN.md). The current
+presentation syntax is frozen during parity work; unsupported Markdown remains
+editable source.

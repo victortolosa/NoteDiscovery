@@ -2,22 +2,27 @@
 
 ## Current status
 
-- Status: Session 3 complete with lists, links, and task-checkbox extension
+- Status: Session 3 complete; full-parity roadmap drafted with preview syntax frozen
 - Branch: `feature/live-preview`
 - Base: `custom` at `8317241`
 - Current session: Session 3 — live-preview behavior
 - Next session: Session 4 — evaluation and decision
-- Decision: pending
+- Direction: proceed toward parity if Session 4 closes without a blocking cursor,
+  source-integrity, or mobile finding
 - Last updated: 2026-07-17
 
 See [LIVE_PREVIEW_MVP_PLAN.md](LIVE_PREVIEW_MVP_PLAN.md) for scope, architecture,
 acceptance criteria, and the go/no-go checkpoint.
 
+See [LIVE_PREVIEW_PARITY_PLAN.md](LIVE_PREVIEW_PARITY_PLAN.md) for the work after
+the evaluation gate.
+
 ## Scope guard
 
-The current objective is to evaluate editing feel and technical viability. Do
-not expand the MVP into full editor parity before Session 4 records a go
-decision.
+The current objective is to close the evaluation, then restore existing editor
+workflows. Do not add more live-preview syntax during parity work. Headings,
+emphasis, inline code, lists, links, and tasks are the frozen presentation
+baseline; all other Markdown remains editable source.
 
 ## Session checklist
 
@@ -101,6 +106,29 @@ decision.
 | 2026-07-17 | Session 3 extension | Wikilink fixture | Source fallback | Pass | `[[folder/note\|Readable label]]` remained untouched source |
 
 ## Decisions
+
+### 2026-07-17: freeze presentation syntax for parity work
+
+Decision: proceed with planning for full application parity while keeping the
+current Markdown presentation set unchanged.
+
+Reason: the current preview already demonstrates the intended editing model.
+The higher-value next work is restoring toolbar, keyboard, navigation,
+attachment, layout, and lifecycle behavior. Additional rendered syntax can be
+evaluated later from daily-use evidence.
+
+Session 4 remains a release-quality evaluation gate rather than being treated
+as complete without Safari and iPhone results.
+
+### 2026-07-17: preserve Edit, Split, and Preview as independent view modes
+
+Decision: Live Preview changes only the editor used by the editable pane. The
+existing Edit, Split, and Preview choices and the rendered Preview pane remain
+unchanged. Classic remains selectable as a fallback.
+
+Reason: keeping editor type separate from view layout limits the patch's blast
+radius, preserves the full renderer as a correctness reference, and makes the
+feature reversible without disrupting established workflows.
 
 ### 2026-07-17: use a time-boxed vertical prototype
 

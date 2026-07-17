@@ -6,7 +6,6 @@ import {
     EditorView,
     highlightActiveLine,
     keymap,
-    lineNumbers,
 } from '@codemirror/view';
 import {
     defaultKeymap,
@@ -30,7 +29,6 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
         EditorState.create({
             doc,
             extensions: [
-                lineNumbers(),
                 history(),
                 markdown({ extensions: [TaskList] }),
                 livePreviewDecorations,
@@ -59,12 +57,7 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
                         caretColor: 'var(--text-primary)',
                         padding: '1rem',
                     },
-                    '.cm-gutters': {
-                        backgroundColor: 'var(--bg-secondary)',
-                        borderColor: 'var(--border-primary)',
-                        color: 'var(--text-tertiary)',
-                    },
-                    '.cm-activeLine, .cm-activeLineGutter': {
+                    '.cm-activeLine': {
                         backgroundColor: 'var(--bg-tertiary)',
                     },
                     '.cm-live-heading': {
