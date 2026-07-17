@@ -3,7 +3,8 @@ name: build-custom
 # On every push to `custom`, GitHub-hosted runners build the NoteDiscovery
 # Docker image and push it to GitHub Container Registry (ghcr.io). The
 # deployment server pulls this image via `docker compose pull` — it never
-# builds locally.
+# builds locally. Publishing does not restart the server; the exact update
+# command is documented in documentation/CUSTOM_DEPLOYMENT.md.
 #
 # Custom patches live as ordinary, readable commits on this branch (e.g. edits
 # to frontend/app.js). The Dockerfile's first stage minifies the frontend at

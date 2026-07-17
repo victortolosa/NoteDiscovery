@@ -19,8 +19,10 @@ dependencies, no over-engineering.
 - **`custom`** (default working branch): personal patches on top of upstream.
   Every **push** to `custom` triggers `.github/workflows/build-custom.yml`,
   which builds and publishes the Docker image to ghcr.io that the deployment
-  server pulls. **Pushing = deploying.** Commit freely; push only when
-  explicitly asked.
+  server pulls. **Pushing publishes a deployable image but does not restart the
+  server.** Commit freely; push only when explicitly asked. Follow
+  [documentation/CUSTOM_DEPLOYMENT.md](documentation/CUSTOM_DEPLOYMENT.md) to
+  pull and recreate the service on `docker-i5`.
 - `main`: tracks upstream. Upstream releases are tagged from `main`
   (`release.ps1` → tag → `docker-publish.yml`); that flow is upstream's, not ours.
 
