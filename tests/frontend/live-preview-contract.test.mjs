@@ -48,3 +48,10 @@ test('the generated bundle remains a lazy-loaded artifact', async () => {
     assert.match(app, /import\('\/static\/dist\/live-preview\.js'\)/);
     assert.doesNotMatch(html, /<script[^>]+live-preview\.js/);
 });
+
+test('Split remains a Classic-only view', async () => {
+    const app = await readFile(new URL('frontend/app.js', root), 'utf8');
+    const html = await readFile(new URL('frontend/index.html', root), 'utf8');
+    assert.match(html, /x-show="editorMode === 'classic'"\s+@click="viewMode = 'split'"/);
+    assert.match(app, /mode === 'live-preview' && this\.viewMode === 'split'/);
+});

@@ -108,9 +108,20 @@ baseline; all other Markdown remains editable source.
 | 2026-07-17 | `6565e4e` | Git merge | Upstream 0.28.3 integration | Pass | Resolved app, index, runner, and environment-documentation conflicts; retained custom tabs, favorites, drag/drop, and theme behavior |
 | 2026-07-17 | Stabilization | Frontend checks | Unit tests and minified build | Pass | Six tests passed; all dependencies exact; lazy bundle built successfully |
 | 2026-07-17 | Stabilization | In-app browser on port 8001 | Persisted Live Preview mount | Pass | Note opening mounted exactly one CodeMirror editor with no line-number gutter |
-| 2026-07-17 | Stabilization | Disposable vault on port 8002 | Edit, Split, and Preview transitions | Pass | Live Preview remained mounted once across all three existing view modes |
+| 2026-07-17 | Stabilization | Disposable vault on port 8002 | View transitions | Pass | Live Preview remained mounted once across view transitions before Split was removed from its experimental UI |
 
 ## Decisions
+
+### 2026-07-17: keep Split Classic-only during the experiment
+
+Decision: hide Split while Live Preview is active. Selecting Live Preview from
+an existing Split layout moves to Edit. Preview remains available as the full
+rendered view.
+
+Reason: Live Preview already provides formatted context while editing. Removing
+the simultaneous rendered pane reduces integration surface and avoids coupling
+the experiment to split-scroll synchronization. Classic retains all three view
+modes unchanged.
 
 ### 2026-07-17: stabilize against upstream before parity features
 
@@ -156,6 +167,10 @@ unchanged. Classic remains selectable as a fallback.
 Reason: keeping editor type separate from view layout limits the patch's blast
 radius, preserves the full renderer as a correctness reference, and makes the
 feature reversible without disrupting established workflows.
+
+Superseded in part by the later decision to keep Split Classic-only while Live
+Preview remains experimental. Edit and Preview are still independent of editor
+implementation.
 
 ### 2026-07-17: use a time-boxed vertical prototype
 

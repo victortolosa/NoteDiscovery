@@ -784,6 +784,9 @@ function noteApp() {
                 this.editorMode = 'classic';
                 this.livePreviewError = this.t('editor.live_preview_unavailable');
             }
+            if (this.editorMode === 'live-preview' && this.viewMode === 'split') {
+                this.viewMode = 'edit';
+            }
             document.documentElement.style.setProperty('--font-scale', this.fontSizeScale);
             await this.loadFavorites(); // override localStorage cache with server state
             this.loadingInitial = false;
@@ -1058,11 +1061,11 @@ function noteApp() {
                         if (e.code === 'Digit1') {
                             targetMode = 'edit';
                         } else if (e.code === 'Digit2') {
-                            targetMode = isMobile ? 'edit' : 'split';
+                            targetMode = (isMobile || this.editorMode === 'live-preview') ? 'edit' : 'split';
                         } else if (e.code === 'Digit3') {
                             targetMode = 'preview';
                         } else if (e.key.toLowerCase() === 'v') {
-                            if (isMobile) {
+                            if (isMobile || this.editorMode === 'live-preview') {
                                 targetMode = this.viewMode === 'edit' ? 'preview' : 'edit';
                             } else {
                                 const order = ['edit', 'split', 'preview'];
@@ -1269,6 +1272,9 @@ function noteApp() {
 
             this.editorMode = mode;
             localStorage.setItem('editorMode', mode);
+            if (mode === 'live-preview' && this.viewMode === 'split') {
+                this.viewMode = 'edit';
+            }
             await this.syncEditorSurface();
 
             // Each editor owns a separate history implementation. Returning to
@@ -5686,7 +5692,7 @@ function noteApp() {
         focusEditorForNewNote() {
             // Only switch if in preview-only mode - don't disturb edit or split mode
             if (this.viewMode === 'preview') {
-                this.viewMode = 'split';
+                this.viewMode = this.editorMode === 'live-preview' ? 'edit' : 'split';
                 this.saveViewMode();
             }
             // Focus the editor after a short delay to ensure DOM is updated

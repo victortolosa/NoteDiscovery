@@ -20,7 +20,8 @@ full rendered-preview parity.
 
 ## Product direction
 
-- Preserve the existing Edit, Split, and Preview view modes and their controls.
+- Preserve Edit, Split, and Preview for Classic; offer Edit and Preview when
+  Live Preview is active.
 - Treat Classic and Live Preview as choices for the editable pane only.
 - Keep the existing rendered Preview pane unchanged in Split and Preview modes.
 - Keep Classic available throughout the work.
@@ -40,22 +41,23 @@ single mode system:
 | View mode | Editable pane | Existing rendered Preview pane |
 | --- | --- | --- |
 | Edit | Classic or Live Preview | Hidden |
-| Split | Classic or Live Preview | Visible and unchanged |
+| Split | Classic only | Visible and unchanged |
 | Preview | Hidden | Visible and unchanged |
 
-Live Preview replaces only the textarea surface when the editable pane is
-visible. It does not replace the existing Markdown renderer, change Split into
-two editable views, or alter Preview mode.
+Live Preview replaces only the textarea surface in Edit. It does not replace the
+existing Markdown renderer or alter Preview mode. Split remains a Classic-only
+layout during the experiment.
 
 Compatibility rules:
 
-- Existing view-mode persistence and Edit, Split, and Preview buttons remain.
-- Changing editor type must not change view mode.
+- Existing view-mode persistence and Edit, Split, and Preview buttons remain for
+  Classic.
+- Selecting Live Preview while Split is active changes the view to Edit.
 - Changing view mode must not change editor type.
 - Entering Preview may unmount or hide Live Preview, but must retain unsaved
   content, selection, and scroll state for a safe return.
-- Split continues to use the established rendered Preview as the source of truth
-  for complete Markdown rendering.
+- Classic Split continues to use the established rendered Preview as the source
+  of truth for complete Markdown rendering.
 - Features can remain Classic-only temporarily while being migrated, provided
   the UI clearly disables or explains them in Live Preview.
 - No shared implementation replaces a proven Classic path until both paths have
@@ -288,8 +290,8 @@ Deliverables:
 
 - Restore per-note cursor and scroll positions across note tabs and mode changes.
 - Support readable line length, Zen mode, sidebar resizing, and window resizing.
-- Verify every transition among Edit, Split, and Preview with both Classic and
-  Live Preview selected.
+- Verify Edit, Split, and Preview with Classic, plus Edit and Preview with Live
+  Preview selected.
 - Preserve the existing rendered Preview implementation and split-pane resizing.
 - Keep metadata, statistics, save state, stale-file conflict, and note switching
   synchronized.
@@ -302,8 +304,8 @@ Exit criteria:
 
 - Returning to a tab restores a useful position without unexpected jumps.
 - Layout controls work in light and dark themes at desktop and mobile widths.
-- The six editor/view combinations in the compatibility table retain content,
-  view choice, and useful positions across transitions and reloads.
+- The five supported editor/view combinations retain content, view choice, and
+  useful positions across transitions and reloads.
 - Repeated switching, resizing, and opening notes does not duplicate handlers or
   progressively increase retained editor instances.
 
@@ -373,7 +375,8 @@ Classic fallback, or attachment safety.
 - All existing formatting commands are usable.
 - Search, outline, note switching, and attachments work.
 - Autosave, manual save, undo, redo, and stale-file recovery remain trustworthy.
-- Edit, Split, and Preview retain their existing roles with either editor choice.
+- Edit, Split, and Preview retain their existing Classic roles; Live Preview
+  exposes Edit and Preview only.
 
 ### Integrity gate
 
