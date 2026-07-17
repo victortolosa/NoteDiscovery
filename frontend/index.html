@@ -2617,7 +2617,7 @@
                                 
                                 <!-- Syntax Highlighting Toggle -->
                                 <div class="mb-4">
-                                    <label for="editor-mode-setting" class="block text-xs font-medium mb-2" style="color: var(--text-secondary);">Editor mode</label>
+                                    <label for="editor-mode-setting" class="block text-xs font-medium mb-2" style="color: var(--text-secondary);" x-text="t('editor.live_preview_mode_label')"></label>
                                     <select
                                         id="editor-mode-setting"
                                         x-model="editorMode"
@@ -2625,10 +2625,14 @@
                                         class="w-full px-2 py-2 text-sm rounded focus:outline-none focus:ring-2 focus:ring-opacity-50"
                                         style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary); cursor: pointer;"
                                     >
-                                        <option value="classic">Classic</option>
-                                        <option value="live-preview">Live Preview (Experimental)</option>
+                                        <option value="classic" x-text="t('editor.classic_mode')"></option>
+                                        <option value="live-preview" :disabled="!livePreviewAvailable" x-text="t('editor.live_preview_mode')"></option>
                                     </select>
-                                    <p class="text-xs mt-1" style="color: var(--text-tertiary);">Live Preview is an incomplete development prototype.</p>
+                                    <p
+                                        class="text-xs mt-1"
+                                        style="color: var(--text-tertiary);"
+                                        x-text="livePreviewAvailabilityChecked && !livePreviewAvailable ? t('editor.live_preview_unavailable') : t('editor.live_preview_description')"
+                                    ></p>
                                 </div>
 
                                 <!-- Syntax Highlighting Toggle -->
@@ -3752,12 +3756,13 @@
                                     id="live-preview-editor"
                                     x-show="editorMode === 'live-preview' && !livePreviewError"
                                     class="live-preview-editor"
-                                    aria-label="Live Preview Markdown editor"
+                                    :aria-label="t('editor.live_preview_aria')"
                                 ></div>
                                 <div
                                     x-show="editorMode === 'live-preview' && livePreviewLoading"
                                     class="live-preview-status"
-                                >Loading Live Preview…</div>
+                                    x-text="t('editor.live_preview_loading')"
+                                ></div>
                                 <div
                                     x-show="editorMode === 'live-preview' && livePreviewError"
                                     class="live-preview-status live-preview-status-error"

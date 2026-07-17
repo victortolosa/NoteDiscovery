@@ -291,10 +291,14 @@ function noteApp() {
         currentNoteName: '',
         noteContent: '',
         editorMode: 'classic',
+        livePreviewAvailable: false,
+        livePreviewAvailabilityChecked: false,
         livePreviewLoading: false,
         livePreviewError: '',
         _livePreviewEditor: null,
+        _livePreviewDocumentPath: '',
         _livePreviewModulePromise: null,
+        _livePreviewScrollUnsubscribe: null,
         viewMode: 'split', // 'edit', 'split', 'preview'
         searchQuery: '',
 
@@ -774,7 +778,12 @@ function noteApp() {
             await this.loadTemplates();
             await this.loadCustomShortcuts();
             await this.checkStatsPlugin();
+            await this.checkLivePreviewAvailability();
             this.loadLocalSettings();
+            if (this.editorMode === 'live-preview' && !this.livePreviewAvailable) {
+                this.editorMode = 'classic';
+                this.livePreviewError = this.t('editor.live_preview_unavailable');
+            }
             document.documentElement.style.setProperty('--font-scale', this.fontSizeScale);
             await this.loadFavorites(); // override localStorage cache with server state
             this.loadingInitial = false;
@@ -885,7 +894,9 @@ function noteApp() {
             // Watch for changes in note content to re-apply search highlights
             this.$watch('noteContent', (newContent) => {
                 if (this._livePreviewEditor) {
-                    this._livePreviewEditor.setContent(newContent);
+                    const resetHistory = this._livePreviewDocumentPath !== this.currentNote;
+                    this._livePreviewEditor.replaceDocument(newContent, { resetHistory });
+                    this._livePreviewDocumentPath = this.currentNote;
                 }
                 if (this.currentSearchHighlight) {
                     // Re-apply highlights after content changes (with small delay for render)
@@ -971,7 +982,7 @@ function noteApp() {
 
                     // Ctrl/Cmd + Z for undo (drawing vs note editor)
                     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
-                        if (this.editorMode === 'live-preview' && document.activeElement?.closest('.cm-editor')) {
+                        if (this._livePreviewEditor?.hasFocus()) {
                             return;
                         }
                         if (this.currentMedia && this.currentMediaType === 'drawing') {
@@ -985,7 +996,7 @@ function noteApp() {
 
                     // Ctrl/Cmd + Y OR Ctrl/Cmd+Shift+Z for redo
                     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-                        if (this.editorMode === 'live-preview' && document.activeElement?.closest('.cm-editor')) {
+                        if (this._livePreviewEditor?.hasFocus()) {
                             return;
                         }
                         if (this.currentMedia && this.currentMediaType === 'drawing') {
@@ -997,7 +1008,7 @@ function noteApp() {
                         }
                     }
                     if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
-                        if (this.editorMode === 'live-preview' && document.activeElement?.closest('.cm-editor')) {
+                        if (this._livePreviewEditor?.hasFocus()) {
                             return;
                         }
                         if (this.currentMedia && this.currentMediaType === 'drawing') {
@@ -1250,6 +1261,7 @@ function noteApp() {
 
         async setEditorMode(mode) {
             if (!['classic', 'live-preview'].includes(mode)) return;
+            if (mode === 'live-preview' && !this.livePreviewAvailable) return;
 
             if (this._livePreviewEditor) {
                 this.noteContent = this._livePreviewEditor.getContent();
@@ -1273,8 +1285,12 @@ function noteApp() {
             if (this.editorMode !== 'live-preview') {
                 if (this._livePreviewEditor) {
                     this.noteContent = this._livePreviewEditor.getContent();
+                    this._livePreviewScrollUnsubscribe?.();
+                    this._livePreviewScrollUnsubscribe = null;
                     this._livePreviewEditor.destroy();
                     this._livePreviewEditor = null;
+                    this._livePreviewDocumentPath = '';
+                    this.$nextTick(() => this.setupScrollSync());
                 }
                 this.livePreviewError = '';
                 return;
@@ -1299,18 +1315,53 @@ function noteApp() {
                 this._livePreviewEditor = createLivePreviewEditor({
                     parent,
                     content: this.noteContent,
+                    labels: {
+                        taskComplete: this.t('editor.live_preview_task_complete'),
+                        taskIncomplete: this.t('editor.live_preview_task_incomplete'),
+                    },
                     onChange: (content) => {
                         this.noteContent = content;
                         this.autoSave({ recordHistory: false });
                     },
                 });
+                this._livePreviewDocumentPath = this.currentNote;
+                this.setupScrollSync();
+                requestAnimationFrame(() => this._restoreNoteScroll());
             } catch (error) {
                 this._livePreviewModulePromise = null;
-                this.livePreviewError = 'Live Preview failed to load. Run npm run build:live-preview.';
+                this.livePreviewError = this.t('editor.live_preview_load_error');
                 ErrorHandler.handle('load Live Preview editor', error, false);
             } finally {
                 this.livePreviewLoading = false;
             }
+        },
+
+        async checkLivePreviewAvailability() {
+            try {
+                const response = await fetch('/static/dist/live-preview.js', {
+                    method: 'HEAD',
+                    cache: 'no-store',
+                });
+                this.livePreviewAvailable = response.ok;
+            } catch (_) {
+                this.livePreviewAvailable = false;
+            } finally {
+                this.livePreviewAvailabilityChecked = true;
+            }
+        },
+
+        replaceLivePreviewDocument(content, { resetHistory = false } = {}) {
+            if (!this._livePreviewEditor) return;
+            this._livePreviewEditor.replaceDocument(content, { resetHistory });
+            this._livePreviewDocumentPath = this.currentNote;
+        },
+
+        replaceEditorRange(change) {
+            if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                this._livePreviewEditor.replaceRange(change);
+                return true;
+            }
+            return false;
         },
 
         // Readable line length toggle (for preview max-width)
@@ -1796,6 +1847,10 @@ function noteApp() {
         // Change locale and reload translations
         async changeLocale(localeCode) {
             await this.loadLocale(localeCode);
+            this._livePreviewEditor?.setLabels({
+                taskComplete: this.t('editor.live_preview_task_complete'),
+                taskIncomplete: this.t('editor.live_preview_task_incomplete'),
+            });
         },
 
         // ==================== END INTERNATIONALIZATION ====================
@@ -2257,9 +2312,8 @@ function noteApp() {
 
             if (this.viewMode === 'edit' || this.viewMode === 'split') {
                 // In edit/split mode, scroll the editor to the line
-                const textarea = document.querySelector('.editor-textarea');
-                if (textarea && heading.line) {
-                    const lines = textarea.value.split('\n');
+                if (heading.line) {
+                    const lines = this.noteContent.split('\n');
                     let charPos = 0;
 
                     // Calculate character position of the heading line
@@ -2267,7 +2321,16 @@ function noteApp() {
                         charPos += lines[i].length + 1; // +1 for newline
                     }
 
-                    // Set cursor position and scroll
+                    if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                        this._livePreviewEditor.setSelection(charPos);
+                        this._livePreviewEditor.focus();
+                        return;
+                    }
+
+                    const textarea = document.querySelector('.editor-textarea');
+                    if (!textarea) return;
+
+                    // Set cursor position and scroll in Classic.
                     textarea.focus();
                     textarea.setSelectionRange(charPos, charPos);
 
@@ -5259,7 +5322,8 @@ function noteApp() {
                 // 1. First tick: expand folders and update DOM
                 // 2. Second tick: highlight the note and setup everything else
                 this.$nextTick(() => {
-                    this.$nextTick(() => {
+                    this.$nextTick(async () => {
+                        await this.syncEditorSurface();
                         this.refreshDOMCache();
                         this.setupScrollSync();
                         // First pass: editor is ready (textarea reflows synchronously). Preview
@@ -6736,6 +6800,7 @@ function noteApp() {
                 clearTimeout(this.saveTimeout);
                 this.saveTimeout = null;
             }
+            this.replaceLivePreviewDocument(this.staleServerContent, { resetHistory: true });
             this.noteContent = this.staleServerContent;
             this._savedContent = this.staleServerContent;
             this._staleServerSignature = '';
@@ -7530,6 +7595,34 @@ function noteApp() {
             this._domCache.previewContainer = this._domCache.previewContent ? this._domCache.previewContent.parentElement : null;
         },
 
+        getActiveEditorScrollMetrics() {
+            if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                return this._livePreviewEditor.getScrollMetrics();
+            }
+            const editor = this._domCache.editor;
+            if (!editor) return null;
+            return {
+                top: editor.scrollTop,
+                left: editor.scrollLeft,
+                scrollHeight: editor.scrollHeight,
+                scrollWidth: editor.scrollWidth,
+                clientHeight: editor.clientHeight,
+                clientWidth: editor.clientWidth,
+            };
+        },
+
+        setActiveEditorScrollPercentage(percentage) {
+            const normalized = Math.max(0, Math.min(Number(percentage) || 0, 1));
+            if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                this._livePreviewEditor.setScrollPercentage(normalized);
+                return;
+            }
+            const editor = this._domCache.editor;
+            if (!editor) return;
+            const scrollableHeight = editor.scrollHeight - editor.clientHeight;
+            editor.scrollTop = normalized * Math.max(0, scrollableHeight);
+        },
+
         // Add copy button to code block
         addCopyButtonToCodeBlock(preElement) {
             // Extract language from code element class (e.g., "language-toml" -> "TOML")
@@ -7656,10 +7749,11 @@ function noteApp() {
                 this.refreshDOMCache();
             }
 
-            const editor = this._domCache.editor;
+            const classicEditor = this._domCache.editor;
             const preview = this._domCache.previewContainer;
+            const liveEditor = this.editorMode === 'live-preview' ? this._livePreviewEditor : null;
 
-            if (!editor || !preview) {
+            if ((!classicEditor && !liveEditor) || !preview) {
                 // If elements don't exist yet, retry with limit
                 if (!this._setupScrollSyncRetries) this._setupScrollSyncRetries = 0;
                 if (this._setupScrollSyncRetries < CONFIG.SCROLL_SYNC_MAX_RETRIES) {
@@ -7675,28 +7769,33 @@ function noteApp() {
             this._setupScrollSyncRetries = 0;
 
             // Remove old listeners if they exist
-            if (this._editorScrollHandler) {
-                editor.removeEventListener('scroll', this._editorScrollHandler);
+            if (this._editorScrollHandler && classicEditor) {
+                classicEditor.removeEventListener('scroll', this._editorScrollHandler);
             }
+            this._livePreviewScrollUnsubscribe?.();
+            this._livePreviewScrollUnsubscribe = null;
             if (this._previewScrollHandler) {
                 preview.removeEventListener('scroll', this._previewScrollHandler);
             }
 
             // Create new scroll handlers
-            this._editorScrollHandler = () => {
+            this._editorScrollHandler = (providedMetrics = null) => {
                 if (this.isScrolling) {
                     this.isScrolling = false;
                     return;
                 }
 
-                if (this.viewMode === 'edit' || this.viewMode === 'split') {
+                if ((this.viewMode === 'edit' || this.viewMode === 'split')
+                    && typeof this.scheduleStickyHeadingForScroll === 'function') {
                     this.scheduleStickyHeadingForScroll('editor');
                 }
 
-                const scrollableHeight = editor.scrollHeight - editor.clientHeight;
+                const metrics = providedMetrics || this.getActiveEditorScrollMetrics();
+                if (!metrics) return;
+                const scrollableHeight = metrics.scrollHeight - metrics.clientHeight;
                 if (scrollableHeight <= 0) return; // No scrolling needed
 
-                const scrollPercentage = editor.scrollTop / scrollableHeight;
+                const scrollPercentage = metrics.top / scrollableHeight;
                 const previewScrollableHeight = preview.scrollHeight - preview.clientHeight;
 
                 // Remember the user-driven scroll position as a percentage so it restores
@@ -7719,7 +7818,8 @@ function noteApp() {
                     return;
                 }
 
-                if (this.viewMode === 'preview') {
+                if (this.viewMode === 'preview'
+                    && typeof this.scheduleStickyHeadingForScroll === 'function') {
                     this.scheduleStickyHeadingForScroll('preview');
                 }
 
@@ -7727,7 +7827,10 @@ function noteApp() {
                 if (scrollableHeight <= 0) return; // No scrolling needed
 
                 const scrollPercentage = preview.scrollTop / scrollableHeight;
-                const editorScrollableHeight = editor.scrollHeight - editor.clientHeight;
+                const editorMetrics = this.getActiveEditorScrollMetrics();
+                const editorScrollableHeight = editorMetrics
+                    ? editorMetrics.scrollHeight - editorMetrics.clientHeight
+                    : 0;
 
                 // Capture preview-driven scrolls too — this is the only path that fires in
                 // preview-only mode, where the textarea is display:none and never scrolls.
@@ -7737,13 +7840,19 @@ function noteApp() {
 
                 if (editorScrollableHeight > 0) {
                     this.isScrolling = true;
-                    editor.scrollTop = scrollPercentage * editorScrollableHeight;
-                    this.scheduleStickyHeadingForScroll('editor');
+                    this.setActiveEditorScrollPercentage(scrollPercentage);
+                    if (typeof this.scheduleStickyHeadingForScroll === 'function') {
+                        this.scheduleStickyHeadingForScroll('editor');
+                    }
                 }
             };
 
             // Attach new listeners
-            editor.addEventListener('scroll', this._editorScrollHandler);
+            if (liveEditor) {
+                this._livePreviewScrollUnsubscribe = liveEditor.onScroll(this._editorScrollHandler);
+            } else {
+                classicEditor.addEventListener('scroll', this._editorScrollHandler, { passive: true });
+            }
             preview.addEventListener('scroll', this._previewScrollHandler);
         },
 
@@ -8244,14 +8353,11 @@ function noteApp() {
             if (!this._domCache.editor || !this._domCache.previewContainer) {
                 this.refreshDOMCache();
             }
-            const editor = this._domCache.editor;
             const preview = this._domCache.previewContainer;
-            if (editor) {
-                const scrollable = editor.scrollHeight - editor.clientHeight;
-                if (scrollable > 0) {
-                    this.isScrolling = true;
-                    editor.scrollTop = pct * scrollable;
-                }
+            const editorMetrics = this.getActiveEditorScrollMetrics();
+            if (editorMetrics && editorMetrics.scrollHeight > editorMetrics.clientHeight) {
+                this.isScrolling = true;
+                this.setActiveEditorScrollPercentage(pct);
             }
             if (preview) {
                 const scrollable = preview.scrollHeight - preview.clientHeight;
@@ -8274,9 +8380,7 @@ function noteApp() {
 
             // Only scroll the visible panes based on viewMode
             if (this.viewMode === 'edit' || this.viewMode === 'split') {
-                if (this._domCache.editor) {
-                    this._domCache.editor.scrollTop = 0;
-                }
+                this.setActiveEditorScrollPercentage(0);
             }
 
             if (this.viewMode === 'preview' || this.viewMode === 'split') {

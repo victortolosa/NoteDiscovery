@@ -3,9 +3,9 @@ FROM node:20-alpine AS minifier
 
 WORKDIR /build
 
-# Install the locked frontend dependencies and the HTML minifier.
+# Install the locked frontend build dependencies.
 COPY package.json package-lock.json ./
-RUN npm ci && npm install -g html-minifier-terser
+RUN npm ci
 
 # Copy frontend files
 COPY frontend/ ./frontend/
@@ -16,7 +16,7 @@ RUN npm run build:live-preview:minify && \
     ./node_modules/.bin/esbuild frontend/sw.js --minify --outfile=frontend/sw.js --allow-overwrite
 
 # Minify HTML files (handles inline CSS and JS too)
-RUN html-minifier-terser \
+RUN ./node_modules/.bin/html-minifier-terser \
     --collapse-whitespace \
     --remove-comments \
     --remove-redundant-attributes \
@@ -24,7 +24,7 @@ RUN html-minifier-terser \
     --minify-js true \
     -o frontend/index.html \
     frontend/index.html && \
-    html-minifier-terser \
+    ./node_modules/.bin/html-minifier-terser \
     --collapse-whitespace \
     --remove-comments \
     --minify-css true \

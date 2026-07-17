@@ -17,14 +17,18 @@ const completedTaskDecoration = Decoration.mark({ class: 'cm-live-task-complete'
 const hiddenSyntaxDecoration = Decoration.replace({});
 
 class CheckboxWidget extends WidgetType {
-    constructor(from, checked) {
+    constructor(from, checked, labels) {
         super();
         this.from = from;
         this.checked = checked;
+        this.labels = labels;
     }
 
     eq(other) {
-        return other.from === this.from && other.checked === this.checked;
+        return other.from === this.from
+            && other.checked === this.checked
+            && other.labels.taskComplete === this.labels.taskComplete
+            && other.labels.taskIncomplete === this.labels.taskIncomplete;
     }
 
     toDOM(view) {
@@ -34,7 +38,7 @@ class CheckboxWidget extends WidgetType {
         checkbox.className = 'cm-live-checkbox';
         checkbox.setAttribute(
             'aria-label',
-            this.checked ? 'Mark task incomplete' : 'Mark task complete'
+            this.checked ? this.labels.taskIncomplete : this.labels.taskComplete
         );
         checkbox.addEventListener('click', (event) => {
             event.preventDefault();
@@ -111,7 +115,7 @@ function syntaxRange(node, state) {
     };
 }
 
-function buildDecorations(view) {
+function buildDecorations(view, labels) {
     const decorations = [];
     const atomicRanges = [];
     const contexts = selectionContexts(view.state);
@@ -178,7 +182,7 @@ function buildDecorations(view) {
 
                     const checked = /^\[[xX]\]$/.test(view.state.sliceDoc(node.from, node.to));
                     const checkboxRange = Decoration.replace({
-                        widget: new CheckboxWidget(node.from, checked),
+                        widget: new CheckboxWidget(node.from, checked, labels),
                     }).range(node.from, node.to);
                     decorations.push(checkboxRange);
                     atomicRanges.push(checkboxRange);
@@ -242,26 +246,33 @@ function buildDecorations(view) {
     };
 }
 
-export const livePreviewDecorations = ViewPlugin.fromClass(
-    class {
-        constructor(view) {
-            const built = buildDecorations(view);
-            this.decorations = built.decorations;
-            this.atomicRanges = built.atomicRanges;
-        }
+export function livePreviewDecorations(labels = {}) {
+    const resolvedLabels = {
+        taskComplete: labels.taskComplete || 'Mark task complete',
+        taskIncomplete: labels.taskIncomplete || 'Mark task incomplete',
+    };
 
-        update(update) {
-            if (update.docChanged || update.selectionSet || update.viewportChanged) {
-                const built = buildDecorations(update.view);
+    return ViewPlugin.fromClass(
+        class {
+            constructor(view) {
+                const built = buildDecorations(view, resolvedLabels);
                 this.decorations = built.decorations;
                 this.atomicRanges = built.atomicRanges;
             }
+
+            update(update) {
+                if (update.docChanged || update.selectionSet || update.viewportChanged) {
+                    const built = buildDecorations(update.view, resolvedLabels);
+                    this.decorations = built.decorations;
+                    this.atomicRanges = built.atomicRanges;
+                }
+            }
+        },
+        {
+            decorations: (plugin) => plugin.decorations,
+            provide: (plugin) => EditorView.atomicRanges.of((view) => (
+                view.plugin(plugin)?.atomicRanges ?? Decoration.none
+            )),
         }
-    },
-    {
-        decorations: (plugin) => plugin.decorations,
-        provide: (plugin) => EditorView.atomicRanges.of((view) => (
-            view.plugin(plugin)?.atomicRanges ?? Decoration.none
-        )),
-    }
-);
+    );
+}

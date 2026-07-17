@@ -85,6 +85,32 @@ outcome and preserves source.
 
 ## Architecture
 
+### Upstream integration boundary
+
+Before each parity session, compare the branch with current `upstream/main`.
+Integrate upstream changes before extending any overlapping editor behavior.
+
+Expected low-conflict ownership:
+
+- CodeMirror implementation stays under `frontend/src/`.
+- Generated `frontend/dist/` assets remain ignored and reproducible.
+- Markdown command tests stay under `tests/frontend/`.
+- Application integration in `frontend/app.js` uses the adapter rather than
+  CodeMirror DOM selectors.
+
+Expected conflict hotspots:
+
+- Settings and editor markup in `frontend/index.html`.
+- Keyboard, note lifecycle, search, scroll, paste, and attachment paths in
+  `frontend/app.js`.
+- The first Docker build stage.
+- Locale files when upstream adds or reorganizes editor strings.
+
+When upstream implements the same supporting capability, prefer upstream's
+version and remove the branch-local duplicate. The `NOTES_DIR` override is the
+first example: it began as experiment infrastructure and was replaced by the
+upstream implementation during the `0.28.3` integration.
+
 ### Editor adapter boundary
 
 Application code should request editor outcomes through one adapter rather than
@@ -372,6 +398,8 @@ Classic fallback, or attachment safety.
   removal is not part of this plan.
 - The rendered Preview path remains independent of CodeMirror and available as a
   stable correctness reference.
+- A trial merge with current upstream has no unexplained conflict, and every
+  resolved conflict is recorded in the progress log.
 
 ## Deferred enhancements
 

@@ -1,4 +1,4 @@
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState, Transaction } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { TaskList } from '@lezer/markdown';
 import {
@@ -18,12 +18,20 @@ import { livePreviewDecorations } from './live-preview-decorations.js';
  * Create the experimental CodeMirror editor behind a small application adapter.
  * Code outside this module should not manipulate EditorView directly.
  */
-export function createLivePreviewEditor({ parent, content = '', onChange = () => {} }) {
+export function createLivePreviewEditor({
+    parent,
+    content = '',
+    labels = {},
+    onChange = () => {},
+}) {
     if (!(parent instanceof HTMLElement)) {
         throw new Error('Live Preview requires a valid parent element.');
     }
 
     let applyingExternalContent = false;
+    const scrollListeners = new Set();
+    const decorationsCompartment = new Compartment();
+    let editorLabels = labels;
 
     const createState = (doc) => (
         EditorState.create({
@@ -31,7 +39,7 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
             extensions: [
                 history(),
                 markdown({ extensions: [TaskList] }),
-                livePreviewDecorations,
+                decorationsCompartment.of(livePreviewDecorations(editorLabels)),
                 drawSelection(),
                 highlightActiveLine(),
                 EditorView.lineWrapping,
@@ -130,9 +138,23 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
         parent,
         state: createState(content),
     });
+    const handleScroll = () => {
+        const metrics = {
+            top: view.scrollDOM.scrollTop,
+            left: view.scrollDOM.scrollLeft,
+            scrollHeight: view.scrollDOM.scrollHeight,
+            scrollWidth: view.scrollDOM.scrollWidth,
+            clientHeight: view.scrollDOM.clientHeight,
+            clientWidth: view.scrollDOM.clientWidth,
+        };
+        for (const listener of scrollListeners) listener(metrics);
+    };
+    view.scrollDOM.addEventListener('scroll', handleScroll, { passive: true });
 
     return {
         destroy() {
+            view.scrollDOM.removeEventListener('scroll', handleScroll);
+            scrollListeners.clear();
             view.destroy();
         },
 
@@ -140,23 +162,65 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
             return view.state.doc.toString();
         },
 
-        setContent(markdown) {
+        replaceDocument(markdown, { resetHistory = true } = {}) {
             const nextContent = String(markdown ?? '');
             if (nextContent === view.state.doc.toString()) return;
 
             applyingExternalContent = true;
             try {
-                // Application-driven replacements represent note loads,
-                // conflict reloads, or editor-mode transfers. A fresh state
-                // prevents undo history from crossing those boundaries.
-                view.setState(createState(nextContent));
+                if (resetHistory) {
+                    // Note loads and conflict reloads must not share history
+                    // with the document that was previously mounted.
+                    view.setState(createState(nextContent));
+                } else {
+                    view.dispatch({
+                        changes: { from: 0, to: view.state.doc.length, insert: nextContent },
+                        annotations: Transaction.userEvent.of('input'),
+                    });
+                }
             } finally {
                 applyingExternalContent = false;
             }
         },
 
+        // Backward-compatible name for application-driven note replacement.
+        setContent(markdown) {
+            this.replaceDocument(markdown, { resetHistory: true });
+        },
+
+        replaceRange({ from, to = from, insert = '', selection = null, userEvent = 'input' }) {
+            const docLength = view.state.doc.length;
+            const safeFrom = Math.max(0, Math.min(Number(from) || 0, docLength));
+            const safeTo = Math.max(safeFrom, Math.min(Number(to) || safeFrom, docLength));
+            const transaction = {
+                changes: { from: safeFrom, to: safeTo, insert: String(insert) },
+                scrollIntoView: true,
+            };
+            if (selection) {
+                transaction.selection = {
+                    anchor: selection.anchor,
+                    head: selection.head ?? selection.anchor,
+                };
+            }
+            if (userEvent) {
+                transaction.annotations = Transaction.userEvent.of(userEvent);
+            }
+            view.dispatch(transaction);
+        },
+
         focus() {
             view.focus();
+        },
+
+        hasFocus() {
+            return view.hasFocus;
+        },
+
+        setLabels(nextLabels = {}) {
+            editorLabels = nextLabels;
+            view.dispatch({
+                effects: decorationsCompartment.reconfigure(livePreviewDecorations(editorLabels)),
+            });
         },
 
         getSelection() {
@@ -180,6 +244,29 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
 
         setScrollPosition({ top = 0, left = 0 } = {}) {
             view.scrollDOM.scrollTo({ top, left });
+        },
+
+        getScrollMetrics() {
+            return {
+                top: view.scrollDOM.scrollTop,
+                left: view.scrollDOM.scrollLeft,
+                scrollHeight: view.scrollDOM.scrollHeight,
+                scrollWidth: view.scrollDOM.scrollWidth,
+                clientHeight: view.scrollDOM.clientHeight,
+                clientWidth: view.scrollDOM.clientWidth,
+            };
+        },
+
+        setScrollPercentage(percentage) {
+            const normalized = Math.max(0, Math.min(Number(percentage) || 0, 1));
+            const scrollableHeight = view.scrollDOM.scrollHeight - view.scrollDOM.clientHeight;
+            view.scrollDOM.scrollTop = normalized * Math.max(0, scrollableHeight);
+        },
+
+        onScroll(listener) {
+            if (typeof listener !== 'function') return () => {};
+            scrollListeners.add(listener);
+            return () => scrollListeners.delete(listener);
         },
     };
 }

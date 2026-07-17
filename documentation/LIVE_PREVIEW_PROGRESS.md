@@ -2,10 +2,11 @@
 
 ## Current status
 
-- Status: Session 3 complete; full-parity roadmap drafted with preview syntax frozen
+- Status: post-review stabilization complete on upstream 0.28.3
 - Branch: `feature/live-preview`
-- Base: `custom` at `8317241`
-- Current session: Session 3 — live-preview behavior
+- Original base: `custom` at `8317241`
+- Upstream integrated: `0cb11ae` (version 0.28.3)
+- Current session: stabilization before Session 4 evaluation
 - Next session: Session 4 — evaluation and decision
 - Direction: proceed toward parity if Session 4 closes without a blocking cursor,
   source-integrity, or mobile finding
@@ -104,8 +105,34 @@ baseline; all other Markdown remains editable source.
 | 2026-07-17 | Session 3 extension | Direct, reference, and automatic links | Readable-label rendering | Pass | Destination syntax hid outside the active region; copied source remained complete |
 | 2026-07-17 | Session 3 extension | Task checkboxes | Click, autosave, and source round-trip | Pass | `[ ]`, `[x]`, and `[X]` toggled through transactions; toggling back restored exact bytes |
 | 2026-07-17 | Session 3 extension | Wikilink fixture | Source fallback | Pass | `[[folder/note\|Readable label]]` remained untouched source |
+| 2026-07-17 | `6565e4e` | Git merge | Upstream 0.28.3 integration | Pass | Resolved app, index, runner, and environment-documentation conflicts; retained custom tabs, favorites, drag/drop, and theme behavior |
+| 2026-07-17 | Stabilization | Frontend checks | Unit tests and minified build | Pass | Six tests passed; all dependencies exact; lazy bundle built successfully |
+| 2026-07-17 | Stabilization | In-app browser on port 8001 | Persisted Live Preview mount | Pass | Note opening mounted exactly one CodeMirror editor with no line-number gutter |
+| 2026-07-17 | Stabilization | Disposable vault on port 8002 | Edit, Split, and Preview transitions | Pass | Live Preview remained mounted once across all three existing view modes |
 
 ## Decisions
+
+### 2026-07-17: stabilize against upstream before parity features
+
+Decision: integrate upstream 0.28.3 and resolve the code-review findings before
+starting toolbar, attachment, or navigation parity.
+
+Completed:
+
+- Replaced the experiment's duplicate `NOTES_DIR` work with upstream's version.
+- Kept CodeMirror focus and scrolling behind the adapter.
+- Routed Split synchronization and saved scroll positions through the active
+  editor rather than the hidden textarea.
+- Added transactional document and range replacement boundaries.
+- Disabled the Live Preview option when its generated bundle is unavailable.
+- Localized settings, loading, error, editor, and task-widget labels in every
+  shipped locale.
+- Locked `html-minifier-terser` in the package manifest and Docker build.
+- Added frontend contract and Markdown continuation tests.
+
+Reason: building parity on the stale 0.27.2 integration would have compounded
+known conflicts with upstream editor shortcuts, media handling, resizing, and
+vault indexing changes.
 
 ### 2026-07-17: freeze presentation syntax for parity work
 
