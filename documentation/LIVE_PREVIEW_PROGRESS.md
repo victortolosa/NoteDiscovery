@@ -2,11 +2,11 @@
 
 ## Current status
 
-- Status: Session 2 complete
+- Status: Session 3 complete
 - Branch: `feature/live-preview`
 - Base: `custom` at `8317241`
-- Current session: Session 2 — editing and persistence
-- Next session: Session 3 — live-preview behavior
+- Current session: Session 3 — live-preview behavior
+- Next session: Session 4 — evaluation and decision
 - Decision: pending
 - Last updated: 2026-07-17
 
@@ -50,16 +50,17 @@ decision.
 
 ### Session 3: live-preview behavior
 
-- [ ] Parse Markdown with the CodeMirror language tree.
-- [ ] Decorate headings.
-- [ ] Decorate bold and italic text.
-- [ ] Decorate inline code.
-- [ ] Hide eligible delimiters outside the active region.
-- [ ] Reveal syntax on the active line.
-- [ ] Reveal syntax intersecting selections.
-- [ ] Map styling to existing CSS variables.
-- [ ] Check light and dark themes.
-- [ ] Record verification results and commit.
+- [x] Parse Markdown with the CodeMirror language tree.
+- [x] Decorate headings.
+- [x] Decorate bold and italic text.
+- [x] Decorate inline code.
+- [x] Hide eligible delimiters outside the active region.
+- [x] Reveal syntax on the active line.
+- [x] Reveal syntax intersecting selections.
+- [x] Map styling to existing CSS variables.
+- [x] Check light and dark themes.
+- [x] Record verification results.
+- [x] Commit Session 3.
 
 ### Session 4: evaluation and decision
 
@@ -87,6 +88,13 @@ decision.
 | 2026-07-17 | Session 2 | In-app browser | Immediate note switch | Pass | Pending edit saved before navigation; undo did not cross the note boundary |
 | 2026-07-17 | Session 2 | API and in-app browser | External file conflict and reload | Pass | Local source remained until confirmation; reload reset CodeMirror history |
 | 2026-07-17 | Session 2 | Filesystem comparison | Untouched fixture preservation | Pass | All five untouched fixture copies remained byte-for-byte identical |
+| 2026-07-17 | Session 3 | In-app browser | Heading, emphasis, and inline-code decorations | Pass | Typography applied from Markdown syntax-tree nodes |
+| 2026-07-17 | Session 3 | In-app browser | Active-line and selected-range reveal | Pass | Markers revealed immediately; selecting all exposed all supported source syntax |
+| 2026-07-17 | Session 3 | Browser clipboard | Copy source | Pass | Copied text matched complete Markdown, including delimiters and final newline |
+| 2026-07-17 | Session 3 | Light and dark themes | Existing theme-token mapping | Pass | Editor and inline code updated without editor-specific theme configuration |
+| 2026-07-17 | Session 3 | Malformed, unsupported, Unicode, and RTL fixtures | Source fallback | Pass | Tables, Mermaid, math, HTML, unclosed syntax, RTL text, and emoji remained source |
+| 2026-07-17 | Session 3 | 67,001-character fixture | Editing and virtualization | Pass | Fill completed in 136 ms; 33 DOM lines represented 3,201 source lines |
+| 2026-07-17 | Session 3 | Filesystem comparison | Untouched fixture preservation | Pass | All seven untouched fixture copies remained byte-for-byte identical |
 
 ## Decisions
 
@@ -216,6 +224,55 @@ application's save and conflict workflows without touching the real vault.
 
 Add the Markdown parser and implement heading, emphasis, and inline-code
 decorations with active-line and selection-based syntax reveal.
+
+### 2026-07-17: basic live-preview behavior
+
+#### Objective
+
+Determine whether syntax-tree-driven formatting and delimiter reveal can provide
+a readable editor without compromising Markdown source or cursor behavior.
+
+#### Completed
+
+- Added locked Markdown language and parser dependencies.
+- Added syntax-tree decorations for ATX headings, strong emphasis, emphasis,
+  and inline code.
+- Added replacement decorations for heading, emphasis, and code delimiters.
+- Added atomic ranges for hidden delimiters.
+- Revealed syntax on every active line and across non-empty selections.
+- Limited decoration work to CodeMirror's visible ranges.
+- Styled supported constructs with existing NoteDiscovery theme variables.
+
+#### Verification
+
+- Inactive heading and inline delimiters hid while their source remained intact.
+- Moving the cursor to a heading immediately revealed its complete marker.
+- Selecting the document revealed every supported delimiter.
+- Copying the selection returned the exact Markdown source and final newline.
+- Heading sizes and weights matched their levels.
+- Bold, italic, combined emphasis, and multi-backtick inline code rendered.
+- Light and dark themes updated editor and inline-code colors from shared tokens.
+- Unsupported constructs remained visible source.
+- Malformed Markdown, Arabic, Hebrew, other Unicode, and emoji copied intact.
+- A 67,001-character, 3,201-line fixture filled in 136 ms in the test browser;
+  CodeMirror kept only 33 lines in the DOM.
+- The large fixture autosaved all 67,001 characters.
+- Seven untouched fixture copies remained byte-for-byte identical.
+- Development and minified bundles, npm audit, JavaScript syntax, and
+  `git diff --check` passed.
+
+#### Issues
+
+- The minified Live Preview bundle increased from about 277 KB to 503 KB after
+  adding the Markdown parser. This is acceptable for the prototype because it
+  remains lazy-loaded, but it belongs in the Session 4 evaluation.
+- iPhone Safari has not yet been tested.
+- Full Docker image verification still requires a running Docker daemon.
+
+#### Next step
+
+Evaluate ordinary writing, cursor movement, layout shifts, browser behavior,
+and iPhone Safari before making the go, revise, or stop decision.
 
 ### Resolved questions
 

@@ -1,4 +1,5 @@
 import { EditorState } from '@codemirror/state';
+import { markdown } from '@codemirror/lang-markdown';
 import {
     drawSelection,
     EditorView,
@@ -11,6 +12,7 @@ import {
     history,
     historyKeymap,
 } from '@codemirror/commands';
+import { livePreviewDecorations } from './live-preview-decorations.js';
 
 /**
  * Create the experimental CodeMirror editor behind a small application adapter.
@@ -29,6 +31,8 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
             extensions: [
                 lineNumbers(),
                 history(),
+                markdown(),
+                livePreviewDecorations,
                 drawSelection(),
                 highlightActiveLine(),
                 EditorView.lineWrapping,
@@ -61,6 +65,40 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
                     },
                     '.cm-activeLine, .cm-activeLineGutter': {
                         backgroundColor: 'var(--bg-tertiary)',
+                    },
+                    '.cm-live-heading': {
+                        fontWeight: '700',
+                        lineHeight: '1.3',
+                    },
+                    '.cm-live-heading-1': {
+                        fontSize: '1.75em',
+                    },
+                    '.cm-live-heading-2': {
+                        fontSize: '1.5em',
+                    },
+                    '.cm-live-heading-3': {
+                        fontSize: '1.3em',
+                    },
+                    '.cm-live-heading-4': {
+                        fontSize: '1.15em',
+                    },
+                    '.cm-live-heading-5, .cm-live-heading-6': {
+                        fontSize: '1em',
+                    },
+                    '.cm-live-strong': {
+                        fontWeight: '700',
+                    },
+                    '.cm-live-emphasis': {
+                        fontStyle: 'italic',
+                    },
+                    '.cm-live-inline-code': {
+                        padding: '0.08em 0.25em',
+                        border: '1px solid var(--border-primary)',
+                        borderRadius: '0.25rem',
+                        backgroundColor: 'var(--bg-tertiary)',
+                        color: 'var(--text-primary)',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                        fontSize: '0.9em',
                     },
                     '&.cm-focused': {
                         outline: 'none',
