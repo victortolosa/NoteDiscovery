@@ -60,7 +60,8 @@ test('shared editor commands load before the Alpine application', async () => {
 test('Split remains a Classic-only view', async () => {
     const app = await readFile(new URL('frontend/app.js', root), 'utf8');
     const html = await readFile(new URL('frontend/index.html', root), 'utf8');
-    assert.match(html, /x-show="editorMode === 'classic'"\s+@click="viewMode = 'split'"/);
+    assert.match(html, /x-if="editorMode === 'classic'">\s+<button\s+@click="viewMode = 'split'"/);
+    assert.doesNotMatch(html, /x-show="editorMode === 'classic'"\s+@click="viewMode = 'split'"/);
     assert.match(app, /mode === 'live-preview' && this\.viewMode === 'split'/);
 });
 
