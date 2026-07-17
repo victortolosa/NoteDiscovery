@@ -65,6 +65,13 @@ config_path = Path(__file__).parent.parent / "config.yaml"
 with open(config_path, 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
+# Allow isolated development runs to use a disposable vault. Relative paths
+# retain the same working-directory behavior as config.yaml paths.
+notes_dir_override = os.getenv('NOTES_DIR', '').strip()
+if notes_dir_override:
+    config['storage']['notes_dir'] = notes_dir_override
+    print("🗂️  Notes directory loaded from NOTES_DIR env var")
+
 # Load version from VERSION file (single source of truth)
 version_path = Path(__file__).parent.parent / "VERSION"
 if not version_path.exists():

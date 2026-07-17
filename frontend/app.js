@@ -1208,6 +1208,15 @@ function noteApp() {
             this.editorMode = mode;
             localStorage.setItem('editorMode', mode);
             await this.syncEditorSurface();
+
+            // Each editor owns a separate history implementation. Returning to
+            // Classic starts its history at the transferred CodeMirror source
+            // instead of allowing undo to jump back across the mode boundary.
+            if (mode === 'classic') {
+                this.undoHistory = [{ content: this.noteContent, cursorPos: 0 }];
+                this.redoHistory = [];
+                this.hasPendingHistoryChanges = false;
+            }
         },
 
         async syncEditorSurface() {
@@ -1242,7 +1251,7 @@ function noteApp() {
                     content: this.noteContent,
                     onChange: (content) => {
                         this.noteContent = content;
-                        this.autoSave();
+                        this.autoSave({ recordHistory: false });
                     },
                 });
             } catch (error) {
@@ -5468,6 +5477,10 @@ function noteApp() {
             }
             // Focus the editor after a short delay to ensure DOM is updated
             this.$nextTick(() => {
+                if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                    this._livePreviewEditor.focus();
+                    return;
+                }
                 const editor = document.getElementById('note-editor');
                 if (editor) editor.focus();
             });
@@ -5998,7 +6011,7 @@ function noteApp() {
         },
         
         // Auto-save with debounce
-        autoSave() {
+        autoSave({ recordHistory = true } = {}) {
             if (this.saveTimeout) {
                 clearTimeout(this.saveTimeout);
             }
@@ -6006,7 +6019,7 @@ function noteApp() {
             this.lastSaved = false;
             
             // Push to undo history (but not during undo/redo operations)
-            if (!this.isUndoRedo) {
+            if (recordHistory && !this.isUndoRedo) {
                 this.pushToHistory();
             }
             

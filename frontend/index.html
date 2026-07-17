@@ -3097,6 +3097,7 @@
                             >
                             <!-- Undo Button (note history or drawing strokes when viewing a drawing) -->
                             <button 
+                                x-show="currentMediaType === 'drawing' || editorMode === 'classic'"
                                 @click="currentMediaType === 'drawing' ? drawingUndo() : undo()"
                                 :disabled="currentMediaType === 'drawing' ? drawingOps.length === 0 : undoHistory.length <= 1"
                                 class="p-2 rounded-lg"
@@ -3112,6 +3113,7 @@
                             
                             <!-- Redo Button -->
                             <button 
+                                x-show="currentMediaType === 'drawing' || editorMode === 'classic'"
                                 @click="currentMediaType === 'drawing' ? drawingRedo() : redo()"
                                 :disabled="currentMediaType === 'drawing' ? drawingRedoStack.length === 0 : redoHistory.length === 0"
                                 class="p-2 rounded-lg"

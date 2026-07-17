@@ -47,8 +47,10 @@ def main():
         print("📦 Installing dependencies...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
     
-    # Create data directories
-    Path("data").mkdir(parents=True, exist_ok=True)
+    # NOTES_DIR supports isolated development runs that must not touch the real
+    # vault. The backend reads the same override during application startup.
+    notes_dir = Path(os.getenv("NOTES_DIR", "").strip() or "data")
+    notes_dir.mkdir(parents=True, exist_ok=True)
     Path("plugins").mkdir(parents=True, exist_ok=True)
     
     # Get port from config or environment
@@ -62,7 +64,7 @@ def main():
     print(f"\n📝 Open your browser to: http://localhost:{port}")
     print("\n💡 Tips:")
     print("   - Press Ctrl+C to stop the server")
-    print("   - Your notes are in ./data/")
+    print(f"   - Your notes are in {notes_dir}")
     print("   - Plugins go in ./plugins/")
     print(f"   - Change port with: PORT={port} python run.py")
     print("\n" + "="*50 + "\n")
@@ -79,4 +81,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -23,10 +23,9 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
 
     let applyingExternalContent = false;
 
-    const view = new EditorView({
-        parent,
-        state: EditorState.create({
-            doc: content,
+    const createState = (doc) => (
+        EditorState.create({
+            doc,
             extensions: [
                 lineNumbers(),
                 history(),
@@ -71,7 +70,12 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
                     },
                 }),
             ],
-        }),
+        })
+    );
+
+    const view = new EditorView({
+        parent,
+        state: createState(content),
     });
 
     return {
@@ -89,13 +93,10 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
 
             applyingExternalContent = true;
             try {
-                view.dispatch({
-                    changes: {
-                        from: 0,
-                        to: view.state.doc.length,
-                        insert: nextContent,
-                    },
-                });
+                // Application-driven replacements represent note loads,
+                // conflict reloads, or editor-mode transfers. A fresh state
+                // prevents undo history from crossing those boundaries.
+                view.setState(createState(nextContent));
             } finally {
                 applyingExternalContent = false;
             }

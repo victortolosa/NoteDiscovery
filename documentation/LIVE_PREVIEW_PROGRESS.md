@@ -2,11 +2,11 @@
 
 ## Current status
 
-- Status: Session 1 complete with one environment-limited verification
+- Status: Session 2 complete
 - Branch: `feature/live-preview`
 - Base: `custom` at `8317241`
-- Current session: Session 1 — build and mounting foundation
-- Next session: Session 2 — editing and persistence
+- Current session: Session 2 — editing and persistence
+- Next session: Session 3 — live-preview behavior
 - Decision: pending
 - Last updated: 2026-07-17
 
@@ -37,15 +37,16 @@ decision.
 
 ### Session 2: editing and persistence
 
-- [ ] Make CodeMirror authoritative while mounted.
-- [ ] Mirror document changes into `noteContent`.
-- [ ] Integrate autosave.
-- [ ] Integrate manual save.
-- [ ] Handle note switching.
-- [ ] Preserve stale-file conflict detection.
-- [ ] Add basic undo and redo.
-- [ ] Add source-preservation checks.
-- [ ] Record verification results and commit.
+- [x] Make CodeMirror authoritative while mounted.
+- [x] Mirror document changes into `noteContent`.
+- [x] Integrate autosave.
+- [x] Integrate manual save.
+- [x] Handle note switching.
+- [x] Preserve stale-file conflict detection.
+- [x] Add basic undo and redo.
+- [x] Add source-preservation checks.
+- [x] Record verification results.
+- [x] Commit Session 2.
 
 ### Session 3: live-preview behavior
 
@@ -81,6 +82,11 @@ decision.
 | 2026-07-17 | Session 1 | Local Uvicorn | Startup, health endpoint, and generated module serving | Pass | Module served as JavaScript from `/static/dist/live-preview.js` |
 | 2026-07-17 | Session 1 | In-app browser | Classic default, Live Preview mount, and return to Classic | Pass | Existing note content remained `test`; real vault content was not edited |
 | 2026-07-17 | Session 1 | Docker | Image build | Not run | Docker daemon was unavailable; Dockerfile build commands passed independently |
+| 2026-07-17 | Session 2 | Disposable vault on port 8002 | Autosave and manual save | Pass | Saved Markdown matched the expected source, including final newline |
+| 2026-07-17 | Session 2 | In-app browser | CodeMirror undo and redo | Pass | Keyboard history worked without invoking Classic history |
+| 2026-07-17 | Session 2 | In-app browser | Immediate note switch | Pass | Pending edit saved before navigation; undo did not cross the note boundary |
+| 2026-07-17 | Session 2 | API and in-app browser | External file conflict and reload | Pass | Local source remained until confirmation; reload reset CodeMirror history |
+| 2026-07-17 | Session 2 | Filesystem comparison | Untouched fixture preservation | Pass | All five untouched fixture copies remained byte-for-byte identical |
 
 ## Decisions
 
@@ -164,6 +170,52 @@ editor path.
 
 Create a disposable fixture-vault workflow, then verify CodeMirror edits,
 autosave, manual save, note switching, and history ownership in Session 2.
+
+### 2026-07-17: editing and persistence
+
+#### Objective
+
+Verify that CodeMirror can own editing state while continuing to use the
+application's save and conflict workflows without touching the real vault.
+
+#### Completed
+
+- Added a `NOTES_DIR` runtime override and documented its safe use.
+- Added seven source fixtures and disposable-vault instructions.
+- Reset CodeMirror state and history for application-driven content changes.
+- Prevented live edits from entering the Classic textarea history.
+- Reset Classic history when content transfers back from Live Preview.
+- Hid Classic undo and redo controls while Live Preview is active.
+- Added Live Preview focus handling for newly created notes.
+- Kept autosave, manual save, outline, metadata, statistics, and conflict
+  processing on the existing application path.
+
+#### Verification
+
+- Autosave persisted exact expected Markdown and its final newline.
+- Manual save persisted immediately through `Cmd+S`.
+- CodeMirror keyboard undo and redo restored the correct source.
+- An immediate note switch flushed the pending edit before navigation.
+- Undo after a note switch did not restore content from the previous note.
+- An API-side external change produced the existing conflict banner without
+  replacing local editor content.
+- Reloading the external version updated CodeMirror and reset its history.
+- Untouched disposable fixtures remained byte-for-byte identical.
+- Local servers on ports 8001 and 8002 remained healthy.
+- JavaScript syntax, Python compilation, bundle build, and `git diff --check`
+  passed.
+
+#### Issues
+
+- A full Docker image build remains unverified because the local daemon is not
+  running.
+- The Session 3 decorations still need explicit RTL and malformed-Markdown
+  testing; Session 2 verified only source preservation for those fixtures.
+
+#### Next step
+
+Add the Markdown parser and implement heading, emphasis, and inline-code
+decorations with active-line and selection-based syntax reveal.
 
 ### Resolved questions
 
