@@ -235,6 +235,14 @@ function buildDecorations(view, labels, sourceRanges = []) {
                         node.from >= range.from && node.to <= range.to
                     ));
                     if (!covered) addPreviewOnlyBlock(node.from, node.to);
+
+                    if (node.name === 'Table') {
+                        const firstLine = view.state.doc.lineAt(node.from).number;
+                        const lastLine = view.state.doc.lineAt(Math.max(node.from, node.to - 1)).number;
+                        for (let lineNumber = firstLine; lineNumber <= lastLine; lineNumber++) {
+                            addLineClass(view.state.doc.line(lineNumber).from, 'cm-live-table-line');
+                        }
+                    }
                 }
 
                 const headingMatch = headingPattern.exec(node.name);

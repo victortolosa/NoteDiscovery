@@ -108,6 +108,9 @@ test('Live Preview Markdown features use non-document decorations', async () => 
     assert.match(decorations, /class: 'cm-live-preview-only-inline'/);
     assert.doesNotMatch(decorations, /PreviewOnlyBadge/);
     assert.match(decorations, /'Table'/);
+    assert.match(decorations, /'cm-live-table-line'/);
+    assert.match(editor, /'\.cm-live-table-line'/);
+    assert.match(editor, /fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'/);
     assert.match(decorations, /node\.name === 'Blockquote'/);
     assert.match(decorations, /node\.name === 'FencedCode'/);
     assert.match(decorations, /node\.name === 'HorizontalRule'/);

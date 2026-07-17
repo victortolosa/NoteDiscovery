@@ -306,6 +306,9 @@ export function createLivePreviewEditor({
                         backgroundColor: 'var(--bg-tertiary)',
                         boxShadow: 'inset 2px 0 0 var(--accent-primary)',
                     },
+                    '.cm-live-table-line': {
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    },
                     '.cm-live-preview-only-inline': {
                         textDecoration: 'underline dotted var(--accent-primary)',
                         textUnderlineOffset: '0.2em',
