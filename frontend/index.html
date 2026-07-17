@@ -3604,7 +3604,29 @@
                     </div>
                     
                     <!-- Editor/Preview/Graph -->
-                    <div class="flex-1 flex relative" style="min-height: 0;">
+                    <div class="flex-1 flex flex-col relative" style="min-height: 0;">
+                        <!-- Stale content conflict banner -->
+                        <div
+                            x-show="staleContent"
+                            class="z-30 px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm flex-shrink-0"
+                            style="background-color: var(--warning-bg, rgba(234, 179, 8, 0.15)); border-bottom: 1px solid var(--warning, #eab308); color: var(--warning, #eab308);"
+                            role="alert"
+                        >
+                            <span>This note has been modified externally. Reload to see the latest version, or keep your changes.</span>
+                            <div class="flex gap-2 sm:ml-4 flex-shrink-0 self-end sm:self-auto">
+                                <button
+                                    @click="reloadFromServer()"
+                                    class="px-2 py-1 text-xs font-medium rounded"
+                                    style="background-color: var(--warning, #eab308); color: white;"
+                                >Reload</button>
+                                <button
+                                    @click="keepMyVersion()"
+                                    class="px-2 py-1 text-xs font-medium rounded"
+                                    style="background-color: var(--bg-tertiary); color: var(--text-secondary);"
+                                >Keep mine</button>
+                            </div>
+                        </div>
+                        <div class="flex-1 flex relative" style="min-height: 0;">
                         <div
                             x-show="loadingNote"
                             x-transition:enter="transition ease-out duration-75"
@@ -3620,26 +3642,6 @@
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                        </div>
-                        <!-- Stale content conflict banner -->
-                        <div
-                            x-show="staleContent"
-                            class="absolute top-0 left-0 right-0 z-30 px-4 py-2 flex items-center justify-between text-sm"
-                            style="background-color: var(--warning-bg, rgba(234, 179, 8, 0.15)); border-bottom: 1px solid var(--warning, #eab308); color: var(--warning, #eab308);"
-                        >
-                            <span>This note has been modified externally. Reload to see the latest version, or keep your changes.</span>
-                            <div class="flex gap-2 ml-4 flex-shrink-0">
-                                <button
-                                    @click="reloadFromServer()"
-                                    class="px-2 py-1 text-xs font-medium rounded"
-                                    style="background-color: var(--warning, #eab308); color: white;"
-                                >Reload</button>
-                                <button
-                                    @click="keepMyVersion()"
-                                    class="px-2 py-1 text-xs font-medium rounded"
-                                    style="background-color: var(--bg-tertiary); color: var(--text-secondary);"
-                                >Keep mine</button>
-                            </div>
                         </div>
                         <!-- Editor -->
                         <div
@@ -4048,6 +4050,7 @@
                                 </template>
                             </div>
                         </template>
+                        </div>
                     </div>
                     
                     <!-- Stats Status Bar (only shows if plugin enabled) -->

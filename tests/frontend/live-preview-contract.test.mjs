@@ -63,3 +63,12 @@ test('Split remains a Classic-only view', async () => {
     assert.match(html, /x-show="editorMode === 'classic'"\s+@click="viewMode = 'split'"/);
     assert.match(app, /mode === 'live-preview' && this\.viewMode === 'split'/);
 });
+
+test('the stale-content alert participates in editor layout', async () => {
+    const html = await readFile(new URL('frontend/index.html', root), 'utf8');
+    const banner = html.match(/x-show="staleContent"\s+class="([^"]+)"/);
+    assert.ok(banner, 'stale-content banner is present');
+    assert.doesNotMatch(banner[1], /\babsolute\b/);
+    assert.match(banner[1], /\bflex-shrink-0\b/);
+    assert.match(html, /class="flex-1 flex flex-col relative"/);
+});
