@@ -26,30 +26,6 @@ const previewOnlyBlockNames = new Set([
     'Table',
 ]);
 
-class PreviewOnlyBadge extends WidgetType {
-    constructor(label) {
-        super();
-        this.label = label;
-    }
-
-    eq(other) {
-        return other.label === this.label;
-    }
-
-    toDOM() {
-        const badge = document.createElement('span');
-        badge.className = 'cm-live-preview-only-badge';
-        badge.textContent = this.label;
-        badge.setAttribute('aria-label', this.label);
-        badge.setAttribute('title', this.label);
-        return badge;
-    }
-
-    ignoreEvent() {
-        return true;
-    }
-}
-
 class CheckboxWidget extends WidgetType {
     constructor(from, checked, labels) {
         super();
@@ -198,14 +174,6 @@ function buildDecorations(view, labels, sourceRanges = []) {
                 previewOnlyLineStarts.add(lineFrom);
                 decorations.push(previewOnlyLineDecoration.range(lineFrom));
             }
-        }
-        if (view.visibleRanges.some((visible) => (
-            visible.from <= firstLine.to && visible.to >= firstLine.from
-        ))) {
-            decorations.push(Decoration.widget({
-                widget: new PreviewOnlyBadge(labels.previewOnly),
-                side: 1,
-            }).range(firstLine.to));
         }
     };
 
@@ -389,7 +357,6 @@ export function livePreviewDecorations(labels = {}) {
     const resolvedLabels = {
         taskComplete: labels.taskComplete || 'Mark task complete',
         taskIncomplete: labels.taskIncomplete || 'Mark task incomplete',
-        previewOnly: labels.previewOnly || 'Preview',
     };
 
     return ViewPlugin.fromClass(

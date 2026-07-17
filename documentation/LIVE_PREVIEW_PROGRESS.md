@@ -240,8 +240,8 @@ syntax rendered directly in Live Preview.
 
 #### Completed
 
-- Added a restrained tertiary background, accent rail, and one localized
-  `Preview` badge to preview-only block constructs.
+- Added a restrained tertiary background and accent rail to preview-only block
+  constructs.
 - Covered frontmatter, tables, fenced code and Mermaid, display math,
   blockquotes and callouts, HTML blocks, and horizontal rules.
 - Added dotted cues for Markdown images and wikilinks.

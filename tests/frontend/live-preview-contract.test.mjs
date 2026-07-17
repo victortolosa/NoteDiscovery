@@ -89,7 +89,7 @@ test('preview-only Markdown uses non-document decorations', async () => {
     assert.match(editor, /markdown\(\{ extensions: \[Table, TaskList\] \}\)/);
     assert.match(decorations, /class: 'cm-live-preview-only-line'/);
     assert.match(decorations, /class: 'cm-live-preview-only-inline'/);
-    assert.match(decorations, /new PreviewOnlyBadge\(labels\.previewOnly\)/);
+    assert.doesNotMatch(decorations, /PreviewOnlyBadge/);
     assert.match(decorations, /'Blockquote'/);
     assert.match(decorations, /'FencedCode'/);
     assert.match(decorations, /'Table'/);
