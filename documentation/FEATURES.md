@@ -16,6 +16,27 @@
 - **Mermaid diagrams** - Create flowcharts, sequence diagrams, and more (see [MERMAID.md](MERMAID.md))
 - **Public Sharing** - Share notes via token-based URLs with optional QR code for mobile (see [SHARING.md](SHARING.md))
 
+### Editor modes
+
+Choose the editor under Settings → Editor mode.
+
+- Classic is the default editor and supports Edit, Split, and Preview views.
+- Live Preview is an experimental, opt-in CodeMirror editor with Edit and
+  Preview views. Split remains Classic-only.
+- Live Preview styles headings, emphasis, inline code, lists, links, and task
+  checkboxes while preserving plain Markdown as the stored source.
+- Formatting toolbar actions, keyboard shortcuts, list continuation, task
+  toggling, autosave, undo and redo, search highlighting, and external-file
+  conflict handling are integrated with Live Preview.
+- Markdown that receives additional rendering in Preview remains editable
+  source with a subtle background, left rail, or dotted inline cue.
+- Switch back to Classic at any time. The editor preference is stored locally.
+
+Live Preview remains experimental while mobile, attachment, navigation, and
+lifecycle parity checks continue. The read-only Preview renderer remains the
+complete rendering path for tables, Mermaid, math, HTML, media, and other
+extended Markdown.
+
 ### Media Support
 - **Drawing editor** — In-app **`drawing-*.png`** sketches next to your notes ([overview](#drawing-editor)); full guide: **[DRAWING.md](DRAWING.md)**
 - **Drag & drop upload** - Drop files from your file system directly into the editor
@@ -462,4 +483,3 @@ Built-in **Model Context Protocol (MCP)** server for AI assistant integration:
 ---
 
 💡 **Tip:** Explore the interface! Most features are discoverable through intuitive drag & drop and hover menus.
-

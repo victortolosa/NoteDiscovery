@@ -77,6 +77,8 @@ NoteDiscovery is a **lightweight, self-hosted note-taking application** that put
 - ⭐ **Favorites** - Star your most-used notes for instant access
 - 📑 **Outline Panel** - Navigate headings with click-to-jump TOC
 - 🤖 **AI Assistant Ready** - MCP integration for Claude, Cursor & more
+- **Optional Live Preview editor** - Enable the experimental CodeMirror editor
+  in Settings while retaining Classic as the default and fallback
 
 ## 🤖 AI-Powered Note Management
 

@@ -2,14 +2,15 @@
 
 ## Current status
 
-- Status: post-review stabilization complete on upstream 0.28.3
-- Branch: `feature/live-preview`
+- Status: deployed to `origin/custom` as an opt-in experiment
+- Branch: `custom`
 - Original base: `custom` at `8317241`
 - Upstream integrated: `0cb11ae` (version 0.28.3)
-- Current session: Session 5 shared commands complete; Session 6 search slice complete
-- Next session: complete Session 4 device evaluation or continue Session 6 navigation
-- Direction: proceed toward parity if Session 4 closes without a blocking cursor,
-  source-integrity, or mobile finding
+- Initial deployed feature commit: `9e09a80`
+- Current session: initial custom-branch rollout complete
+- Next session: collect daily-use feedback, then complete the remaining parity gates
+- Direction: keep Classic as the default and Live Preview available through the
+  Settings toggle
 - Last updated: 2026-07-17
 
 See [LIVE_PREVIEW_MVP_PLAN.md](LIVE_PREVIEW_MVP_PLAN.md) for scope, architecture,
@@ -131,8 +132,20 @@ baseline; all other Markdown remains editable source.
 | 2026-07-17 | Session 5 | Frontend checks | Shared command unit tests and minified build | Pass | Fourteen tests passed; toolbar, indentation, task, table, and continuation commands are editor-independent |
 | 2026-07-17 | Session 5/6 | Disposable vault on port 8002 | Live and Classic editor smoke checks | Pass | Toolbar and shortcut formatting, Enter continuation, keyboard task toggle, search highlighting, F3 movement, and Classic fallback passed |
 | 2026-07-17 | Presentation cues | Disposable vault on port 8002 | Preview-only syntax styling | Pass | Frontmatter, tables, fences, display math, blockquotes, HTML, images, and wikilinks received non-document cues; fixture bytes remained identical |
+| 2026-07-17 | `9e09a80` | GitHub `origin/custom` | Fast-forward deployment | Pass | Local and remote `custom` matched; Classic remained the default and Live Preview remained opt-in through Settings |
 
 ## Decisions
+
+### 2026-07-17: deploy as an opt-in custom feature
+
+Decision: fast-forward `custom` to `9e09a80` and push the Live Preview work to
+`origin/custom` without changing the default editor.
+
+Reason: desktop editing, persistence, shared formatting commands, search,
+conflict handling, source preservation, and Classic fallback passed the local
+release checks. Safari, iPhone, attachments, and the remaining navigation and
+lifecycle parity work are not complete, so removing Classic or making Live
+Preview the default would be premature.
 
 ### 2026-07-17: keep Split Classic-only during the experiment
 
@@ -211,8 +224,6 @@ Reason: this isolates experimental behavior and provides an immediate fallback.
 
 ## Open questions
 
-- Should the experimental preference appear in Settings immediately, or remain
-  behind a temporary development control during the first mounting work?
 - What exact device and iOS version will be used for Session 4?
 
 Resolve questions only when they block the next session. Avoid designing later
@@ -245,7 +256,7 @@ syntax rendered directly in Live Preview.
 - Covered frontmatter, tables, fenced code and Mermaid, display math,
   blockquotes and callouts, HTML blocks, and horizontal rules.
 - Added dotted cues for Markdown images and wikilinks.
-- Kept cue widgets outside the document and limited line decorations to visible
+- Kept visual cues outside the document and limited line decorations to visible
   ranges.
 - Kept fenced-code markers visible instead of treating them as inline-code
   delimiters.
