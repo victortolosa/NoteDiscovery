@@ -72,3 +72,9 @@ test('the stale-content alert participates in editor layout', async () => {
     assert.match(banner[1], /\bflex-shrink-0\b/);
     assert.match(html, /class="flex-1 flex flex-col relative"/);
 });
+
+test('the Live Preview cursor uses the active theme text color', async () => {
+    const source = await readFile(new URL('frontend/src/live-preview.js', root), 'utf8');
+    assert.match(source, /'\.cm-cursor, \.cm-dropCursor'/);
+    assert.match(source, /borderLeftColor: 'var\(--text-primary\)'/);
+});

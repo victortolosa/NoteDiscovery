@@ -148,6 +148,9 @@ export function createLivePreviewEditor({
                         caretColor: 'var(--text-primary)',
                         padding: '1rem',
                     },
+                    '.cm-cursor, .cm-dropCursor': {
+                        borderLeftColor: 'var(--text-primary)',
+                    },
                     '.cm-activeLine': {
                         backgroundColor: 'var(--bg-tertiary)',
                     },
