@@ -133,6 +133,7 @@ baseline; all other Markdown remains editable source.
 | 2026-07-17 | Session 5/6 | Disposable vault on port 8002 | Live and Classic editor smoke checks | Pass | Toolbar and shortcut formatting, Enter continuation, keyboard task toggle, search highlighting, F3 movement, and Classic fallback passed |
 | 2026-07-17 | Presentation cues | Disposable vault on port 8002 | Preview-only syntax styling | Pass | Frontmatter, tables, fences, display math, blockquotes, HTML, images, and wikilinks received non-document cues; fixture bytes remained identical |
 | 2026-07-17 | `9e09a80` | GitHub `origin/custom` | Fast-forward deployment | Pass | Local and remote `custom` matched; Classic remained the default and Live Preview remained opt-in through Settings |
+| 2026-07-17 | `18804a2` | GitHub Actions and repository docs | Custom update workflow | Pass | Recorded `/opt/stacks/notediscovery/compose.yml`, the manual pull/recreate command, verification steps, and rollback procedure |
 
 ## Decisions
 

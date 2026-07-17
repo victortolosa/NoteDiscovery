@@ -185,6 +185,21 @@ docker-compose up -d
 
 See [Advanced Docker Setup](#advanced-docker-setup) for volume details.
 
+### Updating the custom deployment
+
+The `custom` branch publishes
+`ghcr.io/victortolosa/notediscovery:latest`, but publishing does not restart the
+server. After the `build-custom` GitHub Actions run succeeds, update `docker-i5`
+with:
+
+```bash
+cd /opt/stacks/notediscovery && docker compose pull notediscovery && docker compose up -d --force-recreate notediscovery
+```
+
+The server uses `/opt/stacks/notediscovery/compose.yml`. See
+[Custom deployment](documentation/CUSTOM_DEPLOYMENT.md) for verification and
+rollback commands.
+
 
 ### Running Locally (Without Docker)
 
