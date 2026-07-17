@@ -57,6 +57,14 @@ test('shared editor commands load before the Alpine application', async () => {
     assert.ok(app > commands);
 });
 
+test('toolbar formatting reads authoritative content and selection from Live Preview', async () => {
+    const app = await readFile(new URL('frontend/app.js', root), 'utf8');
+    assert.match(app, /content: this\._livePreviewEditor\.getContent\(\)/);
+    assert.match(app, /selection: this\._livePreviewEditor\.getSelection\(\)/);
+    assert.match(app, /const context = this\.getActiveEditorContext\(\);/);
+    assert.match(app, /EditorCommands\.format\(\s*context\.content,\s*context\.selection,/);
+});
+
 test('Split remains a Classic-only view', async () => {
     const app = await readFile(new URL('frontend/app.js', root), 'utf8');
     const html = await readFile(new URL('frontend/index.html', root), 'utf8');

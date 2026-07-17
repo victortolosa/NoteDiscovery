@@ -6451,6 +6451,19 @@ function noteApp() {
             return { from: editor.selectionStart, to: editor.selectionEnd };
         },
 
+        getActiveEditorContext() {
+            if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                return {
+                    content: this._livePreviewEditor.getContent(),
+                    selection: this._livePreviewEditor.getSelection(),
+                };
+            }
+            return {
+                content: this.noteContent,
+                selection: this.getActiveEditorSelection(),
+            };
+        },
+
         applyEditorCommand(result) {
             if (!result?.changed) {
                 if (result?.error === 'not-in-table') {
@@ -6486,9 +6499,10 @@ function noteApp() {
 
         runEditorFormat(type) {
             if (typeof EditorCommands === 'undefined') return false;
+            const context = this.getActiveEditorContext();
             const result = EditorCommands.format(
-                this.noteContent,
-                this.getActiveEditorSelection(),
+                context.content,
+                context.selection,
                 type
             );
             return this.applyEditorCommand(result);
