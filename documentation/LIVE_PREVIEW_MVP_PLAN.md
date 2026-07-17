@@ -32,6 +32,9 @@ editor.
 - Headings.
 - Bold and italic text.
 - Inline code.
+- Ordered and unordered list markers.
+- Direct, reference, and automatic links.
+- Interactive task checkboxes backed by Markdown source.
 - Active-line and selected-range syntax reveal.
 - Styling through existing theme variables.
 - Focused testing on macOS and iPhone Safari.
@@ -39,10 +42,9 @@ editor.
 ### Exclude
 
 - Full textarea feature parity.
-- Links and wikilink navigation.
-- Task-checkbox widgets.
+- Wikilink navigation.
 - Inline image previews.
-- Lists, blockquotes, and horizontal-rule presentation.
+- Blockquotes and horizontal-rule presentation.
 - Search-result and outline navigation integration.
 - Drag-and-drop or attachment insertion.
 - Custom toolbar migration beyond what is needed to exercise the prototype.
@@ -157,6 +159,8 @@ Deliverables:
 
 - Add Markdown language parsing.
 - Style headings, bold, italic, and inline code.
+- Style ordered and unordered lists and supported Markdown links.
+- Render source-backed task-checkbox widgets outside the active region.
 - Hide supported delimiters outside the active region.
 - Reveal syntax on the active line and across selections.
 - Map appearance to existing CSS variables.

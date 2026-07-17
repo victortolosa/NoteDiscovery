@@ -2,7 +2,7 @@
 
 ## Current status
 
-- Status: Session 3 complete
+- Status: Session 3 complete with lists, links, and task-checkbox extension
 - Branch: `feature/live-preview`
 - Base: `custom` at `8317241`
 - Current session: Session 3 — live-preview behavior
@@ -95,6 +95,10 @@ decision.
 | 2026-07-17 | Session 3 | Malformed, unsupported, Unicode, and RTL fixtures | Source fallback | Pass | Tables, Mermaid, math, HTML, unclosed syntax, RTL text, and emoji remained source |
 | 2026-07-17 | Session 3 | 67,001-character fixture | Editing and virtualization | Pass | Fill completed in 136 ms; 33 DOM lines represented 3,201 source lines |
 | 2026-07-17 | Session 3 | Filesystem comparison | Untouched fixture preservation | Pass | All seven untouched fixture copies remained byte-for-byte identical |
+| 2026-07-17 | Session 3 extension | Nested ordered and unordered lists | Structure and styling | Pass | Markers remained visible and used the active theme accent |
+| 2026-07-17 | Session 3 extension | Direct, reference, and automatic links | Readable-label rendering | Pass | Destination syntax hid outside the active region; copied source remained complete |
+| 2026-07-17 | Session 3 extension | Task checkboxes | Click, autosave, and source round-trip | Pass | `[ ]`, `[x]`, and `[X]` toggled through transactions; toggling back restored exact bytes |
+| 2026-07-17 | Session 3 extension | Wikilink fixture | Source fallback | Pass | `[[folder/note\|Readable label]]` remained untouched source |
 
 ## Decisions
 
@@ -273,6 +277,53 @@ a readable editor without compromising Markdown source or cursor behavior.
 
 Evaluate ordinary writing, cursor movement, layout shifts, browser behavior,
 and iPhone Safari before making the go, revise, or stop decision.
+
+### 2026-07-17: lists, links, and task checkboxes
+
+#### Objective
+
+Extend the successful syntax-tree prototype with common structured writing
+elements requested after the initial Session 3 review.
+
+#### Completed
+
+- Enabled Lezer's task-list parser extension.
+- Styled ordered and unordered list markers without hiding their structure.
+- Collapsed direct links and explicit reference links to readable labels.
+- Styled autolinks while preserving their visible URL.
+- Added accessible checkbox widgets that update `[ ]`, `[x]`, and `[X]`
+  markers through CodeMirror transactions.
+- Hid task-list bullets and checkbox source outside the active region.
+- Revealed complete link and task syntax on active lines and selections.
+- Added completed-task styling and a dedicated fixture.
+- Left wikilinks as source to avoid partial interpretation by the standard
+  Markdown parser.
+
+#### Verification
+
+- Nested bullet and ordered markers remained visible and correctly indented.
+- List markers inherited the current theme accent.
+- Direct-link destinations and titles hid without leaving stray punctuation.
+- Reference-link labels collapsed while their definitions remained source.
+- Autolink URLs remained readable.
+- Selecting all revealed complete link and task Markdown.
+- Copying returned direct links, task markers, and wikilinks unchanged.
+- Clicking an open checkbox saved `[x]`; clicking it again restored `[ ]`.
+- Completed task text used line-through styling.
+- All disposable fixture files remained byte-for-byte identical after the
+  checkbox round-trip.
+- The minified lazy bundle remained approximately 505 KB.
+
+#### Issues
+
+- Link navigation is not interactive yet; links are presentation-only in the
+  editable surface.
+- Wikilink rendering and navigation require a NoteDiscovery-specific parser
+  extension and remain out of this focused change.
+
+#### Next step
+
+Continue with Session 4 evaluation before adding more syntax or editor parity.
 
 ### Resolved questions
 

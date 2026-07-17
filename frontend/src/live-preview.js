@@ -1,5 +1,6 @@
 import { EditorState } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
+import { TaskList } from '@lezer/markdown';
 import {
     drawSelection,
     EditorView,
@@ -31,7 +32,7 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
             extensions: [
                 lineNumbers(),
                 history(),
-                markdown(),
+                markdown({ extensions: [TaskList] }),
                 livePreviewDecorations,
                 drawSelection(),
                 highlightActiveLine(),
@@ -99,6 +100,27 @@ export function createLivePreviewEditor({ parent, content = '', onChange = () =>
                         color: 'var(--text-primary)',
                         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
                         fontSize: '0.9em',
+                    },
+                    '.cm-live-link': {
+                        color: 'var(--accent-primary)',
+                        textDecoration: 'underline',
+                        textUnderlineOffset: '0.15em',
+                    },
+                    '.cm-live-list-mark': {
+                        color: 'var(--accent-primary)',
+                        fontWeight: '700',
+                    },
+                    '.cm-live-checkbox': {
+                        width: '1em',
+                        height: '1em',
+                        margin: '0 0.35em 0 0',
+                        verticalAlign: '-0.1em',
+                        accentColor: 'var(--accent-primary)',
+                        cursor: 'pointer',
+                    },
+                    '.cm-live-task-complete': {
+                        color: 'var(--text-tertiary)',
+                        textDecoration: 'line-through',
                     },
                     '&.cm-focused': {
                         outline: 'none',
