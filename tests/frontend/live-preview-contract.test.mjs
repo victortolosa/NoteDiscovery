@@ -49,6 +49,14 @@ test('the generated bundle remains a lazy-loaded artifact', async () => {
     assert.doesNotMatch(html, /<script[^>]+live-preview\.js/);
 });
 
+test('shared editor commands load before the Alpine application', async () => {
+    const html = await readFile(new URL('frontend/index.html', root), 'utf8');
+    const commands = html.indexOf('/static/editor-commands.js');
+    const app = html.indexOf('/static/app.js');
+    assert.ok(commands >= 0);
+    assert.ok(app > commands);
+});
+
 test('Split remains a Classic-only view', async () => {
     const app = await readFile(new URL('frontend/app.js', root), 'utf8');
     const html = await readFile(new URL('frontend/index.html', root), 'utf8');

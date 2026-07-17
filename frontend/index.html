@@ -3649,7 +3649,7 @@
                             :style="(viewMode === 'split' ? `width: ${editorWidth}%;` : 'width: 100%;') + '; display: ' + ((viewMode === 'edit' || viewMode === 'split') ? 'flex' : 'none') + ';'"
                         >
                             <!-- Markdown Formatting Toolbar -->
-                            <div x-show="editorMode === 'classic'" class="flex items-center gap-1 px-2 py-1.5 border-b flex-shrink-0" style="background-color: var(--bg-secondary); border-color: var(--border-primary);">
+                            <div class="flex items-center gap-1 px-2 py-1.5 border-b flex-shrink-0" style="background-color: var(--bg-secondary); border-color: var(--border-primary);">
                                 <button @click="formatText('bold')" class="format-btn" :title="t('format.bold') + ' (Ctrl+B)'">
                                     <span class="font-bold">B</span>
                                 </button>
@@ -4814,6 +4814,7 @@
     </nav>
     
     <script src="/static/editor-markdown-continue.js"></script>
+    <script src="/static/editor-commands.js"></script>
     <script src="/static/app.js"></script>
 
     <!-- MD file drag-and-drop overlay — primary drop target, no pointer-events-none -->

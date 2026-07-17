@@ -886,6 +886,9 @@ function noteApp() {
                 this.$nextTick(() => {
                     requestAnimationFrame(() => {
                         this._restoreNoteScroll();
+                        if (this.currentSearchHighlight) {
+                            this.highlightSearchTerm(this.currentSearchHighlight, false);
+                        }
                     });
                 });
             });
@@ -1080,35 +1083,36 @@ function noteApp() {
                     }
 
                     // Only apply markdown shortcuts when editor is focused and a note is open
-                    const isEditorFocused = document.activeElement?.id === 'note-editor';
+                    const isEditorFocused = document.activeElement?.id === 'note-editor'
+                        || this._livePreviewEditor?.hasFocus();
                     if (isEditorFocused && this.currentNote) {
                         // Ctrl/Cmd + B for bold
                         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
                             e.preventDefault();
-                            this.wrapSelection('**', '**', 'bold text');
+                            this.formatText('bold');
                         }
 
                         // Ctrl/Cmd + I for italic
                         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
                             e.preventDefault();
-                            this.wrapSelection('*', '*', 'italic text');
+                            this.formatText('italic');
                         }
 
                         // Ctrl/Cmd + Shift + K for link (plain Cmd+K opens the Quick Switcher)
                         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
                             e.preventDefault();
-                            this.insertLink();
+                            this.formatText('link');
                         }
 
                         // Ctrl/Cmd + Alt/Option + T for table
                         if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 't') {
                             e.preventDefault();
-                            this.insertTable();
+                            this.formatText('table');
                         }
                         // Ctrl/Cmd + Alt/Option + A to prettify/align table
                         if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'a') {
                             e.preventDefault();
-                            this.prettifyTable();
+                            this.formatText('prettify-table');
                         }
 
                         // Ctrl/Cmd + Alt/Option + Z for Zen mode
@@ -1325,6 +1329,9 @@ function noteApp() {
                         taskComplete: this.t('editor.live_preview_task_complete'),
                         taskIncomplete: this.t('editor.live_preview_task_incomplete'),
                     },
+                    onSourceCommand: (command, context) => (
+                        this.runLivePreviewSourceCommand(command, context)
+                    ),
                     onChange: (content) => {
                         this.noteContent = content;
                         this.autoSave({ recordHistory: false });
@@ -1333,6 +1340,9 @@ function noteApp() {
                 this._livePreviewDocumentPath = this.currentNote;
                 this.setupScrollSync();
                 requestAnimationFrame(() => this._restoreNoteScroll());
+                if (this.currentSearchHighlight) {
+                    this.highlightSearchTerm(this.currentSearchHighlight, false);
+                }
             } catch (error) {
                 this._livePreviewModulePromise = null;
                 this.livePreviewError = this.t('editor.live_preview_load_error');
@@ -1368,6 +1378,44 @@ function noteApp() {
                 return true;
             }
             return false;
+        },
+
+        runLivePreviewSourceCommand(command, context) {
+            if (typeof EditorCommands === 'undefined') return { changed: false };
+            if (command === 'tab') {
+                return EditorCommands.indent(
+                    context.content,
+                    context.selection,
+                    context.shiftKey,
+                    this.tabInsertsTab
+                );
+            }
+            if (command === 'toggleTask') {
+                return EditorCommands.toggleTask(context.content, context.selection);
+            }
+            if (command === 'enter' && typeof EditorMarkdownContinue !== 'undefined') {
+                const result = EditorMarkdownContinue.tryEnter(
+                    context.content,
+                    context.selection.from,
+                    context.selection.to,
+                    {
+                        key: 'Enter',
+                        defaultPrevented: false,
+                        isComposing: false,
+                        shiftKey: false,
+                        ctrlKey: false,
+                        metaKey: false,
+                        altKey: false,
+                    }
+                );
+                if (!result.handled) return { changed: false };
+                return EditorCommands.fromFullText(
+                    context.content,
+                    result.text,
+                    { from: result.cursor, to: result.cursor }
+                );
+            }
+            return { changed: false };
         },
 
         // Readable line length toggle (for preview max-width)
@@ -1443,37 +1491,23 @@ function noteApp() {
         // Handle Tab key in editor (inserts tab if setting enabled; Shift+Tab outdents matching lines)
         handleTabKey(event) {
             if (!this.tabInsertsTab) return;
-
-            const textarea = event.target;
-            const start = textarea.selectionStart;
-            const end = textarea.selectionEnd;
-
-            if (event.shiftKey) {
-                const result = applyEditorOutdent(this.noteContent, start, end);
-                if (!result.changed) return;
-                event.preventDefault();
-                this.noteContent = result.text;
-                this.$nextTick(() => {
-                    textarea.selectionStart = result.selStart;
-                    textarea.selectionEnd = result.selEnd;
-                });
-                this.autoSave();
-                return;
-            }
-
+            if (typeof EditorCommands === 'undefined') return;
+            const result = EditorCommands.indent(
+                this.noteContent,
+                { from: event.target.selectionStart, to: event.target.selectionEnd },
+                event.shiftKey,
+                true
+            );
+            if (!result.changed) return;
             event.preventDefault();
-            this.noteContent = this.noteContent.substring(0, start) + '\t' + this.noteContent.substring(end);
-            this.$nextTick(() => {
-                textarea.selectionStart = textarea.selectionEnd = start + 1;
-            });
-            this.autoSave();
+            this.applyEditorCommand(result);
         },
 
         /**
          * Enter: continue blockquote / bullet / ordered list / task list; second Enter on empty item exits (see editor-markdown-continue.js).
          */
         handleEditorEnterKey(event) {
-            if (typeof EditorMarkdownContinue === 'undefined') return;
+            if (typeof EditorMarkdownContinue === 'undefined' || typeof EditorCommands === 'undefined') return;
             const textarea = event.target;
             if (!textarea || textarea.id !== 'note-editor') return;
 
@@ -1486,12 +1520,11 @@ function noteApp() {
             if (!result.handled) return;
 
             event.preventDefault();
-            this.noteContent = result.text;
-            this.$nextTick(() => {
-                textarea.selectionStart = textarea.selectionEnd = result.cursor;
-            });
-            this.autoSave();
-            this.updateSyntaxHighlight();
+            this.applyEditorCommand(EditorCommands.fromFullText(
+                this.noteContent,
+                result.text,
+                { from: result.cursor, to: result.cursor }
+            ));
         },
 
         // Sort mode configuration
@@ -5420,6 +5453,16 @@ function noteApp() {
 
             const searchTerm = query.trim();
 
+            if (this.editorMode === 'live-preview' && this.viewMode === 'edit' && this._livePreviewEditor) {
+                this.clearPreviewSearchHighlights();
+                const result = this._livePreviewEditor.setSearch(searchTerm, 0, { focus: focusEditor });
+                this.totalMatches = result.total;
+                this.currentMatchIndex = result.activeIndex;
+                return;
+            }
+
+            this._livePreviewEditor?.clearSearch();
+
             // Highlight in editor (textarea)
             this.highlightInEditor(searchTerm, focusEditor);
 
@@ -5550,6 +5593,14 @@ function noteApp() {
             if (this.totalMatches === 0) return;
 
             this.currentMatchIndex = (this.currentMatchIndex + 1) % this.totalMatches;
+            if (this.editorMode === 'live-preview' && this.viewMode === 'edit' && this._livePreviewEditor) {
+                const result = this._livePreviewEditor.setSearch(
+                    this.currentSearchHighlight,
+                    this.currentMatchIndex
+                );
+                this.currentMatchIndex = result.activeIndex;
+                return;
+            }
             this.scrollToMatch(this.currentMatchIndex);
         },
 
@@ -5558,11 +5609,25 @@ function noteApp() {
             if (this.totalMatches === 0) return;
 
             this.currentMatchIndex = (this.currentMatchIndex - 1 + this.totalMatches) % this.totalMatches;
+            if (this.editorMode === 'live-preview' && this.viewMode === 'edit' && this._livePreviewEditor) {
+                const result = this._livePreviewEditor.setSearch(
+                    this.currentSearchHighlight,
+                    this.currentMatchIndex
+                );
+                this.currentMatchIndex = result.activeIndex;
+                return;
+            }
             this.scrollToMatch(this.currentMatchIndex);
         },
 
         // Scroll to a specific match index
         scrollToMatch(index) {
+            if (this.editorMode === 'live-preview' && this.viewMode === 'edit' && this._livePreviewEditor) {
+                const result = this._livePreviewEditor.setSearch(this.currentSearchHighlight, index);
+                this.totalMatches = result.total;
+                this.currentMatchIndex = result.activeIndex;
+                return;
+            }
             const preview = document.querySelector('.markdown-preview');
             if (!preview) return;
 
@@ -5584,7 +5649,7 @@ function noteApp() {
         },
 
         // Clear search highlights
-        clearSearchHighlights() {
+        clearPreviewSearchHighlights() {
             const preview = document.querySelector('.markdown-preview');
             if (!preview) return;
 
@@ -5596,6 +5661,11 @@ function noteApp() {
 
             // Normalize text nodes to merge adjacent text nodes
             preview.normalize();
+        },
+
+        clearSearchHighlights() {
+            this._livePreviewEditor?.clearSearch();
+            this.clearPreviewSearchHighlights();
 
             // Reset match counters
             this.totalMatches = 0;
@@ -6369,6 +6439,58 @@ function noteApp() {
         },
 
         // Markdown formatting helpers
+        getActiveEditorSelection() {
+            if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                return this._livePreviewEditor.getSelection();
+            }
+            const editor = document.getElementById('note-editor');
+            if (!editor) return { from: 0, to: 0 };
+            return { from: editor.selectionStart, to: editor.selectionEnd };
+        },
+
+        applyEditorCommand(result) {
+            if (!result?.changed) {
+                if (result?.error === 'not-in-table') {
+                    this.toast('Place the cursor inside a markdown table and try again.', { type: 'warning' });
+                }
+                return false;
+            }
+
+            if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                this._livePreviewEditor.replaceRange({
+                    ...result.change,
+                    selection: {
+                        anchor: result.selection.from,
+                        head: result.selection.to,
+                    },
+                    userEvent: 'input.complete',
+                });
+                this._livePreviewEditor.focus();
+                return true;
+            }
+
+            const editor = document.getElementById('note-editor');
+            if (!editor) return false;
+            this.noteContent = result.text;
+            this.$nextTick(() => {
+                editor.setSelectionRange(result.selection.from, result.selection.to);
+                editor.focus();
+            });
+            this.autoSave();
+            this.updateSyntaxHighlight();
+            return true;
+        },
+
+        runEditorFormat(type) {
+            if (typeof EditorCommands === 'undefined') return false;
+            const result = EditorCommands.format(
+                this.noteContent,
+                this.getActiveEditorSelection(),
+                type
+            );
+            return this.applyEditorCommand(result);
+        },
+
         // Trim trailing whitespace from double-click word selections.
         // No-op on browsers that already exclude it (Firefox, Safari).
         trimSelectionTrailingSpace(event) {
@@ -6621,53 +6743,7 @@ function noteApp() {
 
         // Format selected text or insert formatting at cursor
         formatText(type) {
-            // Simple wrap cases - reuse wrapSelection()
-            const wrapFormats = {
-                'bold': ['**', '**', 'bold'],
-                'italic': ['*', '*', 'italic'],
-                'strikethrough': ['~~', '~~', 'strikethrough'],
-                'code': ['`', '`', 'code']
-            };
-
-            if (wrapFormats[type]) {
-                const [before, after, placeholder] = wrapFormats[type];
-                this.wrapSelection(before, after, placeholder);
-                return;
-            }
-
-            // Special cases that need custom handling
-            switch (type) {
-                case 'heading':
-                    this.insertLinePrefix('## ', 'Heading');
-                    break;
-                case 'quote':
-                    this.insertLinePrefix('> ', 'quote');
-                    break;
-                case 'bullet':
-                    this.insertLinePrefix('- ', 'item');
-                    break;
-                case 'numbered':
-                    this.insertLinePrefix('1. ', 'item');
-                    break;
-                case 'checkbox':
-                    this.insertLinePrefix('- [ ] ', 'task');
-                    break;
-                case 'link':
-                    this.insertLink();
-                    break;
-                case 'image':
-                    this.wrapSelection('![', '](image-url)', 'alt text');
-                    break;
-                case 'codeblock':
-                    this.wrapSelection('```\n', '\n```', 'code');
-                    break;
-                case 'table':
-                    this.insertTable();
-                    break;
-                case 'prettify-table':
-                    this.prettifyTable();
-                    break;
-            }
+            return this.runEditorFormat(type);
         },
 
         // Insert a line prefix (for headings, lists, quotes)

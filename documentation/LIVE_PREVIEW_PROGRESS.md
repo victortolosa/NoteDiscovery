@@ -6,8 +6,8 @@
 - Branch: `feature/live-preview`
 - Original base: `custom` at `8317241`
 - Upstream integrated: `0cb11ae` (version 0.28.3)
-- Current session: stabilization before Session 4 evaluation
-- Next session: Session 4 — evaluation and decision
+- Current session: Session 5 shared commands complete; Session 6 search slice complete
+- Next session: complete Session 4 device evaluation or continue Session 6 navigation
 - Direction: proceed toward parity if Session 4 closes without a blocking cursor,
   source-integrity, or mobile finding
 - Last updated: 2026-07-17
@@ -80,6 +80,25 @@ baseline; all other Markdown remains editable source.
 - [ ] Compare against Classic and full Preview.
 - [ ] Record a go, revise, or stop decision.
 
+### Session 5: shared commands and writing mechanics
+
+- [x] Extract editor-independent Markdown commands.
+- [x] Enable the full formatting toolbar in Live Preview.
+- [x] Route Classic and Live Preview shortcuts through the shared commands.
+- [x] Restore list, quote, ordered-list, and task continuation on Enter.
+- [x] Restore Tab and Shift+Tab without overriding focus navigation when disabled.
+- [x] Add `Cmd/Ctrl+Enter` task toggling.
+- [x] Add unit and disposable-browser coverage.
+
+### Session 6: search and navigation
+
+- [x] Render sidebar search matches as CodeMirror decorations.
+- [x] Restore F3 and Shift+F3 current-match movement.
+- [x] Restore search context when a note or editor surface opens.
+- [ ] Move outline navigation to exact source offsets.
+- [ ] Verify backlink and history focus behavior.
+- [ ] Restore wikilink insertion and deliberate link activation.
+
 ## Verification record
 
 | Date | Commit | Environment | Check | Result | Notes |
@@ -109,6 +128,8 @@ baseline; all other Markdown remains editable source.
 | 2026-07-17 | Stabilization | Frontend checks | Unit tests and minified build | Pass | Six tests passed; all dependencies exact; lazy bundle built successfully |
 | 2026-07-17 | Stabilization | In-app browser on port 8001 | Persisted Live Preview mount | Pass | Note opening mounted exactly one CodeMirror editor with no line-number gutter |
 | 2026-07-17 | Stabilization | Disposable vault on port 8002 | View transitions | Pass | Live Preview remained mounted once across view transitions before Split was removed from its experimental UI |
+| 2026-07-17 | Session 5 | Frontend checks | Shared command unit tests and minified build | Pass | Fourteen tests passed; toolbar, indentation, task, table, and continuation commands are editor-independent |
+| 2026-07-17 | Session 5/6 | Disposable vault on port 8002 | Live and Classic editor smoke checks | Pass | Toolbar and shortcut formatting, Enter continuation, keyboard task toggle, search highlighting, F3 movement, and Classic fallback passed |
 
 ## Decisions
 
@@ -208,6 +229,45 @@ parity work during the MVP.
   development workflow.
 
 ## Session log
+
+### 2026-07-17: shared commands and search integration
+
+#### Objective
+
+Integrate the first five editor-parity surfaces without expanding rendered
+Markdown syntax.
+
+#### Completed
+
+- Made the existing formatting toolbar available in Live Preview.
+- Added a pure source-command layer shared by Classic and Live Preview.
+- Routed formatting shortcuts, Enter continuation, indentation, and keyboard
+  task toggling through transactional edits.
+- Added CodeMirror search decorations and current-match navigation while
+  retaining NoteDiscovery's sidebar search system.
+- Re-applied search state after note loads, content updates, editor mounting,
+  and Edit/Preview transitions.
+
+#### Verification
+
+- `npm run check:frontend`: passed with fourteen tests and a 501 KB minified
+  lazy bundle.
+- `node --check frontend/app.js`: passed.
+- `git diff --check`: passed.
+- Disposable browser checks passed for Live Preview and Classic formatting,
+  list continuation, task toggling, search highlighting, and F3 navigation.
+
+#### Issues
+
+- Session 6 outline, backlink, wikilink, and deliberate link activation work
+  remains.
+- The pre-existing `stickyHeading` and `stickySubHeading` Alpine errors remain
+  unchanged.
+
+#### Next step
+
+Complete the remaining Session 6 navigation paths, unless the outstanding
+Safari and iPhone Session 4 evaluation is prioritized first.
 
 ### 2026-07-17: build and mounting foundation
 

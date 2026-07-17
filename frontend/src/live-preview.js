@@ -1,8 +1,15 @@
-import { Compartment, EditorState, Transaction } from '@codemirror/state';
+import {
+    Compartment,
+    EditorState,
+    StateEffect,
+    StateField,
+    Transaction,
+} from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { TaskList } from '@lezer/markdown';
 import {
     drawSelection,
+    Decoration,
     EditorView,
     highlightActiveLine,
     keymap,
@@ -14,6 +21,61 @@ import {
 } from '@codemirror/commands';
 import { livePreviewDecorations } from './live-preview-decorations.js';
 
+const setSearch = StateEffect.define();
+
+const buildSearchState = (doc, query, requestedIndex = 0) => {
+    const searchQuery = String(query ?? '').trim();
+    const matches = [];
+    const decorations = [];
+
+    if (searchQuery) {
+        const source = doc.toString();
+        const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(escapedQuery, 'giu');
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+            matches.push({ from: match.index, to: match.index + match[0].length });
+        }
+    }
+
+    const activeIndex = matches.length
+        ? Math.max(0, Math.min(Number(requestedIndex) || 0, matches.length - 1))
+        : -1;
+    matches.forEach((match, index) => {
+        decorations.push(Decoration.mark({
+            class: index === activeIndex
+                ? 'cm-live-search-match cm-live-search-match-active'
+                : 'cm-live-search-match',
+        }).range(match.from, match.to));
+    });
+
+    return {
+        query: searchQuery,
+        matches,
+        activeIndex,
+        decorations: Decoration.set(decorations, true),
+    };
+};
+
+const searchField = StateField.define({
+    create: (state) => buildSearchState(state.doc, ''),
+    update(value, transaction) {
+        let query = value.query;
+        let activeIndex = value.activeIndex;
+        for (const effect of transaction.effects) {
+            if (effect.is(setSearch)) {
+                query = effect.value.query;
+                activeIndex = effect.value.activeIndex;
+            }
+        }
+        if (transaction.docChanged || query !== value.query || activeIndex !== value.activeIndex) {
+            return buildSearchState(transaction.state.doc, query, activeIndex);
+        }
+        return value;
+    },
+    provide: (field) => EditorView.decorations.from(field, value => value.decorations),
+});
+
 /**
  * Create the experimental CodeMirror editor behind a small application adapter.
  * Code outside this module should not manipulate EditorView directly.
@@ -23,6 +85,7 @@ export function createLivePreviewEditor({
     content = '',
     labels = {},
     onChange = () => {},
+    onSourceCommand = () => null,
 }) {
     if (!(parent instanceof HTMLElement)) {
         throw new Error('Live Preview requires a valid parent element.');
@@ -40,10 +103,30 @@ export function createLivePreviewEditor({
                 history(),
                 markdown({ extensions: [TaskList] }),
                 decorationsCompartment.of(livePreviewDecorations(editorLabels)),
+                searchField,
                 drawSelection(),
                 highlightActiveLine(),
                 EditorView.lineWrapping,
-                keymap.of([...defaultKeymap, ...historyKeymap]),
+                keymap.of([
+                    {
+                        key: 'Enter',
+                        run: (view) => runSourceCommand(view, 'enter'),
+                    },
+                    {
+                        key: 'Tab',
+                        run: (view) => runSourceCommand(view, 'tab', { shiftKey: false }),
+                    },
+                    {
+                        key: 'Shift-Tab',
+                        run: (view) => runSourceCommand(view, 'tab', { shiftKey: true }),
+                    },
+                    {
+                        key: 'Mod-Enter',
+                        run: (view) => runSourceCommand(view, 'toggleTask'),
+                    },
+                    ...defaultKeymap,
+                    ...historyKeymap,
+                ]),
                 EditorView.updateListener.of((update) => {
                     if (update.docChanged && !applyingExternalContent) {
                         onChange(update.state.doc.toString());
@@ -123,6 +206,14 @@ export function createLivePreviewEditor({
                         color: 'var(--text-tertiary)',
                         textDecoration: 'line-through',
                     },
+                    '.cm-live-search-match': {
+                        backgroundColor: 'var(--accent-light)',
+                        borderRadius: '0.15rem',
+                    },
+                    '.cm-live-search-match-active': {
+                        backgroundColor: 'var(--accent-primary)',
+                        color: 'var(--bg-primary)',
+                    },
                     '&.cm-focused': {
                         outline: 'none',
                     },
@@ -133,6 +224,26 @@ export function createLivePreviewEditor({
             ],
         })
     );
+
+    const runSourceCommand = (targetView, command, options = {}) => {
+        const selection = targetView.state.selection.main;
+        const result = onSourceCommand(command, {
+            content: targetView.state.doc.toString(),
+            selection: { from: selection.from, to: selection.to },
+            ...options,
+        });
+        if (!result?.changed) return false;
+        targetView.dispatch({
+            changes: result.change,
+            selection: {
+                anchor: result.selection.from,
+                head: result.selection.to,
+            },
+            annotations: Transaction.userEvent.of('input.complete'),
+            scrollIntoView: true,
+        });
+        return true;
+    };
 
     const view = new EditorView({
         parent,
@@ -214,6 +325,23 @@ export function createLivePreviewEditor({
 
         hasFocus() {
             return view.hasFocus;
+        },
+
+        setSearch(query, activeIndex = 0, { focus = false } = {}) {
+            view.dispatch({ effects: setSearch.of({ query, activeIndex }) });
+            const state = view.state.field(searchField);
+            const match = state.matches[state.activeIndex];
+            if (match) {
+                view.dispatch({
+                    effects: EditorView.scrollIntoView(match.from, { y: 'center' }),
+                });
+            }
+            if (focus) view.focus();
+            return { total: state.matches.length, activeIndex: state.activeIndex };
+        },
+
+        clearSearch() {
+            view.dispatch({ effects: setSearch.of({ query: '', activeIndex: -1 }) });
         },
 
         setLabels(nextLabels = {}) {
