@@ -27,6 +27,7 @@
 - **In-app viewing** - View all media types directly in the sidebar
 - **Inline preview** - Audio/video players and PDF viewer embedded in notes
 - **Relative media paths** - For `![alt](path)`, paths resolve from the note’s folder
+- **Inline image sizing** - Obsidian-compatible syntax to size images: `![alt|300](path)` or `![[image.png|300x200]]` (width, or `WIDTHxHEIGHT`; `0` means "auto" for that dimension). Works in preview, print, export, and shared views.
 
 ### Organization
 - **Folder hierarchy** - Organize notes in nested folders
@@ -270,6 +271,34 @@ graph TD
 
 📄 **See the [MERMAID](MERMAID.md) note for diagram examples and syntax reference.**
 
+## 💬 Callouts / Admonitions
+
+GitHub-style callouts highlight important information in your notes. They render as colored, bordered blocks in the preview pane and are fully compatible with notes imported from GitHub or Obsidian.
+
+### Syntax
+
+Start a blockquote with `> [!TYPE]` on its own line, then continue with the body:
+
+```markdown
+> [!NOTE]
+> Useful information that users should know, even when skimming.
+
+> [!TIP] Custom title
+> Helpful advice for doing things better or more easily.
+```
+
+The first line can include an optional custom title after the type. Inner markdown (bold, links, lists, code) is fully parsed.
+
+### Supported Types
+
+- `[!NOTE]` - General information (blue)
+- `[!TIP]` - Helpful advice (green)
+- `[!IMPORTANT]` - Crucial information (purple)
+- `[!WARNING]` - Urgent caution required (amber)
+- `[!CAUTION]` - Negative consequences if ignored (red)
+
+Unknown types fall through to a normal blockquote, so existing notes are never broken.
+
 ## 📄 Note Templates
 
 Create notes from reusable templates with dynamic placeholder replacement.
@@ -335,6 +364,12 @@ date: {{date}}
 | `Esc` | `Esc` | Exit Zen Mode |
 | `F3` | `F3` | Next search match |
 | `Shift+F3` | `Shift+F3` | Previous search match |
+| `Ctrl+Alt+1` | `Cmd+Option+1` | View mode: **Edit** |
+| `Ctrl+Alt+2` | `Cmd+Option+2` | View mode: **Split** (falls back to Edit on mobile) |
+| `Ctrl+Alt+3` | `Cmd+Option+3` | View mode: **Preview** |
+| `Ctrl+Alt+V` | `Cmd+Option+V` | Cycle view mode (Edit → Split → Preview) |
+
+> **View mode shortcuts** work anywhere in the app — you don't need to click into the editor first. They're disabled while Zen Mode is active (Zen is edit-only) and while the graph overlay is open.
 
 > **Note for Mac users:** Some Option-based shortcuts (`Cmd+Option+N/F/T`) may conflict with browser shortcuts in Chrome/Brave. Safari has better compatibility. If shortcuts don't work, try using `Ctrl` instead of `Cmd`, or use the UI buttons.
 

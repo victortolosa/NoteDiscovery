@@ -109,10 +109,10 @@ const FilenameValidator = {
     // Linux: / \0
     // Common set to block (including control characters)
     FORBIDDEN_CHARS: /[\\/:*?"<>|\x00-\x1f]/,
-    
+
     // For display purposes - human readable list
     FORBIDDEN_CHARS_DISPLAY: '\\ / : * ? " < > |',
-    
+
     /**
      * Validate a filename (single segment, no path separators)
      * @param {string} name - The filename to validate
@@ -122,27 +122,27 @@ const FilenameValidator = {
         if (!name || typeof name !== 'string') {
             return { valid: false, error: 'empty' };
         }
-        
+
         const trimmed = name.trim();
         if (!trimmed) {
             return { valid: false, error: 'empty' };
         }
-        
+
         // Check for forbidden characters
         if (this.FORBIDDEN_CHARS.test(trimmed)) {
-            return { 
-                valid: false, 
+            return {
+                valid: false,
                 error: 'forbidden_chars',
                 forbiddenChars: this.FORBIDDEN_CHARS_DISPLAY
             };
         }
-        
+
         // Check for reserved Windows names (case-insensitive)
         const reservedNames = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)/i;
         if (reservedNames.test(trimmed)) {
             return { valid: false, error: 'reserved_name' };
         }
-        
+
         // Check for names starting/ending with dots or spaces (problematic on some systems)
         if (trimmed.startsWith('.') && trimmed.length === 1) {
             return { valid: false, error: 'invalid_dot' };
@@ -150,10 +150,10 @@ const FilenameValidator = {
         if (trimmed.endsWith('.') || trimmed.endsWith(' ')) {
             return { valid: false, error: 'trailing_dot_space' };
         }
-        
+
         return { valid: true, sanitized: trimmed };
     },
-    
+
     /**
      * Validate a path (may contain forward slashes for folder separators)
      * @param {string} path - The path to validate
@@ -163,25 +163,25 @@ const FilenameValidator = {
         if (!path || typeof path !== 'string') {
             return { valid: false, error: 'empty' };
         }
-        
+
         const trimmed = path.trim();
         if (!trimmed) {
             return { valid: false, error: 'empty' };
         }
-        
+
         // Split by forward slash and validate each segment
         const segments = trimmed.split('/').filter(s => s.length > 0);
         if (segments.length === 0) {
             return { valid: false, error: 'empty' };
         }
-        
+
         for (const segment of segments) {
             const result = this.validateFilename(segment);
             if (!result.valid) {
                 return result;
             }
         }
-        
+
         // Rebuild path without empty segments
         return { valid: true, sanitized: segments.join('/') };
     }
@@ -280,6 +280,13 @@ function noteApp() {
         alreadyDonated: false,
         autosaveDelayMs: CONFIG.AUTOSAVE_DELAY,  // hydrated from /api/config in loadConfig()
         notes: [],
+
+        // True while /api/notes is in flight. Drives the "Loading your vault…"
+        // placeholder + the delayed overlay (notesLoadingShowOverlay).
+        notesLoading: true,
+        notesLoadingShowOverlay: false,
+        _notesLoadingOverlayTimer: null,
+
         currentNote: '',
         currentNoteName: '',
         noteContent: '',
@@ -290,7 +297,7 @@ function noteApp() {
         _livePreviewModulePromise: null,
         viewMode: 'split', // 'edit', 'split', 'preview'
         searchQuery: '',
-        
+
         // Graph state (separate overlay, doesn't affect viewMode)
         showGraph: false,
         graphInstance: null,
@@ -330,11 +337,11 @@ function noteApp() {
         _noteLookup: {
             byPath: new Map(),           // path -> true
             byPathLower: new Map(),      // path.toLowerCase() -> true
-            byName: new Map(),           // name (without .md) -> true  
+            byName: new Map(),           // name (without .md) -> true
             byNameLower: new Map(),      // name.toLowerCase() -> true
             byEndPath: new Map(),        // '/filename' and '/filename.md' -> true
         },
-        
+
         // Media lookup map for O(1) media wikilink resolution (built on loadNotes)
         // Maps media filename (case-insensitive) -> full path
         _mediaLookup: new Map(),
@@ -344,7 +351,7 @@ function noteApp() {
         _prefetchTimeout: null,
         _prefetchController: null,
         _maxNoteCacheEntries: 75,
-        
+
         // Preview rendering debounce
         _previewDebounceTimeout: null,
         _lastRenderedContent: '',
@@ -352,24 +359,24 @@ function noteApp() {
         _cachedRenderedHTML: '',
         _mathDebounceTimeout: null,
         _mermaidDebounceTimeout: null,
-        
+
         // Theme state
         currentTheme: 'light',
         availableThemes: [],
-        
+
         // Locale/i18n state
         currentLocale: localStorage.getItem('locale') || 'en-US',
         availableLocales: [],
         // Translations loaded from backend (preloaded before Alpine init via window.__preloadedTranslations)
         translations: window.__preloadedTranslations || {},
-        
+
         // Syntax highlighting
         syntaxHighlightEnabled: false,
         syntaxHighlightTimeout: null,
-        
+
         // Readable line length (preview max-width)
         readableLineLength: true,
-        
+
         // Hide underscore-prefixed folders (_attachments, _templates) from sidebar
         // Read synchronously to prevent flash on initial render
         hideUnderscoreFolders: localStorage.getItem('hideUnderscoreFolders') === 'true',
@@ -396,7 +403,7 @@ function noteApp() {
         allFolders: [],
         expandedFolders: new Set(),
         dragOverFolder: null,  // Track which folder is being hovered during drag
-        
+
         // Tags state
         allTags: {},
         selectedTags: [],
@@ -406,7 +413,7 @@ function noteApp() {
         // Search state
         searchDebounceTimeout: null,
         isSearching: false,
-        
+
         // Outline (TOC) state
         outline: [], // [{level: 1, text: 'Heading', slug: 'heading'}, ...]
 
@@ -415,11 +422,11 @@ function noteApp() {
 
         // Scroll sync state
         isScrolling: false,
-        
+
         // Unified drag state for notes, folders, and media
         draggedItem: null,  // { path: string, type: 'note' | 'folder' | 'image' | 'audio' | 'video' | 'document' }
         dropTarget: null,   // 'editor' | 'folder' | null
-        
+
         // Undo/Redo history
         undoHistory: [],
         redoHistory: [],
@@ -431,33 +438,33 @@ function noteApp() {
         // loadNote() and restored when returning to the same note in the same session. Stays
         // in memory only — cleared on page reload, intentionally (matches typical editor UX).
         noteScrollPositions: {},
-        
+
         // Stats plugin state
         statsPluginEnabled: false,
         noteStats: null,
         statsExpanded: false,
-        
+
         // Note metadata (frontmatter) state
         noteMetadata: null,
         metadataExpanded: false,
         _lastFrontmatter: null, // Cache to avoid re-parsing unchanged frontmatter
-        
+
         // Sidebar resize state
         sidebarWidth: CONFIG.DEFAULT_SIDEBAR_WIDTH,
         isResizing: false,
-        
+
         // Mobile sidebar state
         mobileSidebarOpen: false,
-        
+
         // Split view resize state
         editorWidth: 50, // percentage
         isResizingSplit: false,
-        
+
         // Dropdown state
         showNewDropdown: false,
         dropdownTargetFolder: null, // Folder context for "New" dropdown ('' = root, null = not set)
         dropdownPosition: { top: 0, left: 0 }, // Position for contextual dropdown
-        
+
         // Template state
         showTemplateModal: false,
         availableTemplates: [],
@@ -470,19 +477,19 @@ function noteApp() {
         newButtonAction: 'chooser',
         autoFillNoteTitle: false,
         lastUsedTemplate: '',
-        
+
         // New note / folder name modal (replaces window.prompt)
         showCreateNameModal: false,
         createNameModalKind: 'note',
         createNameModalTargetFolder: '',
         createNameModalInput: '',
-        
+
         // Rename folder modal (replaces window.prompt)
         showRenameFolderModal: false,
         renameFolderPath: '',
         renameFolderOldName: '',
         renameFolderInput: '',
-        
+
         // Generic confirm dialog (replaces window.confirm)
         showConfirmModal: false,
         confirmModalTitle: '',
@@ -491,7 +498,7 @@ function noteApp() {
         confirmModalConfirmLabel: '',
         confirmModalCancelLabel: '',
         _confirmModalResolve: null,
-        
+
         // Share state
         showShareModal: false,
         shareInfo: null,
@@ -502,7 +509,7 @@ function noteApp() {
         shareLinkCopied: false,
         _sharedNotePaths: new Set(),  // O(1) lookup for shared note indicators
         _sharedNotePathsList: [], // sorted paths, mirrors Set for reactive sidebar panel
-        
+
         // MD file upload state
         uploadDragActive: false,
         uploadDragCounter: 0,
@@ -516,11 +523,11 @@ function noteApp() {
         quickSwitcherIndex: 0,
         quickSwitcherResults: [],
         linkInsertCursorPos: null,  // cursor pos snapshot for Shift+Enter wikilink insert
-        
+
         // Non-blocking notifications (replaces window.alert)
         toasts: [],
         _toastIdSeq: 0,
-        
+
         // Homepage state
         selectedHomepageFolder: '',
         openFolderMenu: null,  // path of the folder card whose "..." menu is open (one at a time)
@@ -530,41 +537,41 @@ function noteApp() {
             folders: null,
             breadcrumb: null
         },
-        
+
         // Homepage constants
         HOMEPAGE_MAX_NOTES: 50,
-        
+
         // Computed-like helpers for homepage (cached for performance)
         homepageNotes() {
             // Return cached result if folder hasn't changed
             if (this._homepageCache.folderPath === this.selectedHomepageFolder && this._homepageCache.notes) {
                 return this._homepageCache.notes;
             }
-            
+
             if (!this.folderTree || typeof this.folderTree !== 'object') {
                 return [];
             }
-            
+
             const folderNode = this.getFolderNode(this.selectedHomepageFolder || '');
             const result = (folderNode && Array.isArray(folderNode.notes)) ? folderNode.notes : [];
-            
+
             // Cache the result
             this._homepageCache.notes = result;
             this._homepageCache.folderPath = this.selectedHomepageFolder;
-            
+
             return result;
         },
-        
+
         homepageFolders() {
             // Return cached result if folder hasn't changed
             if (this._homepageCache.folderPath === this.selectedHomepageFolder && this._homepageCache.folders) {
                 return this._homepageCache.folders;
             }
-            
+
             if (!this.folderTree || typeof this.folderTree !== 'object') {
                 return [];
             }
-            
+
             // Get child folders
             let childFolders = [];
             if (!this.selectedHomepageFolder) {
@@ -580,7 +587,7 @@ function noteApp() {
                         .filter(folder => !this.hideUnderscoreFolders || !folder.name.startsWith('_'));
                 }
             }
-            
+
             // Map to simplified structure (note count already cached in folder node)
             const _starredSet = new Set(this.starredFolders);
             const result = childFolders
@@ -595,7 +602,7 @@ function noteApp() {
                     if (a.starred !== b.starred) return a.starred ? -1 : 1;
                     return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
                 });
-            
+
             // Cache the result
             this._homepageCache.folders = result;
             this._homepageCache.folderPath = this.selectedHomepageFolder;
@@ -618,26 +625,26 @@ function noteApp() {
             if (this._homepageCache.folderPath === this.selectedHomepageFolder && this._homepageCache.breadcrumb) {
                 return this._homepageCache.breadcrumb;
             }
-            
+
             const breadcrumb = [{ name: this.t('homepage.title'), path: '' }];
-            
+
             if (this.selectedHomepageFolder) {
                 const parts = this.selectedHomepageFolder.split('/').filter(Boolean);
                 let currentPath = '';
-                
+
                 parts.forEach(part => {
                     currentPath = currentPath ? `${currentPath}/${part}` : part;
                     breadcrumb.push({ name: part, path: currentPath });
                 });
             }
-            
+
             // Cache the result
             this._homepageCache.breadcrumb = breadcrumb;
             this._homepageCache.folderPath = this.selectedHomepageFolder;
-            
+
             return breadcrumb;
         },
-        
+
         // Helper: Format file size nicely
         formatSize(bytes) {
             if (!bytes) return '0 B';
@@ -646,32 +653,32 @@ function noteApp() {
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         },
-        
+
         // Helper: Format date using current locale
         formatDate(dateStr) {
             if (!dateStr) return '';
             const date = new Date(dateStr);
             if (isNaN(date.getTime())) return '';
-            return date.toLocaleDateString(this.currentLocale, { 
-                year: 'numeric', 
-                month: 'short', 
-                day: 'numeric' 
+            return date.toLocaleDateString(this.currentLocale, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
             });
         },
-        
+
         getFolderNode(folderPath = '') {
             if (!this.folderTree || typeof this.folderTree !== 'object') {
                 return null;
             }
-            
+
             if (!folderPath) {
                 return this.folderTree['__root__'] || { name: '', path: '', children: {}, notes: [], noteCount: 0 };
             }
-            
+
             const parts = folderPath.split('/').filter(Boolean);
             let currentLevel = this.folderTree;
             let node = null;
-            
+
             for (const part of parts) {
                 if (!currentLevel[part]) {
                     return null;
@@ -679,24 +686,24 @@ function noteApp() {
                 node = currentLevel[part];
                 currentLevel = node.children || {};
             }
-            
+
             return node;
         },
-        
+
         // Check if app is empty (no notes and no folders)
         get isAppEmpty() {
             const notesArray = Array.isArray(this.notes) ? this.notes : [];
             const foldersArray = Array.isArray(this.allFolders) ? this.allFolders : [];
             return notesArray.length === 0 && foldersArray.length === 0;
-        }, 
-        
+        },
+
         // Mermaid state cache
         lastMermaidTheme: null,
-        
+
         // Media viewer state
         currentMedia: '',  // Path to current media file (kept as 'currentMedia' for compatibility)
         currentMediaType: 'image',  // 'image', 'audio', 'video', 'document', 'drawing'
-        
+
         // Drawing canvas (drawing-*.png only) — ops are session-only until Save flattens to PNG.
         // Coordinates in drawingOps[] are stored in DOCUMENT space (drawingDocW × drawingDocH),
         // not display CSS pixels, so resizing the editor pane never moves strokes and exported
@@ -732,30 +739,30 @@ function noteApp() {
         /** If true, run drawingSave again after the current one finishes (coalesce). */
         _drawingSaveQueued: false,
         _drawingAutosaveTimeout: null,
-        
+
         // DOM element cache (to avoid repeated querySelector calls)
         _domCache: {
             editor: null,
             previewContainer: null,
             previewContent: null
         },
-        
+
         // Initialize app
         async init() {
             // Prevent double initialization (Alpine.js may call x-init twice in some cases)
             if (window.__noteapp_initialized) return;
             window.__noteapp_initialized = true;
-            
+
             // Store global reference for native event handlers in x-html content
             window.$root = this;
-            
+
             // ESC key to cancel drag operations
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && this.draggedItem) {
                     this.cancelDrag();
                 }
             });
-            
+
             await this.loadConfig();
             await this.loadThemes();
             await this.initTheme();
@@ -774,20 +781,20 @@ function noteApp() {
 
             // Parse URL and load specific note if provided
             this.loadItemFromURL();
-            
+
             // Set initial homepage state ONLY if we're actually on the homepage
             if (window.location.pathname === '/') {
                 window.history.replaceState({ homepageFolder: '' }, '', '/');
                 document.title = this.appName;
             }
-            
+
             // Listen for browser back/forward navigation
             window.addEventListener('popstate', (e) => {
                 if (e.state && e.state.notePath) {
                     // Navigating to a note
                     const searchQuery = e.state.searchQuery || '';
                     this.loadNote(e.state.notePath, false, searchQuery); // false = don't update history
-                    
+
                     // Update search box and trigger search if needed
                     if (searchQuery) {
                         this.searchQuery = searchQuery;
@@ -809,7 +816,7 @@ function noteApp() {
                     this.backlinks = [];
                     this.shareInfo = null; // Reset share info
                     document.title = this.appName;
-                    
+
                     // Restore homepage folder state if it was saved
                     if (e.state && e.state.homepageFolder !== undefined) {
                         this.selectedHomepageFolder = e.state.homepageFolder || '';
@@ -817,7 +824,7 @@ function noteApp() {
                         // No folder state in history, go to root
                         this.selectedHomepageFolder = '';
                     }
-                    
+
                     // Invalidate cache to force recalculation
                     this._homepageCache = {
                         folderPath: null,
@@ -825,19 +832,19 @@ function noteApp() {
                         folders: null,
                         breadcrumb: null
                     };
-                    
+
                     // Clear search
                     this.searchQuery = '';
                     this.searchResults = [];
                     this.clearSearchHighlights();
                 }
             });
-            
+
             // Cache DOM references after initial render
             this.$nextTick(() => {
                 this.refreshDOMCache();
             });
-            
+
             // Setup mobile view mode handler
             this.setupMobileViewMode();
 
@@ -874,7 +881,7 @@ function noteApp() {
             this.$watch('editorMode', () => {
                 this.syncEditorSurface();
             });
-            
+
             // Watch for changes in note content to re-apply search highlights
             this.$watch('noteContent', (newContent) => {
                 if (this._livePreviewEditor) {
@@ -894,23 +901,23 @@ function noteApp() {
             this.$nextTick(() => {
                 this.syncEditorSurface();
             });
-            
+
             // Watch tags panel expanded state and save to localStorage
             this.$watch('tagsExpanded', () => {
                 this.saveTagsExpanded();
             });
-            
+
             // Watch favorites expanded state and save to localStorage
             this.$watch('favoritesExpanded', () => {
                 this.saveFavoritesExpanded();
             });
-            
+
             // Setup keyboard shortcuts (only once to prevent double triggers)
             if (!window.__noteapp_shortcuts_initialized) {
                 window.__noteapp_shortcuts_initialized = true;
                 window.addEventListener('keydown', (e) => {
                     // Use e.key (not e.code) for letter keys to support non-QWERTY keyboard layouts
-                    
+
                     // Ctrl/Cmd + S to save (drawing saves PNG; notes save markdown)
                     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
                         if (this.currentMedia && this.currentMediaType === 'drawing') {
@@ -921,7 +928,7 @@ function noteApp() {
                             this.saveNote();
                         }
                     }
-                    
+
                     // Ctrl/Cmd + W to close active tab
                     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
                         e.preventDefault();
@@ -949,19 +956,19 @@ function noteApp() {
                         this.openQuickSwitcher();
                         return;
                     }
-                    
+
                     // Ctrl/Cmd + Alt/Option + N for new note
                     if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'n') {
                         e.preventDefault();
                         this.createNote();
                     }
-                    
+
                     // Ctrl/Cmd + Alt/Option + F for new folder
                     if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'f') {
                         e.preventDefault();
                         this.createFolder();
                     }
-                    
+
                     // Ctrl/Cmd + Z for undo (drawing vs note editor)
                     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
                         if (this.editorMode === 'live-preview' && document.activeElement?.closest('.cm-editor')) {
@@ -975,7 +982,7 @@ function noteApp() {
                             this.undo();
                         }
                     }
-                    
+
                     // Ctrl/Cmd + Y OR Ctrl/Cmd+Shift+Z for redo
                     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
                         if (this.editorMode === 'live-preview' && document.activeElement?.closest('.cm-editor')) {
@@ -1001,19 +1008,63 @@ function noteApp() {
                             this.redo();
                         }
                     }
-                    
+
                     // F3 for next search match
                     if (e.code === 'F3' && !e.shiftKey) {
                         e.preventDefault();
                         this.nextMatch();
                     }
-                    
+
                     // Shift + F3 for previous search match
                     if (e.code === 'F3' && e.shiftKey) {
                         e.preventDefault();
                         this.previousMatch();
                     }
-                    
+
+                    // Ctrl/Cmd + Alt/Option + Z to toggle Zen mode.
+                    // Global (fires regardless of focus) so users can enter/exit Zen without
+                    // first clicking into the editor. Requires an open note; noop otherwise.
+                    if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'z') {
+                        if (this.currentNote) {
+                            e.preventDefault();
+                            this.toggleZenMode();
+                        }
+                    }
+
+                    // View-mode shortcuts (global — fire regardless of focus):
+                    //   Ctrl/Cmd + Alt/Option + 1  → Edit
+                    //   Ctrl/Cmd + Alt/Option + 2  → Split  (falls back to Edit on mobile)
+                    //   Ctrl/Cmd + Alt/Option + 3  → Preview
+                    //   Ctrl/Cmd + Alt/Option + V  → Cycle Edit → Split → Preview → Edit
+                    // Skipped when no note is open, in Zen mode (edit-only), or while the graph
+                    // overlay is showing. Uses e.code for digits so the physical top-row keys
+                    // fire on AZERTY/QWERTZ layouts (where 1/2/3 need Shift) and to bypass
+                    // Mac's Option+digit dead-key composer (Option+1 = ¡, etc.).
+                    if ((e.ctrlKey || e.metaKey) && e.altKey && !e.shiftKey
+                        && this.currentNote && !this.zenMode && !this.showGraph) {
+                        const isMobile = window.innerWidth <= 768;
+                        let targetMode = null;
+                        if (e.code === 'Digit1') {
+                            targetMode = 'edit';
+                        } else if (e.code === 'Digit2') {
+                            targetMode = isMobile ? 'edit' : 'split';
+                        } else if (e.code === 'Digit3') {
+                            targetMode = 'preview';
+                        } else if (e.key.toLowerCase() === 'v') {
+                            if (isMobile) {
+                                targetMode = this.viewMode === 'edit' ? 'preview' : 'edit';
+                            } else {
+                                const order = ['edit', 'split', 'preview'];
+                                const currentIdx = order.indexOf(this.viewMode);
+                                targetMode = order[(currentIdx + 1) % order.length];
+                            }
+                        }
+                        if (targetMode !== null) {
+                            e.preventDefault();
+                            this.viewMode = targetMode;
+                        }
+                    }
+
                     // Only apply markdown shortcuts when editor is focused and a note is open
                     const isEditorFocused = document.activeElement?.id === 'note-editor';
                     if (isEditorFocused && this.currentNote) {
@@ -1022,25 +1073,24 @@ function noteApp() {
                             e.preventDefault();
                             this.wrapSelection('**', '**', 'bold text');
                         }
-                        
+
                         // Ctrl/Cmd + I for italic
                         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
                             e.preventDefault();
                             this.wrapSelection('*', '*', 'italic text');
                         }
-                        
+
                         // Ctrl/Cmd + Shift + K for link (plain Cmd+K opens the Quick Switcher)
                         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
                             e.preventDefault();
                             this.insertLink();
                         }
-                        
+
                         // Ctrl/Cmd + Alt/Option + T for table
                         if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 't') {
                             e.preventDefault();
                             this.insertTable();
                         }
-
                         // Ctrl/Cmd + Alt/Option + A to prettify/align table
                         if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'a') {
                             e.preventDefault();
@@ -1053,7 +1103,7 @@ function noteApp() {
                             this.toggleZenMode();
                         }
                     }
-                    
+
                     // Escape to exit Zen mode (works anywhere)
                     if (e.key === 'Escape' && this.zenMode) {
                         e.preventDefault();
@@ -1061,9 +1111,9 @@ function noteApp() {
                     }
                 });
             }
-            
+
             // Note: setupScrollSync() is called when a note is loaded (see loadNote())
-            
+
             // Listen for system theme changes
             if (window.matchMedia) {
                 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
@@ -1072,7 +1122,7 @@ function noteApp() {
                     }
                 });
             }
-            
+
             // Listen for fullscreen changes (to sync zen mode state)
             document.addEventListener('fullscreenchange', () => {
                 if (!document.fullscreenElement && this.zenMode) {
@@ -1081,7 +1131,7 @@ function noteApp() {
                     this.viewMode = this.previousViewMode;
                 }
             });
-            
+
             // Toasts from ErrorHandler and code paths without Alpine `this`
             if (!window.__noteapp_toast_listener) {
                 window.__noteapp_toast_listener = true;
@@ -1095,7 +1145,7 @@ function noteApp() {
                 });
             }
         },
-        
+
         // Load app configuration
         async loadConfig() {
             try {
@@ -1114,13 +1164,13 @@ function noteApp() {
                 console.error('Failed to load config:', error);
             }
         },
-        
+
         // Load available themes from backend
         async loadThemes() {
             try {
                 const response = await fetch('/api/themes');
                 const data = await response.json();
-                
+
                 // Use theme names directly from backend (already include emojis)
                 this.availableThemes = data.themes;
             } catch (error) {
@@ -1132,7 +1182,7 @@ function noteApp() {
                 ];
             }
         },
-        
+
         // Initialize theme system
         async initTheme() {
             // Load saved theme preference from localStorage
@@ -1140,14 +1190,14 @@ function noteApp() {
             this.currentTheme = savedTheme;
             await this.applyTheme(savedTheme);
         },
-        
+
         // Set and apply theme
         async setTheme(themeId) {
             this.currentTheme = themeId;
             localStorage.setItem('noteDiscoveryTheme', themeId);
             await this.applyTheme(themeId);
         },
-        
+
         // Syntax highlighting toggle
         toggleSyntaxHighlight() {
             this.syntaxHighlightEnabled = !this.syntaxHighlightEnabled;
@@ -1156,13 +1206,13 @@ function noteApp() {
                 this.updateSyntaxHighlight();
             }
         },
-        
+
         // Load all localStorage settings at once using centralized config
         loadLocalSettings() {
             for (const [prop, config] of Object.entries(LOCAL_SETTINGS)) {
                 try {
                     const saved = localStorage.getItem(config.key);
-                    
+
                     if (saved === null) {
                         // Use default value if not set
                         this[prop] = config.default;
@@ -1171,8 +1221,8 @@ function noteApp() {
                     } else if (config.type === 'number') {
                         const num = parseFloat(saved);
                         // Validate range if specified
-                        if (!isNaN(num) && 
-                            (config.min === undefined || num >= config.min) && 
+                        if (!isNaN(num) &&
+                            (config.min === undefined || num >= config.min) &&
                             (config.max === undefined || num <= config.max)) {
                             this[prop] = num;
                         } else {
@@ -1193,7 +1243,7 @@ function noteApp() {
                     this[prop] = config.default;
                 }
             }
-            
+
             // Special case: favorites also needs to update the Set for O(1) lookups
             this.favoritesSet = new Set(this.favorites);
         },
@@ -1262,7 +1312,7 @@ function noteApp() {
                 this.livePreviewLoading = false;
             }
         },
-        
+
         // Readable line length toggle (for preview max-width)
         toggleReadableLineLength() {
             this.readableLineLength = !this.readableLineLength;
@@ -1283,7 +1333,7 @@ function noteApp() {
             document.documentElement.style.setProperty('--font-scale', this.fontSizeScale);
             this.scheduleStickyHeadingRefresh();
         },
-        
+
         // Hide underscore folders toggle (hides _attachments, _templates, etc. from sidebar, folder view, and search)
         toggleHideUnderscoreFolders() {
             this.hideUnderscoreFolders = !this.hideUnderscoreFolders;
@@ -1444,7 +1494,7 @@ function noteApp() {
         // Update syntax highlight overlay (debounced, called on input)
         updateSyntaxHighlight() {
             if (!this.syntaxHighlightEnabled) return;
-            
+
             clearTimeout(this.syntaxHighlightTimeout);
             this.syntaxHighlightTimeout = setTimeout(() => {
                 const overlay = document.getElementById('syntax-overlay');
@@ -1453,7 +1503,7 @@ function noteApp() {
                 }
             }, 50); // 50ms debounce
         },
-        
+
         // Sync overlay scroll with textarea. Per-note scroll restoration is captured separately
         // inside the _editorScrollHandler / _previewScrollHandler in setupScrollSync(), where
         // the existing isScrolling guard ensures we only record user-driven scrolls (not the
@@ -1468,23 +1518,23 @@ function noteApp() {
                 overlay.scrollLeft = textarea.scrollLeft;
             }
         },
-        
+
         // Highlight markdown syntax
         highlightMarkdown(text) {
             if (!text) return '';
-            
+
             // Escape HTML first
             let html = this.escapeHtml(text);
-            
+
             // Store code blocks and inline code with placeholders to protect from other patterns
             const codePlaceholders = [];
-            
+
             // Code blocks FIRST - protect them before anything else
             html = html.replace(/(```[\s\S]*?```)/g, (match) => {
                 codePlaceholders.push('<span class="md-codeblock">' + match + '</span>');
                 return `\x00CODE${codePlaceholders.length - 1}\x00`;
             });
-            
+
             // Frontmatter (must be at VERY start of document, not any line)
             if (html.startsWith('---\n')) {
                 html = html.replace(/^(---\n[\s\S]*?\n---)/, (match) => {
@@ -1492,33 +1542,33 @@ function noteApp() {
                     return `\x00CODE${codePlaceholders.length - 1}\x00`;
                 });
             }
-            
+
             // Inline code - protect it
             html = html.replace(/`([^`\n]+)`/g, (match) => {
                 codePlaceholders.push('<span class="md-code">' + match + '</span>');
                 return `\x00CODE${codePlaceholders.length - 1}\x00`;
             });
-            
+
             // Now apply other patterns (they won't match inside protected code)
-            
+
             // Headings - capture the whitespace to preserve exact characters (tabs vs spaces)
             // This prevents cursor/selection misalignment
             html = html.replace(/^(#{1,6})(\s)(.*)$/gm, '<span class="md-heading">$1$2$3</span>');
-            
+
             // Bold (must come before italic)
             html = html.replace(/\*\*([^*]+)\*\*/g, '<span class="md-bold">**$1**</span>');
             html = html.replace(/__([^_]+)__/g, '<span class="md-bold">__$1__</span>');
-            
+
             // Italic
             html = html.replace(/(?<![*\\])\*([^*\n]+)\*(?!\*)/g, '<span class="md-italic">*$1*</span>');
             html = html.replace(/(?<![_\\])_([^_\n]+)_(?!_)/g, '<span class="md-italic">_$1_</span>');
-            
+
             // Wikilinks [[...]]
             html = html.replace(/\[\[([^\]]+)\]\]/g, '<span class="md-wikilink">[[$1]]</span>');
-            
+
             // Links [text](url)
             html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<span class="md-link">[$1]</span><span class="md-link-url">($2)</span>');
-            
+
             // Lists - use ([ \t]) to capture the space/tab and preserve exact characters
             // IMPORTANT: Don't add any characters (like \u200B) that aren't in the original,
             // as this breaks cursor/selection alignment between textarea and overlay
@@ -1528,30 +1578,30 @@ function noteApp() {
             html = html.replace(/^(\s*)(\d+\.)([ \t])(.*)$/gm, (match, indent, bullet, space, rest) => {
                 return `${indent}<span class="md-list">${bullet}</span>${space}${rest}`;
             });
-            
+
             // Blockquotes
             html = html.replace(/^(&gt;.*)$/gm, '<span class="md-blockquote">$1</span>');
-            
+
             // Horizontal rules
             html = html.replace(/^([-*_]{3,})$/gm, '<span class="md-hr">$1</span>');
-            
+
             // Restore protected code blocks
             html = html.replace(/\x00CODE(\d+)\x00/g, (match, index) => codePlaceholders[parseInt(index)]);
-            
+
             // Add trailing space to match textarea's phantom line for cursor
             // This ensures the overlay and textarea have the same content height
             html += '\n ';
-            
+
             return html;
         },
-        
+
         // Apply theme to document
         async applyTheme(themeId) {
             // Load theme CSS from file
             try {
                 const response = await fetch(`/api/themes/${themeId}`);
                 const data = await response.json();
-                
+
                 // Create or update style element
                 let styleEl = document.getElementById('dynamic-theme');
                 if (!styleEl) {
@@ -1560,10 +1610,10 @@ function noteApp() {
                     document.head.appendChild(styleEl);
                 }
                 styleEl.textContent = data.css;
-                
+
                 // Set data attribute for theme-specific selectors
                 document.documentElement.setAttribute('data-theme', themeId);
-                
+
                 // Load appropriate Highlight.js theme for code syntax highlighting
                 const highlightTheme = document.getElementById('highlight-theme');
                 if (highlightTheme) {
@@ -1574,7 +1624,7 @@ function noteApp() {
                         highlightTheme.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css';
                     }
                 }
-                
+
                 // Re-render Mermaid diagrams with new theme if there's a current note
                 if (this.currentNote) {
                     // Small delay to allow theme CSS to load
@@ -1600,12 +1650,12 @@ function noteApp() {
                         this.renderMermaid();
                     }, 100);
                 }
-                
+
                 // Refresh graph if visible (longer delay to ensure CSS is applied)
                 if (this.showGraph) {
                     setTimeout(() => this.initGraph(), 300);
                 }
-                
+
                 // Update PWA theme-color meta tag to match current theme
                 const themeColorMeta = document.querySelector('meta[name="theme-color"]');
                 if (themeColorMeta) {
@@ -1618,27 +1668,27 @@ function noteApp() {
                 console.error('Failed to load theme:', error);
             }
         },
-        
+
         // ==================== INTERNATIONALIZATION ====================
-        
+
         // Translation function - get translated string by key
         t(key, params = {}) {
             const keys = key.split('.');
             let value = this.translations;
-            
+
             for (const k of keys) {
                 value = value?.[k];
             }
-            
+
             // Fallback to key if translation not found (silently - default translations are inline)
             if (typeof value !== 'string') {
                 return key;
             }
-            
+
             // Replace {{param}} placeholders
             return value.replace(/\{\{(\w+)\}\}/g, (_, name) => params[name] ?? `{{${name}}}`);
         },
-        
+
         /**
          * Non-blocking toast (replaces window.alert). Types map to theme CSS variables.
          * @param {string} message
@@ -1667,7 +1717,7 @@ function noteApp() {
             entry._tid = setTimeout(() => this.dismissToast(id), durationMs);
             return id;
         },
-        
+
         dismissToast(id) {
             const idx = this.toasts.findIndex((t) => t.id === id);
             if (idx === -1) return;
@@ -1678,7 +1728,7 @@ function noteApp() {
             }
             this.toasts.splice(idx, 1);
         },
-        
+
         /**
          * Get localized error message from FilenameValidator result
          * @param {object} validation - The validation result from FilenameValidator
@@ -1688,12 +1738,12 @@ function noteApp() {
         getValidationErrorMessage(validation, type = 'note') {
             switch (validation.error) {
                 case 'empty':
-                    return type === 'note' 
-                        ? this.t('notes.empty_name') 
+                    return type === 'note'
+                        ? this.t('notes.empty_name')
                         : this.t('folders.invalid_name');
                 case 'forbidden_chars':
-                    return this.t('validation.forbidden_chars', { 
-                        chars: validation.forbiddenChars 
+                    return this.t('validation.forbidden_chars', {
+                        chars: validation.forbiddenChars
                     });
                 case 'reserved_name':
                     return this.t('validation.reserved_name');
@@ -1702,12 +1752,12 @@ function noteApp() {
                 case 'trailing_dot_space':
                     return this.t('validation.trailing_dot_space');
                 default:
-                    return type === 'note' 
-                        ? this.t('notes.invalid_name') 
+                    return type === 'note'
+                        ? this.t('notes.invalid_name')
                         : this.t('folders.invalid_name');
             }
         },
-        
+
         // Load available locales from backend
         async loadAvailableLocales() {
             try {
@@ -1719,11 +1769,11 @@ function noteApp() {
                 this.availableLocales = [{ code: 'en-US', name: 'English', flag: '🇺🇸' }];
             }
         },
-        
+
         // Load translations for a specific locale
         async loadLocale(localeCode = null) {
             const targetLocale = localeCode || localStorage.getItem('locale') || 'en-US';
-            
+
             try {
                 const response = await fetch(`/api/locales/${targetLocale}`);
                 if (response.ok) {
@@ -1742,29 +1792,43 @@ function noteApp() {
                 }
             }
         },
-        
+
         // Change locale and reload translations
         async changeLocale(localeCode) {
             await this.loadLocale(localeCode);
         },
-        
+
         // ==================== END INTERNATIONALIZATION ====================
-        
-        // Load all notes
-        async loadNotes() {
+
+        // Load all notes. Pass {silent: true} from error-recovery paths so the
+        // 800ms loading overlay never appears on background re-syncs.
+        async loadNotes({ silent = false } = {}) {
+            this.notesLoading = true;
+            clearTimeout(this._notesLoadingOverlayTimer);
+            if (!silent) {
+                this._notesLoadingOverlayTimer = setTimeout(() => {
+                    if (this.notesLoading && this.notes.length === 0 && this.allFolders.length === 0) {
+                        this.notesLoadingShowOverlay = true;
+                    }
+                }, 800);
+            }
             try {
                 const response = await fetch('/api/notes');
                 const data = await response.json();
                 this.notes = data.notes;
                 this.allFolders = data.folders || [];
-                this.buildNoteLookupMaps(); // Build O(1) lookup maps
+                this.buildNoteLookupMaps();
                 this.buildFolderTree();
-                await this.loadTags(); // Load tags after notes are loaded
+                await this.loadTags();
             } catch (error) {
                 ErrorHandler.handle('load notes', error);
+            } finally {
+                clearTimeout(this._notesLoadingOverlayTimer);
+                this.notesLoading = false;
+                this.notesLoadingShowOverlay = false;
             }
         },
-        
+
         // Build lookup maps for O(1) wikilink resolution
         buildNoteLookupMaps() {
             // Clear existing maps
@@ -1774,13 +1838,13 @@ function noteApp() {
             this._noteLookup.byNameLower.clear();
             this._noteLookup.byEndPath.clear();
             this._mediaLookup.clear();
-            
+
             for (const note of this.notes) {
                 const path = note.path;
                 const pathLower = path.toLowerCase();
                 const name = note.name;
                 const nameLower = name.toLowerCase();
-                
+
                 // Handle media files separately - build media lookup map
                 if (note.type !== 'note') {
                     // Map filename WITH extension (case-insensitive) to full path
@@ -1792,11 +1856,11 @@ function noteApp() {
                     }
                     continue;
                 }
-                
+
                 // Notes only from here
                 const nameWithoutMd = name.replace(/\.md$/i, '');
                 const nameWithoutMdLower = nameWithoutMd.toLowerCase();
-                
+
                 // Store all variations for fast lookup
                 this._noteLookup.byPath.set(path, true);
                 this._noteLookup.byPath.set(path.replace(/\.md$/i, ''), true);
@@ -1806,17 +1870,17 @@ function noteApp() {
                 this._noteLookup.byName.set(nameWithoutMd, true);
                 this._noteLookup.byNameLower.set(nameLower, true);
                 this._noteLookup.byNameLower.set(nameWithoutMdLower, true);
-                
+
                 // End path matching (for /folder/note style links)
                 this._noteLookup.byEndPath.set('/' + nameWithoutMdLower, true);
                 this._noteLookup.byEndPath.set('/' + nameLower, true);
             }
         },
-        
+
         // Fast O(1) check if a wikilink target exists
         wikiLinkExists(linkTarget) {
             const targetLower = linkTarget.toLowerCase();
-            
+
             // Check all lookup maps
             return (
                 this._noteLookup.byPath.has(linkTarget) ||
@@ -1829,14 +1893,14 @@ function noteApp() {
                 this._noteLookup.byEndPath.has('/' + targetLower + '.md')
             );
         },
-        
+
         // Resolve media wikilink to full path (O(1) lookup)
         // Returns the full path if found, null otherwise
         resolveMediaWikilink(mediaName) {
             const nameLower = mediaName.toLowerCase();
             return this._mediaLookup.get(nameLower) || null;
         },
-        
+
         // Resolve a Markdown image path to a vault-relative path (forward slashes).
         // Relative paths use the note file's directory as base (same rules as CommonMark / browsers).
         // A leading "/" (not "//") means vault-root-relative.
@@ -1868,7 +1932,7 @@ function noteApp() {
                 return pathPart;
             }
         },
-        
+
         encodeVaultRelativePathForMediaApi(vaultRelativePath) {
             if (!vaultRelativePath) return '';
             return vaultRelativePath.split('/').map(segment => {
@@ -1879,7 +1943,7 @@ function noteApp() {
                 }
             }).join('/');
         },
-        
+
         // Load all tags
         async loadTags() {
             try {
@@ -1890,20 +1954,20 @@ function noteApp() {
                 ErrorHandler.handle('load tags', error, false); // Optional: no toast
             }
         },
-        
+
         // Debounced tag reload (prevents excessive API calls during typing)
         loadTagsDebounced() {
             // Clear existing timeout
             if (this.tagReloadTimeout) {
                 clearTimeout(this.tagReloadTimeout);
             }
-            
+
             // Set new timeout - reload tags 2 seconds after last save
             this.tagReloadTimeout = setTimeout(() => {
                 this.loadTags();
             }, 2000);
         },
-        
+
         // Toggle tag selection for filtering
         toggleTag(tag) {
             const index = this.selectedTags.indexOf(tag);
@@ -1912,15 +1976,15 @@ function noteApp() {
             } else {
                 this.selectedTags.push(tag);
             }
-            
+
             // Apply unified filtering
             this.applyFilters();
         },
-        
+
         // ========================================================================
         // Template Methods
         // ========================================================================
-        
+
         // Load available templates from _templates folder
         async loadTemplates() {
             try {
@@ -1931,7 +1995,7 @@ function noteApp() {
                 ErrorHandler.handle('load templates', error, false); // Optional: no toast
             }
         },
-        
+
         // Load custom shortcuts from _templates/_shortcuts.md frontmatter
         async loadCustomShortcuts() {
             try {
@@ -2012,7 +2076,7 @@ function noteApp() {
             if (!this.selectedTemplate || !this.newTemplateNoteName.trim()) {
                 return;
             }
-            
+
             try {
                 // Validate the note name
                 const validation = FilenameValidator.validateFilename(this.newTemplateNoteName);
@@ -2020,75 +2084,81 @@ function noteApp() {
                     this.toast(this.getValidationErrorMessage(validation, 'note'), { type: 'warning' });
                     return;
                 }
-                
+
                 // Determine the note path based on dropdown context
                 let notePath = validation.sanitized;
                 if (!notePath.endsWith('.md')) {
                     notePath += '.md';
                 }
-                
+
                 const targetFolder = this.inferredNewItemTargetFolder();
-                
+
                 // If we have a target folder, create note in that folder
                 if (targetFolder) {
                     notePath = `${targetFolder}/${notePath}`;
                 }
-                
+
                 // CRITICAL: Check if note already exists
                 const existingNote = this.notes.find(note => note.path === notePath);
                 if (existingNote) {
                     this.toast(this.t('notes.already_exists', { name: validation.sanitized }), { type: 'warning' });
                     return;
                 }
-                
-                // Create note from template
-                const response = await fetch('/api/templates/create-note', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        templateName: this.selectedTemplate,
-                        notePath: notePath
-                    })
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    this.toast(error.detail || this.t('templates.create_failed'), { type: 'error' });
-                    return;
+
+                // Optimistic stub: add empty entry so sidebar updates instantly.
+                // Server rendering may inject content/tags; loadNote() fetches the
+                // real body and tags are refreshed via loadTagsDebounced below.
+                this._optimisticAddNote(notePath, { content: '' });
+                const folderPart = notePath.includes('/') ? notePath.substring(0, notePath.lastIndexOf('/')) : '';
+                if (folderPart) this.expandedFolders.add(folderPart);
+                this._rebuildTreeAfterMutation();
+
+                try {
+                    const response = await fetch('/api/templates/create-note', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            templateName: this.selectedTemplate,
+                            notePath: notePath
+                        })
+                    });
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || this.t('templates.create_failed'));
+                    }
+                    const data = await response.json();
+
+                    this.lastUsedTemplate = this.selectedTemplate;
+                    try { localStorage.setItem('lastUsedTemplate', this.selectedTemplate); } catch (_) {}
+
+                    this.showTemplateModal = false;
+                    this.selectedTemplate = '';
+                    this.newTemplateNoteName = '';
+
+                    await this.loadNote(data.path);
+                    this.focusEditorForNewNote();
+                    this.loadTagsDebounced();
+                } catch (err) {
+                    this.toast(err.message || this.t('templates.create_failed'), { type: 'error' });
+                    await this.loadNotes({ silent: true });
                 }
-                
-                const data = await response.json();
-                
-                this.lastUsedTemplate = this.selectedTemplate;
-                try { localStorage.setItem('lastUsedTemplate', this.selectedTemplate); } catch (_) {}
-                
-                // Close modal and reset state
-                this.showTemplateModal = false;
-                this.selectedTemplate = '';
-                this.newTemplateNoteName = '';
-                
-                // Reload notes and open the new note
-                await this.loadNotes();
-                await this.loadNote(data.path);
-                this.focusEditorForNewNote();
-                
             } catch (error) {
                 ErrorHandler.handle('create note from template', error);
             }
         },
-        
+
         // Clear all tag filters
         clearTagFilters() {
             this.selectedTags = [];
-            
+
             // Apply unified filtering
             this.applyFilters();
         },
-        
+
         // ========================================================================
         // Outline (TOC) Methods
         // ========================================================================
-        
+
         // Extract headings from markdown content for the outline
         extractOutline(content) {
             if (!content) {
@@ -2096,18 +2166,18 @@ function noteApp() {
                 this.backlinks = [];
                 return;
             }
-            
+
             const headings = [];
             const lines = content.split('\n');
             const slugCounts = {}; // Track duplicate slugs
-            
+
             // Skip frontmatter and code blocks
             let inFrontmatter = false;
             let inCodeBlock = false;
-            
+
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                
+
                 // Handle frontmatter
                 if (i === 0 && line.trim() === '---') {
                     inFrontmatter = true;
@@ -2119,7 +2189,7 @@ function noteApp() {
                     }
                     continue;
                 }
-                
+
                 // Handle fenced code blocks (``` or ~~~)
                 if (line.trim().startsWith('```') || line.trim().startsWith('~~~')) {
                     inCodeBlock = !inCodeBlock;
@@ -2128,20 +2198,20 @@ function noteApp() {
                 if (inCodeBlock) {
                     continue;
                 }
-                
+
                 // Match heading lines (# to ######)
                 const match = line.match(/^(#{1,6})\s+(.+)$/);
                 if (match) {
                     const level = match[1].length;
                     const text = match[2].trim();
-                    
+
                     // Generate slug (GitHub-style)
                     let slug = text
                         .toLowerCase()
                         .replace(/[^\w\s-]/g, '') // Remove special chars
                         .replace(/\s+/g, '-')     // Spaces to dashes
                         .replace(/-+/g, '-');     // Multiple dashes to single
-                    
+
                     // Handle duplicate slugs
                     if (slugCounts[slug] !== undefined) {
                         slugCounts[slug]++;
@@ -2149,7 +2219,7 @@ function noteApp() {
                     } else {
                         slugCounts[slug] = 0;
                     }
-                    
+
                     headings.push({
                         level,
                         text,
@@ -2158,10 +2228,10 @@ function noteApp() {
                     });
                 }
             }
-            
+
             this.outline = headings;
         },
-        
+
         // Scroll to a heading in the editor or preview
         scrollToHeading(heading) {
             if (this.viewMode === 'preview' || this.viewMode === 'split') {
@@ -2184,19 +2254,19 @@ function noteApp() {
                     }
                 }
             }
-            
+
             if (this.viewMode === 'edit' || this.viewMode === 'split') {
                 // In edit/split mode, scroll the editor to the line
                 const textarea = document.querySelector('.editor-textarea');
                 if (textarea && heading.line) {
                     const lines = textarea.value.split('\n');
                     let charPos = 0;
-                    
+
                     // Calculate character position of the heading line
                     for (let i = 0; i < heading.line - 1 && i < lines.length; i++) {
                         charPos += lines[i].length + 1; // +1 for newline
                     }
-                    
+
                     // Set cursor position and scroll
                     textarea.focus();
                     textarea.setSelectionRange(charPos, charPos);
@@ -2214,12 +2284,12 @@ function noteApp() {
         navigateToBacklink(backlinkPath) {
             this.loadNote(backlinkPath);
         },
-        
+
         // Unified filtering logic combining tags and text search
         async applyFilters() {
             const hasTextSearch = this.searchQuery.trim().length > 0;
             const hasTagFilter = this.selectedTags.length > 0;
-            
+
             // Case 1: No filters at all → show full folder tree
             if (!hasTextSearch && !hasTagFilter) {
                 this.isSearching = false;
@@ -2229,7 +2299,7 @@ function noteApp() {
                 this.buildFolderTree();
                 return;
             }
-            
+
             // Case 2: Only tag filter → convert to flat list of matching notes
             if (hasTagFilter && !hasTextSearch) {
                 this.isSearching = false;
@@ -2242,14 +2312,14 @@ function noteApp() {
                 this.clearSearchHighlights();
                 return;
             }
-            
+
             // Case 3: Text search (with or without tag filter)
             if (hasTextSearch) {
                 this.isSearching = true;
                 try {
                     const response = await fetch(`/api/search?q=${encodeURIComponent(this.searchQuery)}`);
                     const data = await response.json();
-                    
+
                     // Apply tag filtering to search results if tags are selected
                     let results = data.results;
                     if (hasTagFilter) {
@@ -2258,7 +2328,7 @@ function noteApp() {
                             return note ? this.noteMatchesTags(note) : false;
                         });
                     }
-                    
+
                     // Filter out notes inside system folders (_attachments, _templates, etc.)
                     if (this.hideUnderscoreFolders) {
                         results = results.filter(result =>
@@ -2283,7 +2353,7 @@ function noteApp() {
                 }
             }
         },
-        
+
         // Check if a note matches selected tags (AND logic)
         noteMatchesTags(note) {
             if (this.selectedTags.length === 0) {
@@ -2295,21 +2365,21 @@ function noteApp() {
             // Check if note has ALL selected tags (AND logic)
             return this.selectedTags.every(tag => note.tags.includes(tag));
         },
-        
+
         // Get all tags sorted by name
         get sortedTags() {
             return Object.entries(this.allTags).sort((a, b) => a[0].localeCompare(b[0]));
         },
-        
+
         // Get tags for current note
         get currentNoteTags() {
             if (!this.currentNote) return [];
             const note = this.notes.find(n => n.path === this.currentNote);
             return note && note.tags ? note.tags : [];
         },
-        
+
         // ==================== FAVORITES ====================
-        
+
         // Save favorites — persists to server (cross-device sync) and localStorage (cache).
         // Debounced: rapid toggles coalesce into a single POST so writes don't race.
         // Saves both note favorites and starred folders in a single request.
@@ -2636,12 +2706,12 @@ function noteApp() {
         isFavorite(notePath) {
             return this.favoritesSet.has(notePath);
         },
-        
+
         // Toggle favorite status for a note
         toggleFavorite(notePath = null) {
             const path = notePath || this.currentNote;
             if (!path) return;
-            
+
             if (this.favoritesSet.has(path)) {
                 // Remove from favorites
                 this.favorites = this.favorites.filter(f => f !== path);
@@ -2653,7 +2723,7 @@ function noteApp() {
             this.favoritesSet = new Set(this.favorites);
             this.saveFavorites();
         },
-        
+
         // Get favorite notes with full details (for display)
         get favoriteNotes() {
             return this.favorites
@@ -2672,7 +2742,7 @@ function noteApp() {
                 })
                 .filter(Boolean); // Remove nulls (deleted notes)
         },
-        
+
         saveFavoritesExpanded() {
             try {
                 localStorage.setItem('favoritesExpanded', this.favoritesExpanded.toString());
@@ -2701,7 +2771,7 @@ function noteApp() {
             if (!this.currentNote) return '';
             const note = this.notes.find(n => n.path === this.currentNote);
             if (!note || !note.modified) return '';
-            
+
             const modified = new Date(note.modified);
             const now = new Date();
             const diffMs = now - modified;
@@ -2709,26 +2779,26 @@ function noteApp() {
             const diffMins = Math.floor(diffSecs / 60);
             const diffHours = Math.floor(diffMins / 60);
             const diffDays = Math.floor(diffHours / 24);
-            
+
             if (diffSecs < 60) return this.t('editor.just_now');
             if (diffMins < 60) return this.t('editor.minutes_ago', { count: diffMins });
             if (diffHours < 24) return this.t('editor.hours_ago', { count: diffHours });
             if (diffDays < 7) return this.t('editor.days_ago', { count: diffDays });
-            
+
             // For older dates, show the date in selected locale
             return modified.toLocaleDateString(this.currentLocale, { month: 'short', day: 'numeric' });
         },
-        
+
         // Parse tags from markdown content (matches backend logic)
         parseTagsFromContent(content) {
             if (!content || !content.trim().startsWith('---')) {
                 return [];
             }
-            
+
             try {
                 const lines = content.split('\n');
                 if (lines[0].trim() !== '---') return [];
-                
+
                 // Find closing ---
                 let endIdx = -1;
                 for (let i = 1; i < lines.length; i++) {
@@ -2737,16 +2807,16 @@ function noteApp() {
                         break;
                     }
                 }
-                
+
                 if (endIdx === -1) return [];
-                
+
                 const frontmatterLines = lines.slice(1, endIdx);
                 const tags = [];
                 let inTagsList = false;
-                
+
                 for (const line of frontmatterLines) {
                     const stripped = line.trim();
-                    
+
                     // Check for inline array: tags: [tag1, tag2]
                     if (stripped.startsWith('tags:')) {
                         const rest = stripped.substring(5).trim();
@@ -2772,26 +2842,26 @@ function noteApp() {
                         }
                     }
                 }
-                
+
                 return [...new Set(tags)].sort();
             } catch (e) {
                 console.error('Error parsing tags:', e);
                 return [];
             }
         },
-        
+
         // Build folder tree structure
         buildFolderTree() {
             const tree = {};
-            
+
             // Add ALL folders from backend (including empty ones)
             this.allFolders.forEach(folderPath => {
                 const parts = folderPath.split('/');
                 let current = tree;
-                
+
                 parts.forEach((part, index) => {
                     const fullPath = parts.slice(0, index + 1).join('/');
-                    
+
                     if (!current[part]) {
                         current[part] = {
                             name: part,
@@ -2803,7 +2873,7 @@ function noteApp() {
                     current = current[part].children;
                 });
             });
-            
+
             // Add ALL notes to their folders (no filtering - tree only shown when no filters active)
             this.notes.forEach(note => {
                 if (!note.folder) {
@@ -2821,7 +2891,7 @@ function noteApp() {
                     // Navigate to the folder and add note
                     const parts = note.folder.split('/');
                     let current = tree;
-                    
+
                     for (let i = 0; i < parts.length; i++) {
                         if (!current[parts[i]]) {
                             current[parts[i]] = {
@@ -2839,7 +2909,7 @@ function noteApp() {
                     }
                 }
             });
-            
+
             // Sort all notes arrays alphabetically (create new sorted arrays for reactivity)
             const sortNotes = (obj) => {
                 if (obj.notes && obj.notes.length > 0) {
@@ -2850,44 +2920,44 @@ function noteApp() {
                     Object.values(obj.children).forEach(child => sortNotes(child));
                 }
             };
-            
+
             // Sort notes in root (create new array for reactivity)
             if (tree['__root__'] && tree['__root__'].notes) {
                 tree['__root__'].notes = [...tree['__root__'].notes].sort(this.getSortComparator());
             }
-            
+
             // Sort notes in all folders
             Object.values(tree).forEach(folder => {
                 if (folder.path !== undefined) { // Skip __root__ as it was already sorted
                     sortNotes(folder);
                 }
             });
-            
+
             // Calculate and cache note counts recursively (for performance)
             const calculateNoteCounts = (folderNode) => {
                 const directNotes = folderNode.notes ? folderNode.notes.length : 0;
-                
+
                 if (!folderNode.children || Object.keys(folderNode.children).length === 0) {
                     folderNode.noteCount = directNotes;
                     return directNotes;
                 }
-                
+
                 const childNotesCount = Object.values(folderNode.children).reduce(
                     (total, child) => total + calculateNoteCounts(child),
                     0
                 );
-                
+
                 folderNode.noteCount = directNotes + childNotesCount;
                 return folderNode.noteCount;
             };
-            
+
             // Calculate note counts for all folders
             Object.values(tree).forEach(folder => {
                 if (folder.path !== undefined || folder === tree['__root__']) {
                     calculateNoteCounts(folder);
                 }
             });
-            
+
             // Invalidate homepage cache when tree is rebuilt
             this._homepageCache = {
                 folderPath: null,
@@ -2895,16 +2965,118 @@ function noteApp() {
                 folders: null,
                 breadcrumb: null
             };
-            
+
             // Assign new tree (Alpine will detect the change)
             this.folderTree = tree;
         },
-        
+
+        // =====================================================================
+        // OPTIMISTIC MUTATION HELPERS
+        // Mirror server-side index updates locally so file ops feel instant on
+        // big vaults. Mutations apply the change to this.notes/this.allFolders
+        // immediately, fire the request, and on error fall back to
+        // loadNotes({silent: true}) to resync from disk.
+        // =====================================================================
+
+        _isoNow() {
+            return new Date().toISOString();
+        },
+
+        _folderFromPath(path) {
+            const i = path.lastIndexOf('/');
+            return i === -1 ? '' : path.substring(0, i);
+        },
+
+        _filenameFromPath(path) {
+            return path.split('/').pop();
+        },
+
+        _inferTypeFromPath(path) {
+            const m = /\.([^./]+)$/.exec(path);
+            const ext = m ? m[1].toLowerCase() : '';
+            if (ext === 'md' || ext === '') return 'note';
+            if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return 'image';
+            if (['mp3', 'wav', 'ogg', 'm4a', 'flac'].includes(ext)) return 'audio';
+            if (['mp4', 'webm', 'mov', 'avi'].includes(ext)) return 'video';
+            if (ext === 'pdf') return 'document';
+            return 'note';
+        },
+
+        // Refresh sidebar tree + wikilink lookup maps after any optimistic update.
+        _rebuildTreeAfterMutation() {
+            this.buildNoteLookupMaps();
+            this.buildFolderTree();
+        },
+
+        // Add a note/media file to the local list. No-op if already present.
+        _optimisticAddNote(path, { content = '', type = null, size = null } = {}) {
+            if (this.notes.some(n => n.path === path)) return;
+            const inferredType = type || this._inferTypeFromPath(path);
+            const filename = this._filenameFromPath(path);
+            const name = inferredType === 'note' ? filename.replace(/\.md$/i, '') : filename;
+            this.notes.push({
+                path,
+                name,
+                folder: this._folderFromPath(path),
+                type: inferredType,
+                size: size != null ? size : (content ? new Blob([content]).size : 0),
+                modified: this._isoNow(),
+                tags: (inferredType === 'note' && content) ? this.parseTagsFromContent(content) : [],
+            });
+        },
+
+        _optimisticRemoveNote(path) {
+            this.notes = this.notes.filter(n => n.path !== path);
+        },
+
+        // Used by single-note rename and move (path changes, identity preserved).
+        _optimisticRenameNote(oldPath, newPath) {
+            const note = this.notes.find(n => n.path === oldPath);
+            if (!note) return;
+            note.path = newPath;
+            note.folder = this._folderFromPath(newPath);
+            const filename = this._filenameFromPath(newPath);
+            note.name = note.type === 'note' ? filename.replace(/\.md$/i, '') : filename;
+        },
+
+        _optimisticAddFolder(folderPath) {
+            if (!folderPath) return;
+            if (!this.allFolders.includes(folderPath)) {
+                this.allFolders.push(folderPath);
+            }
+        },
+
+        // Cascade: remove the folder, its descendant folders, and every note inside.
+        _optimisticRemoveFolderTree(folderPath) {
+            const prefix = folderPath + '/';
+            this.allFolders = this.allFolders.filter(f => f !== folderPath && !f.startsWith(prefix));
+            this.notes = this.notes.filter(n => !n.path.startsWith(prefix));
+        },
+
+        // Cascade: rename the folder, its descendant folders, and rewrite paths
+        // of every note inside.
+        _optimisticRenameFolderTree(oldPath, newPath) {
+            if (oldPath === newPath) return;
+            const oldPrefix = oldPath + '/';
+            const newPrefix = newPath + '/';
+            this.allFolders = this.allFolders.map(f => {
+                if (f === oldPath) return newPath;
+                if (f.startsWith(oldPrefix)) return newPrefix + f.substring(oldPrefix.length);
+                return f;
+            });
+            this.notes.forEach(n => {
+                if (n.path.startsWith(oldPrefix)) {
+                    n.path = newPrefix + n.path.substring(oldPrefix.length);
+                    n.folder = this._folderFromPath(n.path);
+                }
+            });
+        },
+
         // =====================================================================
         // DATA-ATTRIBUTE BASED HANDLERS
         // These read path/name/type from data-* attributes, avoiding JS escaping issues
         // =====================================================================
-        
+
         // Escape strings for HTML attributes (simpler than JS escaping)
         escapeHtmlAttr(str) {
             if (!str) return '';
@@ -2915,7 +3087,7 @@ function noteApp() {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
         },
-        
+
         // Folder handlers - read from dataset
         _pruneNoteCache() {
             const now = Date.now();
@@ -3015,7 +3187,7 @@ function noteApp() {
             this.mobileSidebarOpen = false;
             this.goToHomepageFolder(el.dataset.path);
         },
-        
+
         // Item (note/media) handlers - read from dataset
         handleItemClick(el) {
             this.openItem(el.dataset.path, el.dataset.type);
@@ -3041,26 +3213,26 @@ function noteApp() {
                 this.deleteNote(el.dataset.path, el.dataset.name);
             }
         },
-        
+
         // =====================================================================
         // FOLDER TREE RENDERING
         // =====================================================================
-        
+
         // Render folder recursively (helper for deep nesting)
         // Uses data-* attributes to store path/name, avoiding JS string escaping issues
         renderFolderRecursive(folder, level = 0, isTopLevel = false) {
             if (!folder) return '';
-            
+
             let html = '';
             const isExpanded = this.expandedFolders.has(folder.path);
             const esc = (s) => this.escapeHtmlAttr(s); // Shorthand for HTML escaping
-            
+
             // Render this folder's header
             // Note: Using native event handlers with data-* attributes instead of Alpine directives
             // because x-html doesn't process Alpine directives in dynamically generated content
             html += `
                 <div>
-                    <div 
+                    <div
                         data-path="${esc(folder.path)}"
                         data-name="${esc(folder.name)}"
                         draggable="true"
@@ -3075,7 +3247,7 @@ function noteApp() {
                         style="color: var(--text-primary); cursor: pointer;"
                     >
                         <div class="flex items-center gap-1">
-                            <button 
+                            <button
                                 class="flex-shrink-0 w-4 h-4 flex items-center justify-center"
                                 style="color: var(--text-tertiary); cursor: pointer; transition: transform 0.2s; pointer-events: none; margin-left: -5px; ${isExpanded ? 'transform: rotate(90deg);' : ''}"
                             >
@@ -3107,7 +3279,7 @@ function noteApp() {
                                 style="background-color: var(--bg-tertiary); color: var(--text-secondary);"
                                 title="${esc(this.t('sidebar.new_note'))}"
                             >+</button>
-                            <button 
+                            <button
                                 data-path="${esc(folder.path)}"
                                 data-name="${esc(folder.name)}"
                                 onclick="window.$root.handleRenameFolderClick(this, event)"
@@ -3115,7 +3287,7 @@ function noteApp() {
                                 style="background-color: var(--bg-tertiary); color: var(--text-secondary);"
                                 title="${esc(this.t('sidebar.rename_folder'))}"
                             >✏️</button>
-                            <button 
+                            <button
                                 data-path="${esc(folder.path)}"
                                 data-name="${esc(folder.name)}"
                                 onclick="window.$root.handleDeleteFolderClick(this, event)"
@@ -3130,11 +3302,11 @@ function noteApp() {
                         </div>
                     </div>
             `;
-            
+
             // If expanded, render folder contents (child folders + notes)
             if (isExpanded) {
                 html += `<div class="folder-contents" style="padding-left: 10px;">`;
-                
+
                 // First, render child folders (if any)
                 if (folder.children && Object.keys(folder.children).length > 0) {
                     const children = Object.entries(folder.children)
@@ -3145,21 +3317,21 @@ function noteApp() {
                         html += this.renderFolderRecursive(childFolder, 0, false);
                     });
                 }
-                
+
                 // Then, render notes and images in this folder (after subfolders)
                 if (folder.notes && folder.notes.length > 0) {
                     folder.notes.forEach(note => {
                         html += this.renderNoteItem(note);
                     });
                 }
-                
+
                 html += `</div>`; // Close folder-contents
             }
-            
+
             html += `</div>`; // Close folder wrapper
             return html;
         },
-        
+
         // Render a single note/media item (used by both folders and root level)
         renderNoteItem(note) {
             const esc = (s) => this.escapeHtmlAttr(s);
@@ -3167,7 +3339,7 @@ function noteApp() {
             const isCurrentNote = this.currentNote === note.path;
             const isCurrentMedia = this.currentMedia === note.path;
             const isCurrent = isMediaFile ? isCurrentMedia : isCurrentNote;
-            
+
             // Share icon for shared notes
             const isShared = !isMediaFile && this.isNoteShared(note.path);
             const shareIcon = isShared ? `<svg aria-hidden="true" style="display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin-right: 2px; opacity: 0.7;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${SHARE_ICON_PATH}"></path></svg>` : '';
@@ -3177,9 +3349,9 @@ function noteApp() {
                 : note.type === 'drawing'
                     ? this.t('toolbar.delete_drawing')
                     : this.t('toolbar.delete_image');
-            
+
             return `
-                <div 
+                <div
                     data-path="${esc(note.path)}"
                     data-name="${esc(note.name)}"
                     data-type="${note.type}"
@@ -3193,7 +3365,7 @@ function noteApp() {
                     onmouseout="window.$root.handleItemHover(this, false)"
                 >
                     <span class="truncate" style="display: block; padding-right: 30px;" title="${esc(note.name)}">${shareIcon}${icon}${icon ? ' ' : ''}${esc(note.name)}</span>
-                    <button 
+                    <button
                         data-path="${esc(note.path)}"
                         data-name="${esc(note.name)}"
                         data-type="${note.type}"
@@ -3209,7 +3381,7 @@ function noteApp() {
                 </div>
             `;
         },
-        
+
         // Render root-level items (notes and media not in any folder)
         renderRootItems() {
             const root = this.folderTree['__root__'];
@@ -3218,7 +3390,7 @@ function noteApp() {
             }
             return root.notes.map(note => this.renderNoteItem(note)).join('');
         },
-        
+
         // Toggle folder expansion
         toggleFolder(folderPath) {
             const isCollapsing = this.expandedFolders.has(folderPath);
@@ -3241,12 +3413,12 @@ function noteApp() {
             // Force Alpine reactivity by creating new Set reference
             this.expandedFolders = new Set(this.expandedFolders);
         },
-        
+
         // Check if folder is expanded
         isFolderExpanded(folderPath) {
             return this.expandedFolders.has(folderPath);
         },
-        
+
         // Expand all folders
         expandAllFolders() {
             this.allFolders.forEach(folder => {
@@ -3255,35 +3427,35 @@ function noteApp() {
             // Force Alpine reactivity
             this.expandedFolders = new Set(this.expandedFolders);
         },
-        
+
         // Collapse all folders
         collapseAllFolders() {
             this.expandedFolders.clear();
             // Force Alpine reactivity
             this.expandedFolders = new Set(this.expandedFolders);
         },
-        
+
         // Expand folder tree to show a specific note
         expandFolderForNote(notePath) {
             const parts = notePath.split('/');
-            
+
             // If note is in root, no folders to expand
             if (parts.length <= 1) return;
-            
+
             // Remove the note name (last part)
             parts.pop();
-            
+
             // Build and expand all parent folders
             let currentPath = '';
             parts.forEach((part, index) => {
                 currentPath = index === 0 ? part : `${currentPath}/${part}`;
                 this.expandedFolders.add(currentPath);
             });
-            
+
             // Force Alpine reactivity
             this.expandedFolders = new Set(this.expandedFolders);
         },
-        
+
         // Scroll note into view in the sidebar navigation
         scrollNoteIntoView(notePath) {
             // Find the note element in the sidebar
@@ -3291,11 +3463,11 @@ function noteApp() {
             setTimeout(() => {
                 const sidebar = document.querySelector('.flex-1.overflow-y-auto.custom-scrollbar');
                 if (!sidebar) return;
-                
+
                 const noteElements = sidebar.querySelectorAll('.note-item');
                 let targetElement = null;
                 const noteName = notePath.split('/').pop().replace('.md', '');
-                
+
                 // Find the element that corresponds to this note
                 noteElements.forEach(el => {
                     // Check if this is a note element (not folder) by checking if it has the note name
@@ -3303,38 +3475,38 @@ function noteApp() {
                         // Check computed style to see if it's highlighted
                         const computedStyle = window.getComputedStyle(el);
                         const bgColor = computedStyle.backgroundColor;
-                        
+
                         // Check if background has the accent color (not transparent or default)
                         if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent' && !bgColor.includes('255, 255, 255')) {
                             targetElement = el;
                         }
                     }
                 });
-                
+
                 // If found, scroll it into view
                 if (targetElement) {
-                    targetElement.scrollIntoView({ 
-                        behavior: 'smooth', 
+                    targetElement.scrollIntoView({
+                        behavior: 'smooth',
                         block: 'center',
                         inline: 'nearest'
                     });
                 }
             }, 200); // Increased delay to ensure Alpine has finished rendering
         },
-        
+
         // Unified drag and drop handlers for notes, folders, and media
         onItemDragStart(itemPath, itemType, event) {
             // Set unified drag state
             this.draggedItem = { path: itemPath, type: itemType };
-            
+
             // Make drag image semi-transparent
             if (event.target) {
                 event.target.style.opacity = '0.5';
             }
-            
+
             event.dataTransfer.effectAllowed = 'all';
         },
-        
+
         onItemDragEnd() {
             this.draggedItem = null;
             this.dropTarget = null;
@@ -3344,28 +3516,28 @@ function noteApp() {
             // Reset drag-over class
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
         },
-        
-        
+
+
         // Handle dragover on editor to show cursor position
         onEditorDragOver(event) {
             if (!this.draggedItem) return;
-            
+
             event.preventDefault();
             this.dropTarget = 'editor';
-            
+
             // Focus the textarea
             const textarea = event.target;
             if (textarea.tagName !== 'TEXTAREA') return;
-            
+
             textarea.focus();
-            
+
             // Calculate cursor position from mouse coordinates
             const pos = this.getTextareaCursorFromPoint(textarea, event.clientX, event.clientY);
             if (pos >= 0) {
                 textarea.setSelectionRange(pos, pos);
             }
         },
-        
+
         // Calculate textarea cursor position from mouse coordinates
         getTextareaCursorFromPoint(textarea, x, y) {
             const rect = textarea.getBoundingClientRect();
@@ -3373,41 +3545,41 @@ function noteApp() {
             const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
             const paddingTop = parseFloat(style.paddingTop) || 0;
             const paddingLeft = parseFloat(style.paddingLeft) || 0;
-            
+
             // Calculate which line we're on
             const relativeY = y - rect.top - paddingTop + textarea.scrollTop;
             const lineIndex = Math.max(0, Math.floor(relativeY / lineHeight));
-            
+
             // Split content into lines
             const lines = textarea.value.split('\n');
-            
+
             // Find the character position at the start of this line
             let charPos = 0;
             for (let i = 0; i < Math.min(lineIndex, lines.length); i++) {
                 charPos += lines[i].length + 1; // +1 for newline
             }
-            
+
             // If we're beyond the last line, position at end
             if (lineIndex >= lines.length) {
                 return textarea.value.length;
             }
-            
+
             // Approximate character position within the line based on X coordinate
             const relativeX = x - rect.left - paddingLeft;
             const charWidth = parseFloat(style.fontSize) * 0.6; // Approximate for monospace
             const charInLine = Math.max(0, Math.floor(relativeX / charWidth));
             const lineLength = lines[lineIndex]?.length || 0;
-            
+
             return charPos + Math.min(charInLine, lineLength);
         },
-        
+
         // Handle dragenter on editor
         onEditorDragEnter(event) {
             if (!this.draggedItem) return;
             event.preventDefault();
             this.dropTarget = 'editor';
         },
-        
+
         // Handle dragleave on editor
         onEditorDragLeave(event) {
             // Only clear dropTarget if we're actually leaving the editor
@@ -3416,12 +3588,12 @@ function noteApp() {
                 this.dropTarget = null;
             }
         },
-        
+
         // Handle drop into editor to create internal link or upload media
         async onEditorDrop(event) {
             event.preventDefault();
             this.dropTarget = null;
-            
+
             // Check if files are being dropped (from file system)
             if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
                 const files = Array.from(event.dataTransfer.files);
@@ -3449,10 +3621,10 @@ function noteApp() {
 
             // Otherwise, handle note/media link drop from sidebar
             if (!this.draggedItem) return;
-            
+
             const notePath = this.draggedItem.path;
             const isMediaFile = this.draggedItem.type !== 'note';
-            
+
             let link;
             if (isMediaFile) {
                 // For media files (images, audio, video, PDF), use wiki-style embed link
@@ -3464,7 +3636,7 @@ function noteApp() {
                 const encodedPath = notePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
                 link = `[${noteName}](${encodedPath})`;
             }
-            
+
             // Insert at drop position
             const textarea = event.target;
             // Recalculate position from drop coordinates for accuracy
@@ -3472,21 +3644,21 @@ function noteApp() {
             if (cursorPos < 0) cursorPos = textarea.selectionStart || 0;
             const textBefore = this.noteContent.substring(0, cursorPos);
             const textAfter = this.noteContent.substring(cursorPos);
-            
+
             this.noteContent = textBefore + link + textAfter;
-            
+
             // Move cursor after the link
             this.$nextTick(() => {
                 textarea.selectionStart = textarea.selectionEnd = cursorPos + link.length;
                 textarea.focus();
             });
-            
+
             // Trigger autosave
             this.autoSave();
-            
+
             this.draggedItem = null;
         },
-        
+
         /**
          * Backend `get_attachment_dir` uses the parent folder of `note_path`.
          * With no note open, infer a synthetic path from `currentMedia` so uploads go to the same
@@ -3500,11 +3672,11 @@ function noteApp() {
             if (ai === -1 || ai === 0) return '';
             return `${parts.slice(0, ai).join('/')}/_.md`;
         },
-        
+
         // Handle media files dropped into editor
         async handleMediaDrop(event) {
             const files = Array.from(event.dataTransfer.files);
-            
+
             // Filter for allowed media types
             const allowedTypes = [
                 // Images
@@ -3517,12 +3689,12 @@ function noteApp() {
                 'application/pdf'
             ];
             const mediaFiles = files.filter(file => allowedTypes.includes(file.type.toLowerCase()));
-            
+
             if (mediaFiles.length === 0) {
                 this.toast(this.t('media.no_valid_files'), { type: 'warning' });
                 return;
             }
-            
+
             const textarea = event.target;
             const notePath = this.resolveUploadNotePath();
             // Calculate cursor position from drop coordinates (only meaningful when a note is open)
@@ -3531,26 +3703,20 @@ function noteApp() {
                 cursorPos = this.getTextareaCursorFromPoint(textarea, event.clientX, event.clientY);
                 if (cursorPos < 0) cursorPos = textarea.selectionStart || 0;
             }
-            
-            let uploaded = false;
+
             for (const file of mediaFiles) {
                 try {
                     const mediaPath = await this.uploadMedia(file, notePath);
-                    if (mediaPath) {
-                        uploaded = true;
-                        if (this.currentNote) {
-                            await this.insertMediaMarkdown(mediaPath, file.name, cursorPos);
-                        }
+                    if (mediaPath && this.currentNote) {
+                        await this.insertMediaMarkdown(mediaPath, file.name, cursorPos);
                     }
                 } catch (error) {
                     ErrorHandler.handle(`upload file ${file.name}`, error);
                 }
             }
-            if (uploaded && !this.currentNote) {
-                await this.loadNotes();
-            }
+            // uploadMedia already injects the file into this.notes optimistically.
         },
-        
+
         // Upload a media file (image, audio, video, PDF)
         // Use options.nextToNotes + options.contentFolder to save a new drawing PNG next to .md files (not in _attachments).
         async uploadMedia(file, notePath, options = {}) {
@@ -3564,77 +3730,66 @@ function noteApp() {
             } else {
                 formData.append('note_path', notePath || '');
             }
-            
-            try {
-                const response = await fetch('/api/upload-media', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || 'Upload failed');
-                }
-                
-                const data = await response.json();
-                return data.path;
-            } catch (error) {
-                throw error;
+
+            const response = await fetch('/api/upload-media', {
+                method: 'POST',
+                body: formData
+            });
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Upload failed');
             }
+            const data = await response.json();
+            // Drop the new file into the local note list so the wikilink
+            // resolver finds it without a full /api/notes refresh.
+            if (data.path) {
+                this._optimisticAddNote(data.path, { size: file.size });
+                this._rebuildTreeAfterMutation();
+            }
+            return data.path;
         },
-        
+
         // Insert media markdown at cursor position using wiki-style syntax
-        // This ensures media links don't break when notes are moved
+        // (media links don't break when notes are moved). The uploaded file is
+        // already in this.notes thanks to uploadMedia()'s optimistic add.
         async insertMediaMarkdown(mediaPath, altText, cursorPos) {
-            // Extract just the filename from the path (e.g., "folder/_attachments/image.png" -> "image.png")
             const filename = mediaPath.split('/').pop();
-            
-            // Use wiki-style embed link: ![[filename.png]] or ![[filename.png|alt text]]
-            // The alt text is optional - only add if different from filename
             const filenameWithoutExt = filename.replace(/\.[^/.]+$/, '');
             const altWithoutExt = altText.replace(/\.[^/.]+$/, '');
-            
-            // If alt text is meaningful (not just "pasted-image"), include it
             const markdown = (altWithoutExt && altWithoutExt !== filenameWithoutExt && !altWithoutExt.startsWith('pasted-image'))
                 ? `![[${filename}|${altWithoutExt}]]`
                 : `![[${filename}]]`;
-            
-            // Reload notes FIRST to update image lookup maps before preview renders
-            await this.loadNotes();
-            
+
             const textBefore = this.noteContent.substring(0, cursorPos);
             const textAfter = this.noteContent.substring(cursorPos);
-            
             this.noteContent = textBefore + markdown + '\n' + textAfter;
-            
-            // Trigger autosave
             this.autoSave();
         },
-        
+
         // Handle paste event for clipboard media (images)
         async handlePaste(event) {
             if (!this.currentNote) return;
-            
+
             const items = event.clipboardData?.items;
             if (!items) return;
-            
+
             for (const item of items) {
                 if (item.type.startsWith('image/')) {
                     event.preventDefault();
-                    
+
                     const blob = item.getAsFile();
                     if (blob) {
                         try {
                             const textarea = event.target;
                             const cursorPos = textarea.selectionStart || 0;
-                            
+
                             // Create a simple filename - backend will add timestamp to prevent collisions
                             const ext = item.type.split('/')[1] || 'png';
                             const filename = `pasted-image.${ext}`;
-                            
+
                             // Create a File from the blob
                             const file = new File([blob], filename, { type: item.type });
-                            
+
                             const mediaPath = await this.uploadMedia(file, this.currentNote);
                             if (mediaPath) {
                                 await this.insertMediaMarkdown(mediaPath, filename, cursorPos);
@@ -3647,7 +3802,7 @@ function noteApp() {
                 }
             }
         },
-        
+
         // Media type detection based on file extension (and drawing-*.png convention)
         getMediaType(filename) {
             if (!filename) return null;
@@ -3667,7 +3822,7 @@ function noteApp() {
             }
             return null;
         },
-        
+
         // Get icon for media type
         getMediaIcon(type) {
             const icons = {
@@ -3679,7 +3834,7 @@ function noteApp() {
             };
             return icons[type] || '';
         },
-        
+
         // Open a note or media file (unified handler for sidebar/homepage clicks)
         openItem(path, type = 'note', searchHighlight = '') {
             this.showGraph = false;
@@ -3691,7 +3846,7 @@ function noteApp() {
                 this.loadNote(path, true, searchHighlight);
             }
         },
-        
+
         // View a media file (image, audio, video, PDF) in the main pane
         viewMedia(mediaPath, mediaType = null, updateHistory = true) {
             if (this.currentMediaType === 'drawing') {
@@ -3706,14 +3861,14 @@ function noteApp() {
             this.currentMediaType = mediaType || this.getMediaType(mediaPath) || 'image';
             this.shareInfo = null; // Reset share info
             this.viewMode = 'preview'; // Use preview mode to show media
-            
+
             // Update browser tab title
             const fileName = mediaPath.split('/').pop();
             document.title = `${fileName} - ${this.appName}`;
-            
+
             // Expand folder tree to show the media file
             this.expandFolderForNote(mediaPath);
-            
+
             // Update browser URL
             if (updateHistory) {
                 // Encode each path segment to handle special characters
@@ -3724,7 +3879,7 @@ function noteApp() {
                     `/${encodedPath}`
                 );
             }
-            
+
             // Drawing: Alpine x-init on the canvas runs only on first mount; switching from one drawing
             // to another keeps currentMediaType === 'drawing', so we must reload the PNG here.
             if (this.currentMediaType === 'drawing') {
@@ -3733,12 +3888,12 @@ function noteApp() {
                 });
             }
         },
-        
+
         // Backward compatibility alias
         viewImage(mediaPath, updateHistory = true) {
             this.viewMedia(mediaPath, 'image', updateHistory);
         },
-        
+
         // Delete a media file (image, audio, video, PDF)
         async deleteMedia(mediaPath) {
             const filename = mediaPath.split('/').pop();
@@ -3746,27 +3901,22 @@ function noteApp() {
                 message: this.t('media.confirm_delete', { name: filename }),
             });
             if (!ok) return;
-            
+
+            this._optimisticRemoveNote(mediaPath);
+            this._rebuildTreeAfterMutation();
+            if (this.currentMedia === mediaPath) this.currentMedia = '';
+
             try {
                 const response = await fetch(`/api/notes/${encodeURIComponent(mediaPath)}`, {
                     method: 'DELETE'
                 });
-                
-                if (response.ok) {
-                    await this.loadNotes(); // Refresh tree
-                    
-                    // Clear viewer if deleting currently viewed media
-                    if (this.currentMedia === mediaPath) {
-                        this.currentMedia = '';
-                    }
-                } else {
-                    throw new Error('Failed to delete media file');
-                }
+                if (!response.ok) throw new Error('Failed to delete media file');
             } catch (error) {
                 ErrorHandler.handle('delete media', error);
+                await this.loadNotes({ silent: true });
             }
         },
-        
+
         /**
          * Create a blank drawing PNG and open it for editing.
          * Attachment folder matches "New note" / "New folder" from the same + menu (root vs folder row vs homepage folder).
@@ -3805,13 +3955,17 @@ function noteApp() {
                     nextToNotes: true,
                     contentFolder: targetFolder,
                 });
-                await this.loadNotes();
+                // Server returns the final upload path (may differ from
+                // 'drawing.png' if it added a timestamp suffix).
+                this._optimisticAddNote(path, { type: 'image', size: blob.size });
+                this._rebuildTreeAfterMutation();
                 this.viewMedia(path, 'drawing');
             } catch (error) {
                 ErrorHandler.handle('create drawing', error);
+                await this.loadNotes({ silent: true });
             }
         },
-        
+
         _drawingEncodeMediaPath() {
             return this.currentMedia.split('/').map((s) => encodeURIComponent(s)).join('/');
         },
@@ -3845,7 +3999,7 @@ function noteApp() {
                 y: ((event.clientY - rect.top)  / rect.height) * this.drawingDocH,
             };
         },
-        
+
         _drawingDrawOp(ctx, op) {
             if (!op) return;
             if (op.type === 'fill') {
@@ -3909,7 +4063,7 @@ function noteApp() {
             }
             ctx.restore();
         },
-        
+
         /**
          * Repaint the visible canvas. All drawing math runs in DOCUMENT space; a single
          * setTransform call maps (docW, docH) → device pixels by combining the doc→display
@@ -3941,7 +4095,7 @@ function noteApp() {
                 this._drawingDrawOp(ctx, this.drawingDraft);
             }
         },
-        
+
         _drawingScheduleRedraw() {
             if (this._drawingRaf) return;
             this._drawingRaf = requestAnimationFrame(() => {
@@ -3973,7 +4127,7 @@ function noteApp() {
             }
             return off;
         },
-        
+
         _drawingDisconnectResizeObserver() {
             if (this._drawingResizeObserver) {
                 try {
@@ -3984,14 +4138,14 @@ function noteApp() {
                 this._drawingResizeObserver = null;
             }
         },
-        
+
         _drawingCancelAutosave() {
             if (this._drawingAutosaveTimeout) {
                 clearTimeout(this._drawingAutosaveTimeout);
                 this._drawingAutosaveTimeout = null;
             }
         },
-        
+
         /**
          * Debounced PNG save (same delay as notes). Never runs while the primary button is held
          * (active stroke/shape); pending timers are cleared when a new stroke starts.
@@ -4018,7 +4172,7 @@ function noteApp() {
             };
             this._drawingAutosaveTimeout = setTimeout(attemptSave, this.autosaveDelayMs);
         },
-        
+
         /**
          * Size the visible canvas as a letterbox of (drawingDocW × drawingDocH) inside the
          * available wrap, preserving aspect ratio. The display canvas may be smaller than
@@ -4074,7 +4228,7 @@ function noteApp() {
             }
             this.drawingRedraw();
         },
-        
+
         async initDrawingViewer() {
             if (this.currentMediaType !== 'drawing' || !this.currentMedia) return;
             this._drawingDisconnectResizeObserver();
@@ -4104,13 +4258,13 @@ function noteApp() {
             this.drawingDocH = CONFIG.DRAWING_DEFAULT_DOC_H;
             this._drawingLoadToken = Symbol();
             const token = this._drawingLoadToken;
-            
+
             this._drawingResizeObserver = new ResizeObserver(() => {
                 if (this.currentMediaType !== 'drawing' || !this.currentMedia) return;
                 this._drawingLayoutCanvas();
             });
             this._drawingResizeObserver.observe(wrap);
-            
+
             requestAnimationFrame(() => {
                 if (token !== this._drawingLoadToken) return;
                 this._drawingLayoutCanvas();
@@ -4119,7 +4273,7 @@ function noteApp() {
                     this._drawingLayoutCanvas();
                 });
             });
-            
+
             try {
                 const enc = this._drawingEncodeMediaPath();
                 const res = await fetch(`/api/media/${enc}`, { credentials: 'same-origin' });
@@ -4149,7 +4303,7 @@ function noteApp() {
                 this._drawingLayoutCanvas();
             }
         },
-        
+
         _drawingRgbToHex(r, g, b) {
             const h = (n) => {
                 const s = n.toString(16);
@@ -4419,7 +4573,7 @@ function noteApp() {
             }
             this.drawingRedraw();
         },
-        
+
         drawingPointerMove(e) {
             if (!this.drawingIsPointerDown || this.currentMediaType !== 'drawing') return;
             const { x, y } = this._drawingCanvasCoords(e);
@@ -4444,7 +4598,7 @@ function noteApp() {
             }
             this._drawingScheduleRedraw();
         },
-        
+
         drawingPointerUp(e) {
             if (!this.drawingIsPointerDown || this.currentMediaType !== 'drawing') return;
             const canvas = this._drawingCanvasEl;
@@ -4508,21 +4662,21 @@ function noteApp() {
             this.drawingRedraw();
             this._drawingScheduleAutosave();
         },
-        
+
         drawingUndo() {
             if (this.drawingOps.length === 0) return;
             this.drawingRedoStack.push(this.drawingOps.pop());
             this.drawingRedraw();
             this._drawingScheduleAutosave();
         },
-        
+
         drawingRedo() {
             if (this.drawingRedoStack.length === 0) return;
             this.drawingOps.push(this.drawingRedoStack.pop());
             this.drawingRedraw();
             this._drawingScheduleAutosave();
         },
-        
+
         /**
          * Text tool — single-line, commit-once. Clicking the canvas spawns a floating <input>
          * at the click position; pressing Enter or losing focus rasterizes the text into a
@@ -4562,7 +4716,7 @@ function noteApp() {
                 el.focus();
             });
         },
-        
+
         /**
          * Normalize text-tool input: ctx.fillText doesn't honor line breaks (renders them
          * as literal LF glyphs / tofu), and Firefox treats contenteditable="plaintext-only"
@@ -4574,7 +4728,7 @@ function noteApp() {
             const collapsed = s.replace(/[\r\n\t\v\f]+/g, ' ');
             return collapsed.length > 1024 ? collapsed.slice(0, 1024) : collapsed;
         },
-        
+
         /**
          * Live-preview handler for the text tool. The contenteditable div is invisible
          * (color: transparent), so the only thing the user actually SEES of their typing
@@ -4600,7 +4754,7 @@ function noteApp() {
             }
             this._drawingScheduleRedraw();
         },
-        
+
         drawingTextCommit() {
             if (!this.drawingTextActive) return;
             // Read straight from the DOM so we capture the very last keystroke even if the
@@ -4633,7 +4787,7 @@ function noteApp() {
             this.drawingRedraw();
             this._drawingScheduleAutosave();
         },
-        
+
         drawingTextCancel() {
             if (!this.drawingTextActive) return;
             this.drawingTextActive = false;
@@ -4643,7 +4797,7 @@ function noteApp() {
             if (el) el.textContent = '';
             this.drawingRedraw();
         },
-        
+
         /**
          * Persist the flattened canvas to disk (Ctrl+S, autosave). Same feedback as saveNote:
          * header "Saved" only — never clears stroke undo/redo or reloads the image; stacks reset when
@@ -4699,7 +4853,13 @@ function noteApp() {
                         }
                         throw new Error(detail || res.statusText);
                     }
-                    await this.loadNotes();
+                    // Drawing file already in this.notes — only metadata changed
+                    // (size/mtime). Bump locally instead of a full /api/notes scan.
+                    const rec = this.notes.find(n => n.path === this.currentMedia);
+                    if (rec) {
+                        rec.size = blob.size;
+                        rec.modified = this._isoNow();
+                    }
                     this.lastSaved = true;
                     setTimeout(() => {
                         this.lastSaved = false;
@@ -4721,65 +4881,65 @@ function noteApp() {
                 }
             }
         },
-        
+
         // Handle clicks on internal links in preview
         handleInternalLink(event) {
             // Check if clicked element is a link
             const link = event.target.closest('a');
             if (!link) return;
-            
+
             const href = link.getAttribute('href');
             if (!href) return;
-            
+
             // Check if it's an external link or API path (media files, etc.)
             // Safe external protocols: http, https, mailto, tel, ssh, ftp, sftp, and app deep links
             const externalProtocols = ['http://', 'https://', '//', 'mailto:', 'tel:', 'ssh:', 'ftp:', 'sftp:', 'slack:', 'discord:', 'teams:', 'vscode:', 'zoom:', 'whatsapp:', 'telegram:', 'signal:', 'spotify:', 'steam:', 'magnet:', '/api/'];
             if (externalProtocols.some(p => href.startsWith(p))) {
                 return; // Let external links and API paths work normally
             }
-            
+
             // Prevent default navigation for internal links
             event.preventDefault();
-            
+
             // Parse href into note path and anchor (e.g., "note.md#section" -> notePath="note.md", anchor="section")
             const decodedHref = decodeURIComponent(href);
             const hashIndex = decodedHref.indexOf('#');
             const notePath = hashIndex !== -1 ? decodedHref.substring(0, hashIndex) : decodedHref;
             const anchor = hashIndex !== -1 ? decodedHref.substring(hashIndex + 1) : null;
-            
+
             // If it's just an anchor link (#heading), scroll within current note
             if (!notePath && anchor) {
                 this.scrollToAnchor(anchor);
                 return;
             }
-            
+
             // Skip if no path
             if (!notePath) return;
-            
+
             // Find the note by path (try exact match first, then with .md extension)
-            let targetNote = this.notes.find(n => 
-                n.path === notePath || 
+            let targetNote = this.notes.find(n =>
+                n.path === notePath ||
                 n.path === notePath + '.md'
             );
-            
+
             if (!targetNote) {
                 // Try to find by name (in case link uses just the note name without path)
-                targetNote = this.notes.find(n => 
-                    n.name === notePath || 
+                targetNote = this.notes.find(n =>
+                    n.name === notePath ||
                     n.name === notePath + '.md' ||
                     n.name.toLowerCase() === notePath.toLowerCase() ||
                     n.name.toLowerCase() === (notePath + '.md').toLowerCase()
                 );
             }
-            
+
             if (!targetNote) {
                 // Last resort: case-insensitive path matching
-                targetNote = this.notes.find(n => 
+                targetNote = this.notes.find(n =>
                     n.path.toLowerCase() === notePath.toLowerCase() ||
                     n.path.toLowerCase() === (notePath + '.md').toLowerCase()
                 );
             }
-            
+
             if (targetNote) {
                 // Load the note, then scroll to anchor if present
                 this.loadNote(targetNote.path).then(() => {
@@ -4799,7 +4959,7 @@ function noteApp() {
                 });
             }
         },
-        
+
         // Scroll to an anchor (heading) by slug - reuses outline data
         scrollToAnchor(anchor) {
             // Normalize the anchor (GitHub-style slug)
@@ -4808,15 +4968,15 @@ function noteApp() {
                 .replace(/[^\w\s-]/g, '')
                 .replace(/\s+/g, '-')
                 .replace(/-+/g, '-');
-            
+
             // Find matching heading in outline
             const heading = this.outline.find(h => h.slug === targetSlug);
-            
+
             if (heading) {
                 this.scrollToHeading(heading);
             } else {
                 // Fallback: try to find heading by exact text match
-                const headingByText = this.outline.find(h => 
+                const headingByText = this.outline.find(h =>
                     h.text.toLowerCase().replace(/\s+/g, '-') === anchor.toLowerCase()
                 );
                 if (headingByText) {
@@ -4824,8 +4984,8 @@ function noteApp() {
                 }
             }
         },
-        
-        
+
+
         cancelDrag() {
             // Cancel any active drag operation (triggered by ESC key)
             this.draggedItem = null;
@@ -4836,135 +4996,125 @@ function noteApp() {
             document.querySelectorAll('.note-item').forEach(el => el.style.opacity = '1');
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
         },
-        
+
         async onFolderDrop(targetFolderPath) {
             // Ignore if we're dropping into the editor
             if (this.dropTarget === 'editor') {
                 return;
             }
-            
+
             // Capture dragged item info immediately (ondragend may clear it)
             if (!this.draggedItem) return;
             const { path: draggedPath, type: draggedType } = this.draggedItem;
-            
+
             // Determine item category for endpoint selection
             const isFolder = draggedType === 'folder';
             const isNote = draggedType === 'note';
             const isMedia = !isFolder && !isNote; // image, audio, video, document
-            
+
             // Handle folder drop
             if (isFolder) {
                 // Prevent dropping folder into itself or its subfolders
-                if (targetFolderPath === draggedPath || 
+                if (targetFolderPath === draggedPath ||
                     targetFolderPath.startsWith(draggedPath + '/')) {
                     this.toast(this.t('folders.cannot_move_into_self'), { type: 'warning' });
                     return;
                 }
-                
+
                 const folderName = draggedPath.split('/').pop();
                 const newPath = targetFolderPath ? `${targetFolderPath}/${folderName}` : folderName;
-                
+
                 if (newPath === draggedPath) return;
-                
-                // Capture favorites info before async call
+
                 const oldPrefix = draggedPath + '/';
                 const newPrefix = newPath + '/';
-                
+                const wasExpanded = this.expandedFolders.has(draggedPath);
+
+                this._optimisticRenameFolderTree(draggedPath, newPath);
+                this._rebuildTreeAfterMutation();
+
+                const favoritesInFolder = this.favorites.filter(f => f.startsWith(oldPrefix));
+                if (favoritesInFolder.length > 0) {
+                    const newFavorites = this.favorites.map(f =>
+                        f.startsWith(oldPrefix) ? newPrefix + f.substring(oldPrefix.length) : f
+                    );
+                    this.favorites = newFavorites;
+                    this.favoritesSet = new Set(newFavorites);
+                    this.saveFavorites();
+                }
+                if (wasExpanded) {
+                    this.expandedFolders.delete(draggedPath);
+                    this.expandedFolders.add(newPath);
+                    this.saveExpandedFolders();
+                }
+                if (this.currentNote && this.currentNote.startsWith(oldPrefix)) {
+                    this.currentNote = newPrefix + this.currentNote.substring(oldPrefix.length);
+                }
+
                 try {
                     const response = await fetch('/api/folders/move', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ oldPath: draggedPath, newPath })
                     });
-                    
-                    if (response.ok) {
-                        // Update favorites for notes inside moved folder
-                        const favoritesInFolder = this.favorites.filter(f => f.startsWith(oldPrefix));
-                        if (favoritesInFolder.length > 0) {
-                            const newFavorites = this.favorites.map(f => 
-                                f.startsWith(oldPrefix) ? newPrefix + f.substring(oldPrefix.length) : f
-                            );
-                            this.favorites = newFavorites;
-                            this.favoritesSet = new Set(newFavorites);
-                            this.saveFavorites();
-                        }
-                        
-                        // Keep folder expanded if it was
-                        const wasExpanded = this.expandedFolders.has(draggedPath);
-                        
-                        await this.loadNotes();
-                        await this.loadSharedNotePaths();
-                        
-                        if (wasExpanded) {
-                            this.expandedFolders.delete(draggedPath);
-                            this.expandedFolders.add(newPath);
-                            this.saveExpandedFolders();
-                        }
-                    } else {
+                    if (!response.ok) {
                         const errorData = await response.json().catch(() => ({}));
-                        this.toast(errorData.detail || this.t('move.failed_folder'), { type: 'error' });
+                        throw new Error(errorData.detail || this.t('move.failed_folder'));
                     }
+                    await this.loadSharedNotePaths();
                 } catch (error) {
                     console.error('Failed to move folder:', error);
-                    this.toast(this.t('move.failed_folder'), { type: 'error' });
+                    this.toast(error.message || this.t('move.failed_folder'), { type: 'error' });
+                    await this.loadNotes({ silent: true });
                 }
                 return;
             }
-            
+
             // Handle note or media drop into folder
             const item = this.notes.find(n => n.path === draggedPath);
             if (!item) return;
-            
+
             const filename = draggedPath.split('/').pop();
             const newPath = targetFolderPath ? `${targetFolderPath}/${filename}` : filename;
-            
+
             if (newPath === draggedPath) return;
-            
-            // Check if note is favorited (only for notes)
+
             const wasFavorited = isNote && this.favoritesSet.has(draggedPath);
-            
+            const wasCurrentNote = this.currentNote === draggedPath;
+            const wasCurrentMedia = this.currentMedia === draggedPath;
+
+            this._optimisticRenameNote(draggedPath, newPath);
+            this._rebuildTreeAfterMutation();
+
+            if (wasFavorited) {
+                this.favorites = this.favorites.map(f => f === draggedPath ? newPath : f);
+                this.favoritesSet = new Set(this.favorites);
+                this.saveFavorites();
+            }
+            if (wasCurrentNote) this.currentNote = newPath;
+            if (wasCurrentMedia) this.currentMedia = newPath;
+
             try {
-                // Use different endpoint for media vs notes
                 const endpoint = isMedia ? '/api/media/move' : '/api/notes/move';
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ oldPath: draggedPath, newPath })
                 });
-                
-                if (response.ok) {
-                    // Update favorites if the moved note was favorited
-                    if (wasFavorited) {
-                        const newFavorites = this.favorites.map(f => f === draggedPath ? newPath : f);
-                        this.favorites = newFavorites;
-                        this.favoritesSet = new Set(newFavorites);
-                        this.saveFavorites();
-                    }
-                    
-                    // Keep current item open if it was the moved one
-                    const wasCurrentNote = this.currentNote === draggedPath;
-                    const wasCurrentMedia = this.currentMedia === draggedPath;
-                    
-                    await this.loadNotes();
-                    if (isNote) {
-                        await this.loadSharedNotePaths();
-                    }
-                    
-                    if (wasCurrentNote) this.currentNote = newPath;
-                    if (wasCurrentMedia) this.currentMedia = newPath;
-                } else {
+                if (!response.ok) {
                     const errorData = await response.json().catch(() => ({}));
                     const errorKey = isMedia ? 'move.failed_media' : 'move.failed_note';
-                    this.toast(errorData.detail || this.t(errorKey), { type: 'error' });
+                    throw new Error(errorData.detail || this.t(errorKey));
                 }
+                if (isNote) await this.loadSharedNotePaths();
             } catch (error) {
                 console.error(`Failed to move ${isMedia ? 'media' : 'note'}:`, error);
-                const errorKey = isMedia ? 'move.failed_media' : 'move.failed_note';
-                this.toast(this.t(errorKey), { type: 'error' });
+                this.toast(error.message || this.t(isMedia ? 'move.failed_media' : 'move.failed_note'), { type: 'error' });
+                await this.loadNotes({ silent: true });
             }
         },
-        
-        
+
+
         // Load a specific note
         async loadNote(notePath, updateHistory = true, searchQuery = '') {
             try {
@@ -5045,11 +5195,11 @@ function noteApp() {
                 }
                 this.currentMedia = ''; // Clear image viewer when loading a note
                 this.shareInfo = null; // Reset share info for new note
-                
+
                 // Update browser tab title
                 document.title = `${this.currentNoteName} - ${this.appName}`;
                 this.lastSaved = false;
-                
+
                 // Extract outline for TOC panel
                 this.extractOutline(data.content);
 
@@ -5060,7 +5210,7 @@ function noteApp() {
                 this.undoHistory = [{ content: data.content, cursorPos: 0 }];
                 this.redoHistory = [];
                 this.hasPendingHistoryChanges = false;
-                
+
                 // Update browser URL and history
                 if (updateHistory) {
                     // Encode the path properly (spaces become %20, etc.)
@@ -5073,8 +5223,8 @@ function noteApp() {
                         url += `?search=${encodeURIComponent(searchQuery)}`;
                     }
                     window.history.pushState(
-                        { 
-                            notePath: notePath, 
+                        {
+                            notePath: notePath,
                             searchQuery: searchQuery,
                             homepageFolder: this.selectedHomepageFolder || '' // Save current folder state
                         },
@@ -5082,15 +5232,15 @@ function noteApp() {
                         url
                     );
                 }
-                
+
                 // Calculate stats if plugin enabled
                 if (this.statsPluginEnabled) {
                     this.calculateStats();
                 }
-                
+
                 // Parse frontmatter metadata
                 this.parseMetadata();
-                
+
                 // Store search query for highlighting
                 if (searchQuery) {
                     this.currentSearchHighlight = searchQuery;
@@ -5098,7 +5248,7 @@ function noteApp() {
                     // Clear highlights if no search query
                     this.currentSearchHighlight = '';
                 }
-                
+
                 // Expand folder tree to show the loaded note
                 this.expandFolderForNote(notePath);
 
@@ -5132,12 +5282,12 @@ function noteApp() {
                         } else {
                             this.clearSearchHighlights();
                         }
-                        
+
                         // Scroll note into view in sidebar if needed
                         this.scrollNoteIntoView(notePath);
                     });
                 });
-                
+
             } catch (error) {
                 this.loadingNote = false;
                 ErrorHandler.handle('load note', error);
@@ -5148,40 +5298,40 @@ function noteApp() {
         loadItemFromURL() {
             // Get path from URL (e.g., /folder/note or /folder/image.png)
             let path = window.location.pathname;
-            
+
             // Strip .md extension if present (for MKdocs/Zensical integration)
             if (path.toLowerCase().endsWith('.md')) {
                 path = path.slice(0, -3);
                 // Update URL bar to show clean path without .md
                 window.history.replaceState(null, '', path);
             }
-            
+
             // Skip if root path or static assets
             if (path === '/' || path.startsWith('/static/') || path.startsWith('/api/')) {
                 return;
             }
-            
+
             // Remove leading slash and decode URL encoding (e.g., %20 -> space)
             const decodedPath = decodeURIComponent(path.substring(1));
-            
+
             // Check if this is a media file (image, audio, video, PDF)
             const matchedItem = this.notes.find(n => n.path === decodedPath);
-            
+
             if (matchedItem && matchedItem.type !== 'note') {
                 // It's a media file, view it
                 this.viewMedia(decodedPath, matchedItem.type, false); // false = don't update history
             } else {
                 // It's a note, add .md extension and load it
                 const notePath = decodedPath + '.md';
-                
+
                 // Parse query string for search parameter
                 const urlParams = new URLSearchParams(window.location.search);
                 const searchParam = urlParams.get('search');
-                
+
                 // Try to load the note directly - the backend will handle 404 if it doesn't exist
                 // This is more robust than checking the frontend notes list
                 this.loadNote(notePath, false, searchParam || '');
-                
+
                 // If there's a search parameter, populate the search box and trigger search
                 if (searchParam) {
                     this.searchQuery = searchParam;
@@ -5190,62 +5340,62 @@ function noteApp() {
                 }
             }
         },
-        
+
         // Highlight search term in editor and preview
         highlightSearchTerm(query, focusEditor = false) {
             if (!query || !query.trim()) {
                 this.clearSearchHighlights();
                 return;
             }
-            
+
             const searchTerm = query.trim();
-            
+
             // Highlight in editor (textarea)
             this.highlightInEditor(searchTerm, focusEditor);
-            
+
             // Highlight in preview (rendered HTML)
             this.highlightInPreview(searchTerm);
         },
-        
+
         // Highlight search term in the editor textarea
         highlightInEditor(searchTerm, shouldFocus = false) {
             const editor = this._domCache.editor || document.getElementById('editor');
             if (!editor) return;
-            
+
             // For textarea, we can't directly highlight text, but we can scroll to first match
             const content = editor.value;
             const lowerContent = content.toLowerCase();
             const lowerTerm = searchTerm.toLowerCase();
             const index = lowerContent.indexOf(lowerTerm);
-            
+
             if (index !== -1) {
                 // Calculate line number to scroll to
                 const textBefore = content.substring(0, index);
                 const lineNumber = textBefore.split('\n').length;
-                
+
                 // Scroll to approximate position
                 const lineHeight = 20; // Approximate line height in pixels
                 editor.scrollTop = (lineNumber - 5) * lineHeight; // Scroll a bit above to show context
-                
+
                 // Only focus and select if explicitly requested (e.g., from search result click)
                 if (shouldFocus) {
                     editor.focus();
                     editor.setSelectionRange(index, index + searchTerm.length);
-                    
+
                     // Blur immediately so the selection stays visible but editor isn't focused
                     setTimeout(() => editor.blur(), 100);
                 }
             }
         },
-        
+
         // Highlight search term in the preview pane
         highlightInPreview(searchTerm) {
             const preview = document.querySelector('.markdown-preview');
             if (!preview) return;
-            
+
             // Remove existing highlights
             this.clearSearchHighlights();
-            
+
             // Create a tree walker to find all text nodes
             const walker = document.createTreeWalker(
                 preview,
@@ -5253,31 +5403,31 @@ function noteApp() {
                 null,
                 false
             );
-            
+
             const textNodes = [];
             let node;
             while (node = walker.nextNode()) {
                 // Skip code blocks and pre tags
-                if (node.parentElement.tagName === 'CODE' || 
+                if (node.parentElement.tagName === 'CODE' ||
                     node.parentElement.tagName === 'PRE') {
                     continue;
                 }
                 textNodes.push(node);
             }
-            
+
             const lowerTerm = searchTerm.toLowerCase();
             let matchIndex = 0;
-            
+
             // Highlight matches in text nodes
             textNodes.forEach(textNode => {
                 const text = textNode.textContent;
                 const lowerText = text.toLowerCase();
-                
+
                 if (lowerText.includes(lowerTerm)) {
                     const fragment = document.createDocumentFragment();
                     let lastIndex = 0;
                     let index;
-                    
+
                     while ((index = lowerText.indexOf(lowerTerm, lastIndex)) !== -1) {
                         // Add text before match
                         if (index > lastIndex) {
@@ -5285,75 +5435,75 @@ function noteApp() {
                                 document.createTextNode(text.substring(lastIndex, index))
                             );
                         }
-                        
+
                         // Add highlighted match
                         const mark = document.createElement('mark');
                         mark.className = 'search-highlight';
                         mark.setAttribute('data-match-index', matchIndex);
                         mark.textContent = text.substring(index, index + searchTerm.length);
-                        
+
                         // First match is active (styled via CSS)
                         if (matchIndex === 0) {
                             mark.classList.add('active-match');
                         }
-                        
+
                         fragment.appendChild(mark);
                         matchIndex++;
-                        
+
                         lastIndex = index + searchTerm.length;
                     }
-                    
+
                     // Add remaining text
                     if (lastIndex < text.length) {
                         fragment.appendChild(
                             document.createTextNode(text.substring(lastIndex))
                         );
                     }
-                    
+
                     // Replace text node with highlighted fragment
                     textNode.parentNode.replaceChild(fragment, textNode);
                 }
             });
-            
+
             // Update total matches and reset current index
             this.totalMatches = matchIndex;
             this.currentMatchIndex = matchIndex > 0 ? 0 : -1;
-            
+
             // Scroll to first match
             if (this.totalMatches > 0) {
                 this.scrollToMatch(0);
             }
         },
-        
+
         // Navigate to next search match
         nextMatch() {
             if (this.totalMatches === 0) return;
-            
+
             this.currentMatchIndex = (this.currentMatchIndex + 1) % this.totalMatches;
             this.scrollToMatch(this.currentMatchIndex);
         },
-        
+
         // Navigate to previous search match
         previousMatch() {
             if (this.totalMatches === 0) return;
-            
+
             this.currentMatchIndex = (this.currentMatchIndex - 1 + this.totalMatches) % this.totalMatches;
             this.scrollToMatch(this.currentMatchIndex);
         },
-        
+
         // Scroll to a specific match index
         scrollToMatch(index) {
             const preview = document.querySelector('.markdown-preview');
             if (!preview) return;
-            
+
             const allMatches = preview.querySelectorAll('mark.search-highlight');
             if (index < 0 || index >= allMatches.length) return;
-            
+
             // Update styling - make current match prominent (via CSS class)
             allMatches.forEach((mark, i) => {
                 mark.classList.toggle('active-match', i === index);
             });
-            
+
             // Scroll to the match
             const targetMatch = allMatches[index];
             const previewContainer = this._domCache.previewContainer;
@@ -5362,42 +5512,42 @@ function noteApp() {
                 previewContainer.scrollTop = elementTop - 100; // Scroll with some offset
             }
         },
-        
+
         // Clear search highlights
         clearSearchHighlights() {
             const preview = document.querySelector('.markdown-preview');
             if (!preview) return;
-            
+
             const highlights = preview.querySelectorAll('mark.search-highlight');
             highlights.forEach(mark => {
                 const text = document.createTextNode(mark.textContent);
                 mark.parentNode.replaceChild(text, mark);
             });
-            
+
             // Normalize text nodes to merge adjacent text nodes
             preview.normalize();
-            
+
             // Reset match counters
             this.totalMatches = 0;
             this.currentMatchIndex = -1;
         },
-        
+
         // =====================================================
         // DROPDOWN MENU SYSTEM
         // =====================================================
-        
+
         // Shift+click always forces the chooser regardless of newButtonAction.
         toggleNewDropdown(event) {
             const wantsChooser =
                 (event && event.shiftKey) ||
                 !this.newButtonAction ||
                 this.newButtonAction === 'chooser';
-            
+
             if (wantsChooser) {
                 this._openNewDropdownChooser(event);
                 return;
             }
-            
+
             switch (this.newButtonAction) {
                 case 'note':     this.createNote();         break;
                 case 'folder':   this.createFolder();       break;
@@ -5406,15 +5556,15 @@ function noteApp() {
                 default:         this._openNewDropdownChooser(event);
             }
         },
-        
+
         _openNewDropdownChooser(event) {
             this.showNewDropdown = true;
-            
+
             if (event && event.target) {
                 const rect = event.target.getBoundingClientRect();
                 let top = rect.bottom + 4;
                 let left = rect.left;
-                
+
                 const dropdownWidth = 200;
                 const dropdownHeight = 150;
                 if (left + dropdownWidth > window.innerWidth) {
@@ -5423,11 +5573,11 @@ function noteApp() {
                 if (top + dropdownHeight > window.innerHeight) {
                     top = rect.top - dropdownHeight - 4;
                 }
-                
+
                 this.dropdownPosition = { top, left };
             }
         },
-        
+
         openTemplateModal() {
             this.showNewDropdown = false;
             this.mobileSidebarOpen = false;
@@ -5447,12 +5597,12 @@ function noteApp() {
                 });
             }
         },
-        
+
         closeDropdown() {
             this.showNewDropdown = false;
             this.dropdownTargetFolder = null; // Reset folder context
         },
-        
+
         /**
          * Parent folder for new note/folder/drawing from the + menu when no explicit path is passed.
          * Same rules as the create-name modal: '' = vault root; otherwise a folder path (e.g. folder1/sub).
@@ -5463,11 +5613,11 @@ function noteApp() {
             }
             return this.selectedHomepageFolder || '';
         },
-        
+
         // =====================================================
         // UNIFIED CREATION FUNCTIONS (reusable from anywhere)
         // =====================================================
-        
+
         // Switch to split view (if in preview-only mode) and focus editor for new notes
         focusEditorForNewNote() {
             // Only switch if in preview-only mode - don't disturb edit or split mode
@@ -5485,7 +5635,7 @@ function noteApp() {
                 if (editor) editor.focus();
             });
         },
-        
+
         async createNote(folderPath = null, directPath = null) {
             if (directPath) {
                 const notePath = directPath.endsWith('.md') ? directPath : `${directPath}.md`;
@@ -5500,7 +5650,7 @@ function noteApp() {
             const explicitTarget = folderPath !== null && folderPath !== undefined ? folderPath : undefined;
             this.openCreateNameModal('note', explicitTarget);
         },
-        
+
         /**
          * @param {'note'|'folder'} kind
          * @param {string|undefined} explicitTargetFolder - if set, use as parent folder context ("" = root)
@@ -5523,7 +5673,7 @@ function noteApp() {
                 }
             });
         },
-        
+
         // Zettelkasten-style yyyymmddHHMMSS in local time.
         _autoTitleTimestamp() {
             const d = new Date();
@@ -5531,16 +5681,16 @@ function noteApp() {
             return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
                    `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
         },
-        
+
         closeCreateNameModal() {
             this.showCreateNameModal = false;
             this.createNameModalInput = '';
         },
-        
+
         cancelCreateNameModal() {
             this.closeCreateNameModal();
         },
-        
+
         createNameModalHelpText() {
             const tf = this.createNameModalTargetFolder;
             if (this.createNameModalKind === 'note') {
@@ -5552,19 +5702,19 @@ function noteApp() {
                 ? this.t('folders.prompt_name_in_folder', { folder: tf })
                 : this.t('folders.prompt_name_with_path');
         },
-        
+
         createNameModalTitle() {
             return this.createNameModalKind === 'note'
                 ? this.t('sidebar.new_note')
                 : this.t('sidebar.new_folder');
         },
-        
+
         createNameModalLabel() {
             return this.createNameModalKind === 'note'
                 ? this.t('notes.prompt_name')
                 : this.t('folders.prompt_name');
         },
-        
+
         async submitCreateNameModal() {
             const rawName = (this.createNameModalInput || '').trim();
             if (!rawName) {
@@ -5573,7 +5723,7 @@ function noteApp() {
             }
             const targetFolder = this.createNameModalTargetFolder;
             const kind = this.createNameModalKind;
-            
+
             if (kind === 'note') {
                 const validation = targetFolder
                     ? FilenameValidator.validateFilename(rawName)
@@ -5595,7 +5745,7 @@ function noteApp() {
                 if (ok) this.closeCreateNameModal();
                 return;
             }
-            
+
             const validation = targetFolder
                 ? FilenameValidator.validateFilename(rawName)
                 : FilenameValidator.validatePath(rawName);
@@ -5613,56 +5763,54 @@ function noteApp() {
             const ok = await this._finalizeCreateFolder(folderPath, targetFolder);
             if (ok) this.closeCreateNameModal();
         },
-        
+
         async _finalizeCreateNote(notePath) {
+            // Optimistic add — sidebar reflects the new note instantly. Server
+            // confirms; on failure we resync silently.
+            this._optimisticAddNote(notePath, { content: '' });
+            const folderPart = notePath.includes('/') ? notePath.substring(0, notePath.lastIndexOf('/')) : '';
+            if (folderPart) this.expandedFolders.add(folderPart);
+            this._rebuildTreeAfterMutation();
+
             try {
                 const response = await fetch(`/api/notes/${notePath}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: '' })
                 });
-                
-                if (response.ok) {
-                    const folderPart = notePath.includes('/') ? notePath.substring(0, notePath.lastIndexOf('/')) : '';
-                    if (folderPart) this.expandedFolders.add(folderPart);
-                    await this.loadNotes();
-                    await this.loadNote(notePath);
-                    this.focusEditorForNewNote();
-                    return true;
-                }
-                ErrorHandler.handle('create note', new Error('Server returned error'));
-                return false;
+                if (!response.ok) throw new Error('Server returned error');
+                await this.loadNote(notePath);
+                this.focusEditorForNewNote();
+                return true;
             } catch (error) {
                 ErrorHandler.handle('create note', error);
+                await this.loadNotes({ silent: true });
                 return false;
             }
         },
-        
+
         async _finalizeCreateFolder(folderPath, targetFolder) {
+            this._optimisticAddFolder(folderPath);
+            if (targetFolder) this.expandedFolders.add(targetFolder);
+            this.expandedFolders.add(folderPath);
+            this._rebuildTreeAfterMutation();
+
             try {
                 const response = await fetch('/api/folders', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ path: folderPath })
                 });
-                
-                if (response.ok) {
-                    if (targetFolder) {
-                        this.expandedFolders.add(targetFolder);
-                    }
-                    this.expandedFolders.add(folderPath);
-                    await this.loadNotes();
-                    this.goToHomepageFolder(folderPath);
-                    return true;
-                }
-                ErrorHandler.handle('create folder', new Error('Server returned error'));
-                return false;
+                if (!response.ok) throw new Error('Server returned error');
+                this.goToHomepageFolder(folderPath);
+                return true;
             } catch (error) {
                 ErrorHandler.handle('create folder', error);
+                await this.loadNotes({ silent: true });
                 return false;
             }
         },
-        
+
         // --- MD file upload ---
 
         // Compute the full note path for an uploaded file given a base filename.
@@ -5828,7 +5976,7 @@ function noteApp() {
             const explicitTarget = parentPath !== null && parentPath !== undefined ? parentPath : undefined;
             this.openCreateNameModal('folder', explicitTarget);
         },
-        
+
         renameFolder(folderPath, currentName) {
             this.renameFolderPath = folderPath;
             this.renameFolderOldName = currentName;
@@ -5843,18 +5991,18 @@ function noteApp() {
                 }
             });
         },
-        
+
         closeRenameFolderModal() {
             this.showRenameFolderModal = false;
             this.renameFolderPath = '';
             this.renameFolderOldName = '';
             this.renameFolderInput = '';
         },
-        
+
         cancelRenameFolderModal() {
             this.closeRenameFolderModal();
         },
-        
+
         /**
          * Theme-styled confirm dialog (replaces window.confirm).
          * @param {{ message: string, title?: string, danger?: boolean, confirmLabel?: string, cancelLabel?: string }} options
@@ -5874,15 +6022,15 @@ function noteApp() {
                 this.mobileSidebarOpen = false;
             });
         },
-        
+
         confirmModalConfirm() {
             this._confirmModalFinish(true);
         },
-        
+
         confirmModalCancel() {
             this._confirmModalFinish(false);
         },
-        
+
         _confirmModalFinish(ok) {
             if (!this._confirmModalResolve) return;
             this.showConfirmModal = false;
@@ -5890,7 +6038,7 @@ function noteApp() {
             this._confirmModalResolve = null;
             fn(!!ok);
         },
-        
+
         async submitRenameFolderModal() {
             const folderPath = this.renameFolderPath;
             const currentName = this.renameFolderOldName;
@@ -5899,141 +6047,131 @@ function noteApp() {
                 this.closeRenameFolderModal();
                 return;
             }
-            
+
             const validation = FilenameValidator.validateFilename(newName);
             if (!validation.valid) {
                 this.toast(this.getValidationErrorMessage(validation, 'folder'), { type: 'warning' });
                 return;
             }
-            
+
             const validatedName = validation.sanitized;
             const pathParts = folderPath.split('/');
             pathParts[pathParts.length - 1] = validatedName;
             const newPath = pathParts.join('/');
-            
+
             const ok = await this._finalizeRenameFolder(folderPath, newPath);
             if (ok) this.closeRenameFolderModal();
         },
-        
+
         async _finalizeRenameFolder(folderPath, newPath) {
+            const folderPrefix = folderPath + '/';
+            const newFolderPrefix = newPath + '/';
+
+            // Optimistic cascade: rewrite folder + every nested folder + every
+            // note path. Sidebar reflects the rename instantly.
+            this._optimisticRenameFolderTree(folderPath, newPath);
+            this._rebuildTreeAfterMutation();
+
+            if (this.expandedFolders.has(folderPath)) {
+                this.expandedFolders.delete(folderPath);
+                this.expandedFolders.add(newPath);
+            }
+            const newFavorites = this.favorites.map(f =>
+                f.startsWith(folderPrefix) ? newFolderPrefix + f.substring(folderPrefix.length) : f
+            );
+            if (JSON.stringify(newFavorites) !== JSON.stringify(this.favorites)) {
+                this.favorites = newFavorites;
+                this.favoritesSet = new Set(newFavorites);
+                this.saveFavorites();
+            }
+            if (this.currentNote && this.currentNote.startsWith(folderPrefix)) {
+                this.currentNote = newFolderPrefix + this.currentNote.substring(folderPrefix.length);
+            }
+
             try {
                 const response = await fetch('/api/folders/rename', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        oldPath: folderPath,
-                        newPath: newPath
-                    })
+                    body: JSON.stringify({ oldPath: folderPath, newPath: newPath })
                 });
-                
-                if (response.ok) {
-                    if (this.expandedFolders.has(folderPath)) {
-                        this.expandedFolders.delete(folderPath);
-                        this.expandedFolders.add(newPath);
-                    }
-                    
-                    const folderPrefix = folderPath + '/';
-                    const newFolderPrefix = newPath + '/';
-                    const newFavorites = this.favorites.map(f => {
-                        if (f.startsWith(folderPrefix)) {
-                            return f.replace(folderPrefix, newFolderPrefix);
-                        }
-                        return f;
-                    });
-                    if (JSON.stringify(newFavorites) !== JSON.stringify(this.favorites)) {
-                        this.favorites = newFavorites;
-                        this.favoritesSet = new Set(newFavorites);
-                        this.saveFavorites();
-                    }
-                    
-                    if (this.currentNote && this.currentNote.startsWith(folderPrefix)) {
-                        this.currentNote = this.currentNote.replace(folderPrefix, newFolderPrefix);
-                    }
-                    
-                    await this.loadNotes();
-                    return true;
-                }
-                ErrorHandler.handle('rename folder', new Error('Server returned error'));
-                return false;
+                if (!response.ok) throw new Error('Server returned error');
+                return true;
             } catch (error) {
                 ErrorHandler.handle('rename folder', error);
+                await this.loadNotes({ silent: true });
                 return false;
             }
         },
-        
-        // Delete folder
+
+        // Delete folder (cascade: every nested folder + note)
         async deleteFolder(folderPath, folderName) {
             const ok = await this.confirmModalAsk({
                 message: this.t('folders.confirm_delete', { name: folderName }),
             });
             if (!ok) return;
-            
+
+            const folderPrefix = folderPath + '/';
+
+            this._optimisticRemoveFolderTree(folderPath);
+            this._rebuildTreeAfterMutation();
+
+            this.expandedFolders.delete(folderPath);
+            const newFavorites = this.favorites.filter(f => !f.startsWith(folderPrefix));
+            if (newFavorites.length !== this.favorites.length) {
+                this.favorites = newFavorites;
+                this.favoritesSet = new Set(newFavorites);
+                this.saveFavorites();
+            }
+            if (this.currentNote && this.currentNote.startsWith(folderPrefix)) {
+                this.currentNote = '';
+                this.noteContent = '';
+                document.title = this.appName;
+            }
+            const newStarred = this.starredFolders.filter(
+                path => path !== folderPath && !path.startsWith(folderPrefix)
+            );
+            if (newStarred.length !== this.starredFolders.length) {
+                this.starredFolders = newStarred;
+                this.saveFavorites();
+            }
+
             try {
                 const response = await fetch(`/api/folders/${encodeURIComponent(folderPath)}`, {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' }
                 });
-                
-                if (response.ok) {
-                    // Remove from expanded folders
-                    this.expandedFolders.delete(folderPath);
-                    
-                    // Remove any favorites that were in the deleted folder
-                    const folderPrefix = folderPath + '/';
-                    const newFavorites = this.favorites.filter(f => !f.startsWith(folderPrefix));
-                    if (newFavorites.length !== this.favorites.length) {
-                        this.favorites = newFavorites;
-                        this.favoritesSet = new Set(newFavorites);
-                        this.saveFavorites();
-                    }
-
-                    // Remove from starred folders if starred
-                    const newStarred = this.starredFolders.filter(p => p !== folderPath && !p.startsWith(folderPrefix));
-                    if (newStarred.length !== this.starredFolders.length) {
-                        this.starredFolders = newStarred;
-                        this.saveFavorites();
-                    }
-
-                    // Clear current note if it was in the deleted folder
-                    if (this.currentNote && this.currentNote.startsWith(folderPrefix)) {
-                        this.currentNote = '';
-                        this.noteContent = '';
-                        document.title = this.appName;
-                    }
-                    
-                    await this.loadNotes();
-                } else {
-                    ErrorHandler.handle('delete folder', new Error('Server returned error'));
-                }
+                if (!response.ok) throw new Error('Server returned error');
+                this.loadTagsDebounced();
             } catch (error) {
                 ErrorHandler.handle('delete folder', error);
+                await this.loadNotes({ silent: true });
             }
         },
-        
+
         // Auto-save with debounce
         autoSave({ recordHistory = true } = {}) {
             if (this.saveTimeout) {
                 clearTimeout(this.saveTimeout);
             }
-            
+
             this.lastSaved = false;
-            
+
             // Push to undo history (but not during undo/redo operations)
             if (recordHistory && !this.isUndoRedo) {
                 this.pushToHistory();
             }
-            
+
             // Calculate stats in real-time if plugin enabled
             if (this.statsPluginEnabled) {
                 this.calculateStats();
             }
-            
+
             // Parse metadata in real-time
             this.parseMetadata();
-            
+
             // Update outline (TOC) in real-time
             this.extractOutline(this.noteContent);
-            
+
             this.saveTimeout = setTimeout(() => {
                 // Commit to undo history when autosave triggers (same debounce timing)
                 if (this.hasPendingHistoryChanges) {
@@ -6042,70 +6180,70 @@ function noteApp() {
                 this.saveNote();
             }, this.autosaveDelayMs);
         },
-        
+
         // Mark that we have pending changes (called on each keystroke)
         pushToHistory() {
             this.hasPendingHistoryChanges = true;
         },
-        
+
         // Immediately commit pending changes to history (call before undo/redo)
         flushHistory() {
             if (this.hasPendingHistoryChanges) {
                 this.commitToHistory();
             }
         },
-        
+
         // Actually commit to undo history (internal)
         commitToHistory() {
             const editor = document.getElementById('note-editor');
             const cursorPos = editor ? editor.selectionStart : 0;
-            
+
             // Only push if content actually changed from last history entry
-            if (this.undoHistory.length > 0 && 
+            if (this.undoHistory.length > 0 &&
                 this.undoHistory[this.undoHistory.length - 1].content === this.noteContent) {
                 this.hasPendingHistoryChanges = false;
                 return;
             }
-            
+
             this.undoHistory.push({ content: this.noteContent, cursorPos });
-            
+
             // Limit history size
             if (this.undoHistory.length > this.maxHistorySize) {
                 this.undoHistory.shift();
             }
-            
+
             // Clear redo history when new change is made
             this.redoHistory = [];
             this.hasPendingHistoryChanges = false;
         },
-        
+
         // Undo last change
         undo() {
             if (!this.currentNote) return;
-            
+
             // Flush any pending history changes first (so we don't lose unsaved edits)
             this.flushHistory();
-            
+
             if (this.undoHistory.length <= 1) return;
-            
+
             const editor = document.getElementById('note-editor');
-            
+
             // Pop current state to redo history
             const currentState = this.undoHistory.pop();
             this.redoHistory.push(currentState);
-            
+
             // Get previous state
             const previousState = this.undoHistory[this.undoHistory.length - 1];
-            
+
             // Apply previous state
             this.isUndoRedo = true;
             this.noteContent = previousState.content;
-            
+
             // Recalculate stats with new content
             if (this.statsPluginEnabled) {
                 this.calculateStats();
             }
-            
+
             // Restore cursor position from the state we're going back to
             this.$nextTick(() => {
                 this.saveNote();
@@ -6119,33 +6257,33 @@ function noteApp() {
                 }
             });
         },
-        
+
         // Redo last undone change
         redo() {
             if (!this.currentNote) return;
-            
+
             // Flush any pending history changes first
             this.flushHistory();
-            
+
             if (this.redoHistory.length === 0) return;
-            
+
             const editor = document.getElementById('note-editor');
-            
+
             // Pop from redo history
             const nextState = this.redoHistory.pop();
-            
+
             // Push to undo history
             this.undoHistory.push(nextState);
-            
+
             // Apply next state
             this.isUndoRedo = true;
             this.noteContent = nextState.content;
-            
+
             // Recalculate stats with new content
             if (this.statsPluginEnabled) {
                 this.calculateStats();
             }
-            
+
             // Restore cursor position from the state we're going forward to
             this.$nextTick(() => {
                 this.saveNote();
@@ -6159,57 +6297,78 @@ function noteApp() {
                 }
             });
         },
-        
+
         // Markdown formatting helpers
+        // Trim trailing whitespace from double-click word selections.
+        // No-op on browsers that already exclude it (Firefox, Safari).
+        trimSelectionTrailingSpace(event) {
+            const editor = event && event.target;
+            if (!editor) return;
+            const start = editor.selectionStart;
+            let end = editor.selectionEnd;
+            if (start >= end) return;
+            const text = editor.value;
+            while (end > start && /\s/.test(text.charAt(end - 1))) end--;
+            if (end !== editor.selectionEnd) {
+                editor.setSelectionRange(start, end);
+            }
+        },
+
         wrapSelection(before, after, placeholder) {
             const editor = document.getElementById('note-editor');
             if (!editor) return;
-            
+
             const start = editor.selectionStart;
             const end = editor.selectionEnd;
             const selectedText = this.noteContent.substring(start, end);
-            const textToWrap = selectedText || placeholder;
-            
+
+            // Push edge whitespace OUTSIDE inline wrappers — "**house **" is
+            // invalid per CommonMark. Block wrappers (with \n) keep it intact.
+            const isInline = !before.includes('\n') && !after.includes('\n');
+            let leading = '', trailing = '', core = selectedText;
+            if (isInline && selectedText) {
+                const m = selectedText.match(/^(\s*)([\s\S]*?)(\s*)$/);
+                leading = m[1];
+                core = m[2];
+                trailing = m[3];
+            }
+            const textToWrap = core || placeholder;
+
             // Build the new text
-            const newText = before + textToWrap + after;
-            
+            const newText = leading + before + textToWrap + after + trailing;
+
             // Update content
             this.noteContent = this.noteContent.substring(0, start) + newText + this.noteContent.substring(end);
-            
-            // Set cursor position (select the wrapped text or placeholder)
+
             this.$nextTick(() => {
-                if (selectedText) {
-                    // If text was selected, keep it selected (inside the wrapper)
-                    editor.setSelectionRange(start + before.length, start + before.length + selectedText.length);
-                } else {
-                    // If no text selected, select the placeholder
-                    editor.setSelectionRange(start + before.length, start + before.length + placeholder.length);
-                }
+                const coreStart = start + leading.length + before.length;
+                const coreEnd = coreStart + textToWrap.length;
+                editor.setSelectionRange(coreStart, coreEnd);
                 editor.focus();
             });
-            
+
             // Trigger autosave
             this.autoSave();
         },
-        
+
         insertLink() {
             const editor = document.getElementById('note-editor');
             if (!editor) return;
-            
+
             const start = editor.selectionStart;
             const end = editor.selectionEnd;
             const selectedText = this.noteContent.substring(start, end);
-            
+
             // If text is selected, use it as link text; otherwise use placeholder
             const linkText = selectedText || 'link text';
             const linkUrl = 'url';
-            
+
             // Build the markdown link
             const newText = `[${linkText}](${linkUrl})`;
-            
+
             // Update content
             this.noteContent = this.noteContent.substring(0, start) + newText + this.noteContent.substring(end);
-            
+
             // Set cursor position to select the URL part for easy editing
             this.$nextTick(() => {
                 const urlStart = start + linkText.length + 3; // After "[linkText]("
@@ -6217,11 +6376,11 @@ function noteApp() {
                 editor.setSelectionRange(urlStart, urlEnd);
                 editor.focus();
             });
-            
+
             // Trigger autosave
             this.autoSave();
         },
-        
+
         // Prettify/align a markdown table at the cursor or selection
         prettifyTable() {
             const editor = document.getElementById('note-editor');
@@ -6361,35 +6520,35 @@ function noteApp() {
         insertTable() {
             const editor = document.getElementById('note-editor');
             if (!editor) return;
-            
+
             const cursorPos = editor.selectionStart;
-            
+
             // Basic 3x3 table placeholder
             const table = `| Header 1 | Header 2 | Header 3 |
 |----------|----------|----------|
 | Cell 1   | Cell 2   | Cell 3   |
 | Cell 4   | Cell 5   | Cell 6   |
 `;
-            
+
             // Add newline before if not at start of line
             const textBefore = this.noteContent.substring(0, cursorPos);
             const needsNewlineBefore = textBefore.length > 0 && !textBefore.endsWith('\n');
             const prefix = needsNewlineBefore ? '\n\n' : '';
-            
+
             // Insert the table
             this.noteContent = textBefore + prefix + table + this.noteContent.substring(cursorPos);
-            
+
             // Position cursor at first header for easy editing
             this.$nextTick(() => {
                 const newPos = cursorPos + prefix.length + 2; // After "| "
                 editor.setSelectionRange(newPos, newPos + 8); // Select "Header 1"
                 editor.focus();
             });
-            
+
             // Trigger autosave
             this.autoSave();
         },
-        
+
         // Format selected text or insert formatting at cursor
         formatText(type) {
             // Simple wrap cases - reuse wrapSelection()
@@ -6399,13 +6558,13 @@ function noteApp() {
                 'strikethrough': ['~~', '~~', 'strikethrough'],
                 'code': ['`', '`', 'code']
             };
-            
+
             if (wrapFormats[type]) {
                 const [before, after, placeholder] = wrapFormats[type];
                 this.wrapSelection(before, after, placeholder);
                 return;
             }
-            
+
             // Special cases that need custom handling
             switch (type) {
                 case 'heading':
@@ -6440,22 +6599,22 @@ function noteApp() {
                     break;
             }
         },
-        
+
         // Insert a line prefix (for headings, lists, quotes)
         insertLinePrefix(prefix, placeholder) {
             const editor = document.getElementById('note-editor');
             if (!editor) return;
-            
+
             const start = editor.selectionStart;
             const end = editor.selectionEnd;
             const selectedText = this.noteContent.substring(start, end);
             const beforeText = this.noteContent.substring(0, start);
             const afterText = this.noteContent.substring(end);
-            
+
             // Check if at start of line
             const atLineStart = beforeText.endsWith('\n') || beforeText === '';
             const newline = atLineStart ? '' : '\n';
-            
+
             let replacement;
             if (selectedText) {
                 // Prefix each line of selection
@@ -6467,9 +6626,9 @@ function noteApp() {
             } else {
                 replacement = newline + prefix + placeholder;
             }
-            
+
             this.noteContent = beforeText + replacement + afterText;
-            
+
             this.$nextTick(() => {
                 if (selectedText) {
                     editor.setSelectionRange(start + newline.length, start + replacement.length);
@@ -6479,10 +6638,10 @@ function noteApp() {
                 }
                 editor.focus();
             });
-            
+
             this.autoSave();
         },
-        
+
         // Save current note
         async saveNote() {
             if (!this.currentNote) return;
@@ -6507,19 +6666,19 @@ function noteApp() {
                     if (note) {
                         note.modified = new Date().toISOString();
                         note.size = new Blob([this.noteContent]).size;
-                        
+
                         // Parse tags from content
                         note.tags = this.parseTagsFromContent(this.noteContent);
                     }
-                    
+
                     // Reload tags to update sidebar counts (debounced to prevent spam)
                     this.loadTagsDebounced();
-                    
+
                     // Rebuild folder tree if tag filters are active
                     if (this.selectedTags.length > 0) {
                         this.buildFolderTree();
                     }
-                    
+
                     // Hide "saved" indicator
                     setTimeout(() => {
                         this.lastSaved = false;
@@ -6599,15 +6758,15 @@ function noteApp() {
         // Rename current note
         async renameNote() {
             if (!this.currentNote) return;
-            
+
             const oldPath = this.currentNote;
             const newName = this.currentNoteName.trim();
-            
+
             if (!newName) {
                 this.toast(this.t('notes.empty_name'), { type: 'warning' });
                 return;
             }
-            
+
             // Validate the new name (single segment, no path separators)
             const validation = FilenameValidator.validateFilename(newName);
             if (!validation.valid) {
@@ -6616,13 +6775,13 @@ function noteApp() {
                 this.currentNoteName = oldPath.split('/').pop().replace('.md', '');
                 return;
             }
-            
+
             const validatedName = validation.sanitized;
             const folder = oldPath.split('/').slice(0, -1).join('/');
             const newPath = folder ? `${folder}/${validatedName}.md` : `${validatedName}.md`;
-            
+
             if (oldPath === newPath) return;
-            
+
             // Check if a note with the new name already exists
             const existingNote = this.notes.find(n => n.path.toLowerCase() === newPath.toLowerCase());
             if (existingNote) {
@@ -6631,92 +6790,83 @@ function noteApp() {
                 this.currentNoteName = oldPath.split('/').pop().replace('.md', '');
                 return;
             }
-            
-            // Create new note with same content
+
+            // Optimistic rename: rewrite local path now + favorites + current
+            // note pointer + URL. POST new content, then DELETE old.
+            this._optimisticRenameNote(oldPath, newPath);
+            this._rebuildTreeAfterMutation();
+
+            if (this.favoritesSet.has(oldPath)) {
+                this.favorites = this.favorites.map(f => f === oldPath ? newPath : f);
+                this.favoritesSet = new Set(this.favorites);
+                this.saveFavorites();
+            }
+            this.currentNote = newPath;
+            this._updateTabPath(oldPath, newPath);
+
             try {
                 const response = await fetch(`/api/notes/${newPath}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: this.noteContent })
                 });
-                
-                if (response.ok) {
-                    // Delete old note
-                    await fetch(`/api/notes/${oldPath}`, { method: 'DELETE' });
-                    
-                    // Update favorites if the renamed note was favorited
-                    if (this.favoritesSet.has(oldPath)) {
-                        const newFavorites = this.favorites.map(f => f === oldPath ? newPath : f);
-                        this.favorites = newFavorites;
-                        this.favoritesSet = new Set(newFavorites);
-                        this.saveFavorites();
-                    }
-                    
-                    this._updateTabPath(oldPath, newPath);
-                    this.currentNote = newPath;
-                    await this.loadNotes();
-                } else {
-                    ErrorHandler.handle('rename note', new Error('Server returned error'));
-                }
+                if (!response.ok) throw new Error('Server returned error');
+                await fetch(`/api/notes/${oldPath}`, { method: 'DELETE' });
             } catch (error) {
                 ErrorHandler.handle('rename note', error);
+                await this.loadNotes({ silent: true });
             }
         },
-        
+
         // Delete current note
         async deleteCurrentNote() {
             if (!this.currentNote) return;
-            
+
             // Just call deleteNote with current note details
             await this.deleteNote(this.currentNote, this.currentNoteName);
         },
-        
+
         // Delete any note from sidebar
         async deleteNote(notePath, noteName) {
             const ok = await this.confirmModalAsk({
                 message: this.t('notes.confirm_delete', { name: noteName }),
             });
             if (!ok) return;
-            
-            try {
-                const response = await fetch(`/api/notes/${notePath}`, {
-                    method: 'DELETE'
-                });
-                
-                if (response.ok) {
-                    // Remove from favorites if it was favorited
-                    if (this.favoritesSet.has(notePath)) {
-                        const newFavorites = this.favorites.filter(f => f !== notePath);
-                        this.favorites = newFavorites;
-                        this.favoritesSet = new Set(newFavorites);
-                        this.saveFavorites();
-                    }
-                    
-                    // Remove from tab bar
-                    this._removeTabByPath(notePath);
 
-                    // If the deleted note is currently open, clear it
-                    if (this.currentNote === notePath) {
-                        this.currentNote = '';
-                        this.noteContent = '';
-                        this.currentNoteName = '';
-                        this._lastRenderedContent = ''; // Clear render cache
-                        this._lastRenderedNote = '';
-                        this._cachedRenderedHTML = '';
-                        document.title = this.appName;
-                        // Redirect to root
-                        window.history.replaceState({}, '', '/');
-                    }
-                    
-                    await this.loadNotes();
-                } else {
-                    ErrorHandler.handle('delete note', new Error('Server returned error'));
-                }
+            // Optimistic: remove locally + clear current note + drop favorite
+            // before the network round-trip. Sidebar refreshes in <1ms on any
+            // vault size. On error we resync silently from disk.
+            this._optimisticRemoveNote(notePath);
+            this._rebuildTreeAfterMutation();
+
+            if (this.favoritesSet.has(notePath)) {
+                this.favorites = this.favorites.filter(f => f !== notePath);
+                this.favoritesSet = new Set(this.favorites);
+                this.saveFavorites();
+            }
+
+            if (this.currentNote === notePath) {
+                this.currentNote = '';
+                this.noteContent = '';
+                this.currentNoteName = '';
+                this._lastRenderedContent = '';
+                this._lastRenderedNote = '';
+                this._cachedRenderedHTML = '';
+                document.title = this.appName;
+                window.history.replaceState({}, '', '/');
+            }
+            this._removeTabByPath(notePath);
+
+            try {
+                const response = await fetch(`/api/notes/${notePath}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error('Server returned error');
+                this.loadTagsDebounced();
             } catch (error) {
                 ErrorHandler.handle('delete note', error);
+                await this.loadNotes({ silent: true });
             }
         },
-        
+
         // Search notes
         debouncedSearchNotes() {
             if (this.searchDebounceTimeout) {
@@ -6742,7 +6892,7 @@ function noteApp() {
         async searchNotes() {
             await this.applyFilters();
         },
-        
+
         // Trigger MathJax typesetting after DOM update
         typesetMath() {
             if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
@@ -6757,26 +6907,26 @@ function noteApp() {
                 }, 10);
             }
         },
-        
+
         // Render Mermaid diagrams
         async renderMermaid() {
             if (typeof window.mermaid === 'undefined') {
                 console.warn('Mermaid not loaded yet');
                 return;
             }
-            
+
             // Use requestAnimationFrame for better performance than setTimeout
             requestAnimationFrame(async () => {
                 const previewContent = document.querySelector('.markdown-preview');
                 if (!previewContent) return;
-                
+
                 // Get the appropriate theme based on current app theme
                 const themeType = this.getThemeType();
                 const mermaidTheme = themeType === 'light' ? 'default' : 'dark';
-                
+
                 // Only reinitialize if theme changed (performance optimization)
                 if (this.lastMermaidTheme !== mermaidTheme) {
-                    window.mermaid.initialize({ 
+                    window.mermaid.initialize({
                         startOnLoad: false,
                         theme: mermaidTheme,
                         securityLevel: 'strict', // Use strict for better security
@@ -6798,27 +6948,27 @@ function noteApp() {
                     });
                     this.lastMermaidTheme = mermaidTheme;
                 }
-                
+
                 // Find all code blocks with language 'mermaid'
                 const mermaidBlocks = previewContent.querySelectorAll('pre code.language-mermaid');
-                
+
                 // Early return if no diagrams to render
                 if (mermaidBlocks.length === 0) return;
-                
+
                 for (let i = 0; i < mermaidBlocks.length; i++) {
                     const block = mermaidBlocks[i];
                     const pre = block.parentElement;
-                    
+
                     // Skip if already rendered (performance optimization)
                     if (pre.querySelector('.mermaid-rendered')) continue;
-                    
+
                     try {
                         const code = block.textContent;
                         const id = `mermaid-diagram-${Date.now()}-${i}`;
-                        
+
                         // Render the diagram
                         const { svg } = await window.mermaid.render(id, code);
-                        
+
                         // Create a container for the rendered diagram
                         const container = document.createElement('div');
                         container.className = 'mermaid-rendered';
@@ -6826,7 +6976,7 @@ function noteApp() {
                         container.innerHTML = svg;
                         // Store original code for theme re-rendering
                         container.dataset.originalCode = code;
-                        
+
                         // Replace the code block with the rendered diagram
                         pre.parentElement.replaceChild(container, pre);
                     } catch (error) {
@@ -6840,7 +6990,7 @@ function noteApp() {
                 }
             });
         },
-        
+
         // Get current theme type (light or dark)
         // Returns: 'light' or 'dark'
         // Used by features that need to adapt to theme brightness (e.g., Mermaid diagrams, Chart.js)
@@ -6850,35 +7000,35 @@ function noteApp() {
                 const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
                 return isDark ? 'dark' : 'light';
             }
-            
+
             // Try to get theme type from loaded theme metadata
             const currentThemeData = this.availableThemes.find(t => t.id === this.currentTheme);
             if (currentThemeData && currentThemeData.type) {
                 // Use metadata from theme file (light or dark)
                 return currentThemeData.type; // Already 'light' or 'dark'
             }
-            
+
             // Backward compatibility: fallback to hardcoded map if metadata not available
             const fallbackMap = {
                 'light': 'light',
                 'vs-blue': 'light'
             };
-            
+
             return fallbackMap[this.currentTheme] || 'dark';
         },
-        
-        
+
+
         // Computed property for rendered markdown
         get renderedMarkdown() {
             if (!this.noteContent) return '<p style="color: var(--text-tertiary);">Nothing to preview yet...</p>';
-            
+
             // Performance: Return cached HTML if content hasn't changed
             if (this.noteContent === this._lastRenderedContent &&
                 this.currentNote === this._lastRenderedNote &&
                 this._cachedRenderedHTML) {
                 return this._cachedRenderedHTML;
             }
-            
+
             // Strip YAML frontmatter from content before rendering
             let contentToRender = this.noteContent;
             if (contentToRender.trim().startsWith('---')) {
@@ -6898,12 +7048,129 @@ function noteApp() {
                     }
                 }
             }
-            
+
             // Convert Obsidian-style wikilinks: [[note]] or [[note|display text]]
             // Must be done before marked.parse() to avoid conflicts with markdown syntax
             // BUT we need to protect code blocks first to avoid converting [[text]] inside code
             const self = this; // Reference for closure
-            
+
+            // Parses an Obsidian-style inline image size spec from an alt-like string.
+            // Returns { alt, width, height } — width/height are null when not specified.
+            //
+            //   parseImageSizeSpec("caption")            -> {alt:"caption",  w:null, h:null}
+            //   parseImageSizeSpec("caption|100")        -> {alt:"caption",  w:100,  h:null}
+            //   parseImageSizeSpec("caption|100x200")    -> {alt:"caption",  w:100,  h:200}
+            //   parseImageSizeSpec("100", {allowSolo})   -> {alt:"",         w:100,  h:null}   (wikilink only)
+            //   parseImageSizeSpec("100x200",{allowSolo})-> {alt:"",         w:100,  h:200}    (wikilink only)
+            //
+            // A dimension of 0 is treated as "unset" (Obsidian convention: |0x200 = height only).
+            // allowSolo=true accepts a bare `<digits>` string as a size; used for wikilinks
+            // where `![[img|100]]` unambiguously means "size 100" (no alt to confuse). For
+            // standard markdown `![100](x)` we default allowSolo=false so "100" stays as alt.
+            const parseImageSizeSpec = (text, opts = {}) => {
+                const allowSolo = opts.allowSolo === true;
+                if (!text) return { alt: '', width: null, height: null };
+                const trimmed = text.trim();
+                if (allowSolo) {
+                    const solo = trimmed.match(/^(\d+)(?:[xX](\d+))?$/);
+                    if (solo) {
+                        const w = parseInt(solo[1], 10);
+                        const h = solo[2] !== undefined ? parseInt(solo[2], 10) : null;
+                        return {
+                            alt: '',
+                            width: w > 0 ? w : null,
+                            height: (h !== null && h > 0) ? h : null,
+                        };
+                    }
+                }
+                const idx = trimmed.lastIndexOf('|');
+                if (idx === -1) return { alt: trimmed, width: null, height: null };
+                const size = trimmed.slice(idx + 1).trim();
+                const m = size.match(/^(\d+)(?:[xX](\d+))?$/);
+                if (!m) return { alt: trimmed, width: null, height: null };
+                const w = parseInt(m[1], 10);
+                const h = m[2] !== undefined ? parseInt(m[2], 10) : null;
+                return {
+                    alt: trimmed.slice(0, idx).trim(),
+                    width: w > 0 ? w : null,
+                    height: (h !== null && h > 0) ? h : null,
+                };
+            };
+
+            // Step 0: GFM/GLFM callouts. Runs BEFORE code-block extraction so
+            // fences nested in a callout blockquote lose their `> ` prefix on
+            // the closer — otherwise CommonMark won't see a valid fence closer
+            // once restored inside <div class="callout-body"> and the block
+            // runs unclosed. Fence-aware so `> [!TIP]` literal inside a
+            // top-level code block is not misread as a callout.
+            {
+                const CALLOUT_RE = /^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i;
+                const CALLOUT_ICONS = { note: 'ℹ️', tip: '💡', important: '❗', warning: '⚠️', caution: '🛑' };
+                const CALLOUT_TITLES = { note: 'Note', tip: 'Tip', important: 'Important', warning: 'Warning', caution: 'Caution' };
+                // Fence opener at 0-3 spaces indent (CommonMark). Captured
+                // group holds the fence chars so the closer must match char + length.
+                const FENCE_OPEN_RE = /^\s{0,3}(`{3,}|~{3,})/;
+                const escapeAttr = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                const srcLines = contentToRender.split('\n');
+                const outLines = [];
+                let li = 0;
+                let fenceChar = null; // '`' or '~' when inside a top-level fence
+                let fenceLen = 0;
+                while (li < srcLines.length) {
+                    const line = srcLines[li];
+
+                    // Inside a top-level fence: pass through opaquely.
+                    if (fenceChar) {
+                        outLines.push(line);
+                        const closeRe = new RegExp('^\\s{0,3}' + (fenceChar === '`' ? '`' : '~') + '{' + fenceLen + ',}\\s*$');
+                        if (closeRe.test(line)) { fenceChar = null; fenceLen = 0; }
+                        li++;
+                        continue;
+                    }
+
+                    const fenceOpen = line.match(FENCE_OPEN_RE);
+                    if (fenceOpen) {
+                        fenceChar = fenceOpen[1][0];
+                        fenceLen = fenceOpen[1].length;
+                        outLines.push(line);
+                        li++;
+                        continue;
+                    }
+
+                    const m = line.match(CALLOUT_RE);
+                    if (!m) {
+                        outLines.push(line);
+                        li++;
+                        continue;
+                    }
+                    const type = m[1].toLowerCase();
+                    const title = escapeAttr((m[2] || '').trim() || CALLOUT_TITLES[type]);
+                    const icon = CALLOUT_ICONS[type];
+                    const bodyLines = [];
+                    li++;
+                    // Fence lines inside the callout also start with `>`, so
+                    // they get absorbed and stripped, leaving a clean fence.
+                    while (li < srcLines.length && srcLines[li].startsWith('>')) {
+                        bodyLines.push(srcLines[li].replace(/^>\s?/, ''));
+                        li++;
+                    }
+                    outLines.push(
+                        '',
+                        `<div class="callout callout-${type}">`,
+                        `<div class="callout-title"><span class="callout-icon" aria-hidden="true">${icon}</span><span class="callout-title-text">${title}</span></div>`,
+                        `<div class="callout-body">`,
+                        '',
+                        bodyLines.join('\n'),
+                        '',
+                        `</div>`,
+                        `</div>`,
+                        ''
+                    );
+                }
+                contentToRender = outLines.join('\n');
+            }
+
             // Step 1: Temporarily replace code blocks and inline code with placeholders
             const codeBlocks = [];
             // Protect fenced code blocks (```...```)
@@ -6916,18 +7183,39 @@ function noteApp() {
                 codeBlocks.push(match);
                 return `\x00CODEBLOCK${codeBlocks.length - 1}\x00`;
             });
-            
+
             // Step 2: Convert media wikilinks FIRST: ![[file.png]] or ![[file.png|alt text]]
             // Must be before note wikilinks to prevent [[file.png]] from being matched first
+            //
+            // Also supports Obsidian-style inline sizing:
+            //   ![[img.jpg|100]]            -> width 100
+            //   ![[img.jpg|100x200]]        -> width 100, height 200
+            //   ![[img.jpg|caption|100]]    -> alt "caption", width 100
+            // The `allowSolo:true` mode treats a bare `|<digits>` group as a size
+            // (Obsidian's wikilink convention). Standard markdown images require a
+            // pipe inside the alt text and are handled by the DOM walker below.
             contentToRender = contentToRender.replace(
                 /!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,
                 (match, mediaName, altText) => {
                     const filename = mediaName.trim();
-                    const alt = altText ? altText.trim() : filename.replace(/\.[^/.]+$/, '');
-                    
+                    const rawAlt = altText ? altText.trim() : '';
+                    const spec = parseImageSizeSpec(rawAlt, { allowSolo: true });
+                    // If no explicit alt, fall back to the filename stem.
+                    const alt = spec.alt || filename.replace(/\.[^/.]+$/, '');
+                    // Emit width/height as BOTH HTML attributes (semantics, a11y)
+                    // AND inline style. Tailwind's Preflight `img { height: auto }`
+                    // wins over stylesheet rules that use attribute selectors, so
+                    // inline style is the reliable way to pin the size.
+                    const stylePieces = [];
+                    if (spec.width) stylePieces.push(`width:${spec.width}px`);
+                    if (spec.height) stylePieces.push(`height:${spec.height}px`);
+                    const sizeAttrs = (spec.width ? ` width="${spec.width}"` : '') +
+                                      (spec.height ? ` height="${spec.height}"` : '') +
+                                      (stylePieces.length ? ` style="${stylePieces.join(';')}"` : '');
+
                     // Resolve media path using O(1) lookup
                     const mediaPath = self.resolveMediaWikilink(filename);
-                    
+
                     if (mediaPath) {
                         // URL-encode path segments for the API
                         const encodedPath = mediaPath.split('/').map(segment => {
@@ -6937,12 +7225,14 @@ function noteApp() {
                                 return encodeURIComponent(segment);
                             }
                         }).join('/');
-                        
+
                         const safeAlt = alt.replace(/"/g, '&quot;');
                         const mediaSrc = `/api/media/${encodedPath}`;
                         const mediaType = self.getMediaType(filename);
-                        
-                        // Return appropriate HTML based on media type
+
+                        // Return appropriate HTML based on media type.
+                        // Size attributes only apply to images; non-image media
+                        // ignores the size (still strips it from the caption).
                         switch (mediaType) {
                             case 'audio':
                                 return `<div class="media-embed media-audio"><audio controls preload="none" src="${mediaSrc}" title="${safeAlt}"></audio><span class="media-caption">${safeAlt}</span></div>`;
@@ -6954,10 +7244,10 @@ function noteApp() {
                                 // upgrades it to a media-pdf wrapper + iframe. Issue #239.
                                 return `<span class="md-pdf-embed" data-src="${mediaSrc}" data-alt="${safeAlt}"></span>`;
                             default: // image
-                                return `<img src="${mediaSrc}" alt="${safeAlt}" title="${safeAlt}">`;
+                                return `<img src="${mediaSrc}" alt="${safeAlt}" title="${safeAlt}"${sizeAttrs}>`;
                         }
                     }
-                    
+
                     // Media not found - return broken indicator
                     const safeFilename = filename.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                     const mediaType = self.getMediaType(filename);
@@ -6965,7 +7255,7 @@ function noteApp() {
                     return `<span class="wikilink-broken" title="Media not found">${icon} ${safeFilename}</span>`;
                 }
             );
-            
+
             // Step 2b: Convert note wikilinks: [[note]] or [[note|display text]]
             contentToRender = contentToRender.replace(
                 /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,
@@ -6980,22 +7270,33 @@ function noteApp() {
                     const defaultLinkText = `${basePath.split('/').pop()?.replace(/\.md$/i, '') || ''}${anchor}` || linkTarget;
                     const linkText = displayText ? displayText.trim() : defaultLinkText;
                     const noteExists = basePath === '' || self.wikiLinkExists(basePath);
-                    
+
                     // Escape special chars: href needs quote escaping, text needs HTML escaping
                     const safeHref = linkTarget.replace(/"/g, '%22');
                     const safeText = linkText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    
+
                     // Return link with data attribute for styling broken links
                     const brokenClass = noteExists ? '' : ' class="wikilink-broken"';
                     return `<a href="${safeHref}"${brokenClass} data-wikilink="true">${safeText}</a>`;
                 }
             );
-            
+
+            // (Callouts handled in Step 0, before code-block extraction.)
+
+            contentToRender = contentToRender.replace(
+                /^(\s*[-*+]\s+\[[xX ]\]\s+)(\d+)\.(\s)/gm,
+                '$1$2\\.$3'
+            );
+            contentToRender = contentToRender.replace(
+                /^(\s*[-*+]\s+\[[xX ]\]\s+)([#>*+\-])(\s)/gm,
+                '$1\\$2$3'
+            );
+
             // Step 3: Restore code blocks
             contentToRender = contentToRender.replace(/\x00CODEBLOCK(\d+)\x00/g, (match, index) => {
                 return codeBlocks[parseInt(index)];
             });
-            
+
             // Protect LaTeX \(...\) and \[...\] delimiters from marked.js escaping
             marked.use({
                 extensions: [{
@@ -7031,46 +7332,65 @@ function noteApp() {
                     return hljs.highlightAuto(code).value;
                 }
             });
-            
+
             // Parse markdown
             let html = marked.parse(contentToRender);
-            
+
             // Sanitize HTML to prevent XSS attacks
             // DOMPurify defaults allow most HTML/SVG tags but strip scripts, iframes, and event handlers
             // MathJax and Mermaid run AFTER this, so their elements don't need whitelisting
             html = DOMPurify.sanitize(html);
-            
+
             // Post-process: Add target="_blank" to external links and title attributes to images
             // Parse as DOM to safely manipulate
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = html;
-            
+
             // Find all links
             const links = tempDiv.querySelectorAll('a');
             links.forEach(link => {
                 const href = link.getAttribute('href');
                 if (href && typeof href === 'string') {
                     // Check if it's an external link
-                    const isExternal = href.indexOf('http://') === 0 || 
-                                      href.indexOf('https://') === 0 || 
+                    const isExternal = href.indexOf('http://') === 0 ||
+                                      href.indexOf('https://') === 0 ||
                                       href.indexOf('//') === 0;
-                    
+
                     if (isExternal) {
                         link.setAttribute('target', '_blank');
                         link.setAttribute('rel', 'noopener noreferrer');
                     }
                 }
             });
-            
+
             // Find all images and transform paths for display
             // Also convert non-image media (audio, video, PDF) to appropriate elements
             const images = tempDiv.querySelectorAll('img');
             images.forEach(img => {
+                // Extract Obsidian-style size spec from standard-markdown alt.
+                // Wikilink images already had their size applied above and their
+                // alt cleaned, so calling this again is a no-op for them.
+                // See wikilink handler comment above about why we set inline style
+                // in addition to the width/height attributes.
+                const rawAlt = img.getAttribute('alt') || '';
+                const spec = parseImageSizeSpec(rawAlt);
+                if (spec.width && !img.hasAttribute('width')) {
+                    img.setAttribute('width', String(spec.width));
+                    img.style.width = spec.width + 'px';
+                }
+                if (spec.height && !img.hasAttribute('height')) {
+                    img.setAttribute('height', String(spec.height));
+                    img.style.height = spec.height + 'px';
+                }
+                if (spec.alt !== rawAlt) {
+                    img.setAttribute('alt', spec.alt);
+                }
+
                 let src = img.getAttribute('src');
                 if (src) {
                     const isExternal = src.startsWith('http://') || src.startsWith('https://') || src.startsWith('//');
                     const isLocal = !isExternal && !src.startsWith('data:');
-                    
+
                     // Transform relative paths to /api/media/ for serving
                     if (isLocal && !src.startsWith('/api/media/')) {
                         const vaultRelative = self.currentNote
@@ -7080,12 +7400,12 @@ function noteApp() {
                         src = `/api/media/${encodedPath}`;
                         img.setAttribute('src', src);
                     }
-                    
+
                     // Check if this is non-image media and convert to appropriate element
                     const mediaType = self.getMediaType(src);
                     const altText = img.getAttribute('alt') || src.split('/').pop().replace(/\.[^/.]+$/, '');
                     const safeAlt = altText.replace(/"/g, '&quot;');
-                    
+
                     // Only convert LOCAL media to embedded elements (security)
                     // External non-image media gets styled links instead
                     if (isLocal || src.startsWith('/api/media/')) {
@@ -7123,7 +7443,7 @@ function noteApp() {
                     }
                     // External audio/video: leave as broken image for security
                 }
-                
+
                 // For regular images, set title attribute
                 const altText = img.getAttribute('alt');
                 if (altText) {
@@ -7153,15 +7473,15 @@ function noteApp() {
             });
 
             html = tempDiv.innerHTML;
-            
+
             // Debounced MathJax rendering (avoid re-running on every keystroke)
             if (this._mathDebounceTimeout) clearTimeout(this._mathDebounceTimeout);
             this._mathDebounceTimeout = setTimeout(() => this.typesetMath(), 300);
-            
+
             // Debounced Mermaid rendering
             if (this._mermaidDebounceTimeout) clearTimeout(this._mermaidDebounceTimeout);
             this._mermaidDebounceTimeout = setTimeout(() => this.renderMermaid(), 300);
-            
+
             // Apply syntax highlighting and add copy buttons to code blocks
             setTimeout(() => {
                 // Use cached reference if available, otherwise query
@@ -7174,14 +7494,14 @@ function noteApp() {
                         if (!block.classList.contains('hljs')) {
                             hljs.highlightElement(block);
                         }
-                        
+
                         // Add copy button if not already present
                         const pre = block.parentElement;
                         if (pre && !pre.querySelector('.copy-code-button')) {
                             this.addCopyButtonToCodeBlock(pre);
                         }
                     });
-                    
+
                     // Enable video metadata loading (for first frame preview)
                     // Track by source URL to prevent duplicate requests on re-renders
                     if (!this._initializedVideoSources) this._initializedVideoSources = new Set();
@@ -7194,22 +7514,22 @@ function noteApp() {
                     });
                 }
             }, 0);
-            
+
             // Cache the result for performance
             this._lastRenderedContent = this.noteContent;
             this._lastRenderedNote = this.currentNote;
             this._cachedRenderedHTML = html;
-            
+
             return html;
         },
-        
+
         // Refresh DOM element cache
         refreshDOMCache() {
             this._domCache.editor = document.querySelector('.editor-textarea');
             this._domCache.previewContent = document.querySelector('.markdown-preview');
             this._domCache.previewContainer = this._domCache.previewContent ? this._domCache.previewContent.parentElement : null;
         },
-        
+
         // Add copy button to code block
         addCopyButtonToCodeBlock(preElement) {
             // Extract language from code element class (e.g., "language-toml" -> "TOML")
@@ -7227,7 +7547,7 @@ function noteApp() {
                     language = langMap[rawLang] || match[1].toUpperCase();
                 }
             }
-            
+
             // Create copy button with language label
             const button = document.createElement('button');
             button.className = 'copy-code-button';
@@ -7235,7 +7555,7 @@ function noteApp() {
             button.innerHTML = `<span>${displayText}</span>`;
             button.dataset.originalText = displayText; // Store for restore after copy
             button.title = this.t('common.copy_to_clipboard');
-            
+
             // Style the button
             button.style.position = 'absolute';
             button.style.top = '8px';
@@ -7257,41 +7577,41 @@ function noteApp() {
             button.style.fontFamily = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace';
             button.style.textTransform = 'uppercase';
             button.style.letterSpacing = '0.5px';
-            
+
             // Style the pre element to be relative
             preElement.style.position = 'relative';
-            
+
             // Show button on hover
             preElement.addEventListener('mouseenter', () => {
                 button.style.opacity = '1';
             });
-            
+
             preElement.addEventListener('mouseleave', () => {
                 button.style.opacity = '0';
             });
-            
+
             // Copy to clipboard on click
             button.addEventListener('click', async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                
+
                 const codeElement = preElement.querySelector('code');
                 if (!codeElement) return;
-                
+
                 const code = codeElement.textContent;
-                
+
                 const originalText = button.dataset.originalText;
                 const copiedText = this.t('common.copied');
                 const copyTitle = this.t('common.copy_to_clipboard');
-                
+
                 try {
                     await navigator.clipboard.writeText(code);
-                    
+
                     // Visual feedback - show localized "Copied!"
                     button.innerHTML = `<span>${copiedText}</span>`;
                     button.style.backgroundColor = 'rgba(34, 197, 94, 0.8)';
                     button.title = copiedText;
-                    
+
                     // Reset after 2 seconds
                     setTimeout(() => {
                         button.innerHTML = `<span>${originalText}</span>`;
@@ -7300,7 +7620,7 @@ function noteApp() {
                     }, 2000);
                 } catch (err) {
                     console.error('Failed to copy code:', err);
-                    
+
                     // Fallback for older browsers
                     const textArea = document.createElement('textarea');
                     textArea.value = code;
@@ -7308,7 +7628,7 @@ function noteApp() {
                     textArea.style.left = '-999999px';
                     document.body.appendChild(textArea);
                     textArea.select();
-                    
+
                     try {
                         document.execCommand('copy');
                         button.innerHTML = `<span>${copiedText}</span>`;
@@ -7320,25 +7640,25 @@ function noteApp() {
                     } catch (fallbackErr) {
                         console.error('Fallback copy failed:', fallbackErr);
                     }
-                    
+
                     document.body.removeChild(textArea);
                 }
             });
-            
+
             // Add button to pre element
             preElement.appendChild(button);
         },
-        
+
         // Setup scroll synchronization
         setupScrollSync() {
             // Use cached references (refresh if not available)
             if (!this._domCache.editor || !this._domCache.previewContainer) {
                 this.refreshDOMCache();
             }
-            
+
             const editor = this._domCache.editor;
             const preview = this._domCache.previewContainer;
-            
+
             if (!editor || !preview) {
                 // If elements don't exist yet, retry with limit
                 if (!this._setupScrollSyncRetries) this._setupScrollSyncRetries = 0;
@@ -7350,10 +7670,10 @@ function noteApp() {
                 }
                 return;
             }
-            
+
             // Reset retry counter on success
             this._setupScrollSyncRetries = 0;
-            
+
             // Remove old listeners if they exist
             if (this._editorScrollHandler) {
                 editor.removeEventListener('scroll', this._editorScrollHandler);
@@ -7361,7 +7681,7 @@ function noteApp() {
             if (this._previewScrollHandler) {
                 preview.removeEventListener('scroll', this._previewScrollHandler);
             }
-            
+
             // Create new scroll handlers
             this._editorScrollHandler = () => {
                 if (this.isScrolling) {
@@ -7375,7 +7695,7 @@ function noteApp() {
 
                 const scrollableHeight = editor.scrollHeight - editor.clientHeight;
                 if (scrollableHeight <= 0) return; // No scrolling needed
-                
+
                 const scrollPercentage = editor.scrollTop / scrollableHeight;
                 const previewScrollableHeight = preview.scrollHeight - preview.clientHeight;
 
@@ -7392,7 +7712,7 @@ function noteApp() {
                     preview.scrollTop = scrollPercentage * previewScrollableHeight;
                 }
             };
-            
+
             this._previewScrollHandler = () => {
                 if (this.isScrolling) {
                     this.isScrolling = false;
@@ -7405,7 +7725,7 @@ function noteApp() {
 
                 const scrollableHeight = preview.scrollHeight - preview.clientHeight;
                 if (scrollableHeight <= 0) return; // No scrolling needed
-                
+
                 const scrollPercentage = preview.scrollTop / scrollableHeight;
                 const editorScrollableHeight = editor.scrollHeight - editor.clientHeight;
 
@@ -7426,7 +7746,7 @@ function noteApp() {
             editor.addEventListener('scroll', this._editorScrollHandler);
             preview.addEventListener('scroll', this._previewScrollHandler);
         },
-        
+
         // Check if stats plugin is enabled
         async checkStatsPlugin() {
             try {
@@ -7434,7 +7754,7 @@ function noteApp() {
                 const data = await response.json();
                 const statsPlugin = data.plugins.find(p => p.id === 'note_stats');
                 this.statsPluginEnabled = statsPlugin && statsPlugin.enabled;
-                
+
                 // Calculate stats for current note if enabled
                 if (this.statsPluginEnabled && this.noteContent) {
                     this.calculateStats();
@@ -7444,74 +7764,74 @@ function noteApp() {
                 this.statsPluginEnabled = false;
             }
         },
-        
+
         // Calculate note statistics (client-side)
         calculateStats() {
             if (!this.statsPluginEnabled || !this.noteContent) {
                 this.noteStats = null;
                 return;
             }
-            
+
             const content = this.noteContent;
-            
+
             // Word count
             const words = (content.match(/\S+/g) || []).length;
-            
+
             // Character count
             const chars = content.replace(/\s/g, '').length;
             const totalChars = content.length;
-            
+
             // Reading time (200 words per minute)
             const readingTime = Math.max(1, Math.round(words / 200));
-            
+
             // Line count
             const lines = content.split('\n').length;
-            
+
             // Paragraph count
             const paragraphs = content.split('\n\n').filter(p => p.trim()).length;
-            
+
             // Sentences: punctuation [.!?]+ followed by space or end-of-string
             const sentences = (content.match(/[.!?]+(?:\s|$)/g) || []).length;
-            
+
             // List items: lines starting with -, *, + or a number (e.g. 1., 10.), excluding tasks [-]
             const listItems = (content.match(/^\s*(?:[-*+]|\d+\.)\s+(?!\[)/gm) || []).length;
-            
+
             // Tables: markdown table separator rows (| --- | --- |)
             const tables = (content.match(/^\s*\|(?:\s*:?-+:?\s*\|){1,}\s*$/gm) || []).length;
-            
+
             // Link count (standard markdown links)
             const markdownLinkMatches = content.match(/\[([^\]]+)\]\(([^\)]+)\)/g) || [];
             const markdownLinks = markdownLinkMatches.length;
             const markdownInternalLinks = markdownLinkMatches.filter(l => l.includes('.md')).length;
-            
+
             // Wikilink count ([[note]] or [[note|display text]] format)
             const wikilinks = (content.match(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g) || []).length;
-            
+
             // Total links (markdown + wikilinks)
             const links = markdownLinks + wikilinks;
             const internalLinks = markdownInternalLinks + wikilinks; // All wikilinks are internal
-            
+
             // Code blocks
             const codeBlocks = (content.match(/```[\s\S]*?```/g) || []).length;
             const inlineCode = (content.match(/`[^`]+`/g) || []).length;
-            
+
             // Headings
             const h1 = (content.match(/^# /gm) || []).length;
             const h2 = (content.match(/^## /gm) || []).length;
             const h3 = (content.match(/^### /gm) || []).length;
-            
+
             // Tasks
             const totalTasks = (content.match(/- \[[ x]\]/gi) || []).length;
             const completedTasks = (content.match(/- \[x\]/gi) || []).length;
             const pendingTasks = totalTasks - completedTasks;
             const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-            
+
             // Images
             const images = (content.match(/!\[([^\]]*)\]\(([^\)]+)\)/g) || []).length;
-            
+
             // Blockquotes
             const blockquotes = (content.match(/^> /gm) || []).length;
-            
+
             this.noteStats = {
                 words,
                 sentences,
@@ -7544,7 +7864,7 @@ function noteApp() {
                 blockquotes
             };
         },
-        
+
         // Parse YAML frontmatter metadata from note content
         parseMetadata() {
             if (!this.noteContent) {
@@ -7552,16 +7872,16 @@ function noteApp() {
                 this._lastFrontmatter = null;
                 return;
             }
-            
+
             const content = this.noteContent;
-            
+
             // Check if content starts with frontmatter
             if (!content.trim().startsWith('---')) {
                 this.noteMetadata = null;
                 this._lastFrontmatter = null;
                 return;
             }
-            
+
             try {
                 const lines = content.split('\n');
                 if (lines[0].trim() !== '---') {
@@ -7569,7 +7889,7 @@ function noteApp() {
                     this._lastFrontmatter = null;
                     return;
                 }
-                
+
                 // Find closing ---
                 let endIdx = -1;
                 for (let i = 1; i < lines.length; i++) {
@@ -7578,35 +7898,35 @@ function noteApp() {
                         break;
                     }
                 }
-                
+
                 if (endIdx === -1) {
                     this.noteMetadata = null;
                     this._lastFrontmatter = null;
                     return;
                 }
-                
+
                 // Performance optimization: skip parsing if frontmatter unchanged
                 const frontmatterRaw = lines.slice(0, endIdx + 1).join('\n');
                 if (frontmatterRaw === this._lastFrontmatter) {
                     return; // No change, keep existing metadata
                 }
                 this._lastFrontmatter = frontmatterRaw;
-                
+
                 const frontmatterLines = lines.slice(1, endIdx);
                 const metadata = {};
                 let currentKey = null;
                 let currentValue = [];
-                
+
                 for (const line of frontmatterLines) {
                     // Check for new key: value pair (supports keys with hyphens/underscores)
                     const keyMatch = line.match(/^([a-zA-Z_][\w-]*):\s*(.*)$/);
-                    
+
                     if (keyMatch) {
                         // Save previous key if exists
                         if (currentKey) {
                             metadata[currentKey] = this.parseYamlValue(currentValue.join('\n'));
                         }
-                        
+
                         currentKey = keyMatch[1];
                         const value = keyMatch[2].trim();
                         currentValue = [value];
@@ -7618,33 +7938,33 @@ function noteApp() {
                         currentValue.push(line);
                     }
                 }
-                
+
                 // Save last key
                 if (currentKey) {
                     metadata[currentKey] = this.parseYamlValue(currentValue.join('\n'));
                 }
-                
+
                 this.noteMetadata = Object.keys(metadata).length > 0 ? metadata : null;
-                
+
             } catch (error) {
                 console.error('Failed to parse frontmatter:', error);
                 this.noteMetadata = null;
                 this._lastFrontmatter = null;
             }
         },
-        
+
         // Parse a YAML value (handles arrays, strings, numbers, booleans)
         parseYamlValue(value) {
             if (!value || value.trim() === '') return null;
-            
+
             value = value.trim();
-            
+
             // Check for inline array: [item1, item2]
             if (value.startsWith('[') && value.endsWith(']')) {
                 const inner = value.slice(1, -1);
                 return inner.split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(s => s);
             }
-            
+
             // Check for YAML list format (multiple lines starting with -)
             if (value.includes('\n  -') || value.startsWith('  -')) {
                 const items = [];
@@ -7657,40 +7977,40 @@ function noteApp() {
                 }
                 return items.length > 0 ? items : value;
             }
-            
+
             // Check for boolean
             if (value.toLowerCase() === 'true') return true;
             if (value.toLowerCase() === 'false') return false;
-            
+
             // Check for number
             if (/^-?\d+(\.\d+)?$/.test(value)) {
                 return parseFloat(value);
             }
-            
+
             // Return as string (remove quotes if present)
             return value.replace(/^["']|["']$/g, '');
         },
-        
+
         // Check if a string is a URL
         isUrl(str) {
             if (typeof str !== 'string') return false;
             return /^https?:\/\/\S+$/i.test(str.trim());
         },
-        
+
         // Escape HTML to prevent XSS
         escapeHtml(str) {
             const div = document.createElement('div');
             div.textContent = str;
             return div.innerHTML;
         },
-        
+
         // Format metadata value for display
         formatMetadataValue(key, value) {
             if (value === null || value === undefined) return '';
-            
+
             // Arrays are handled separately in the template
             if (Array.isArray(value)) return value;
-            
+
             // Format dates nicely
             if (key === 'date' || key === 'created' || key === 'modified' || key === 'updated') {
                 let date;
@@ -7702,67 +8022,67 @@ function noteApp() {
                     date = new Date(value);
                 }
                 if (!isNaN(date.getTime())) {
-                    return date.toLocaleDateString(this.currentLocale, { 
-                        year: 'numeric', 
-                        month: 'short', 
-                        day: 'numeric' 
+                    return date.toLocaleDateString(this.currentLocale, {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
                     });
                 }
             }
-            
+
             // Booleans
             if (typeof value === 'boolean') {
                 return value ? this.t('common.yes') : this.t('common.no');
             }
-            
+
             return String(value);
         },
-        
+
         // Format metadata value as HTML (for URL support)
         formatMetadataValueHtml(key, value) {
             const formatted = this.formatMetadataValue(key, value);
-            
+
             // Check if it's a URL
             if (this.isUrl(formatted)) {
                 const escaped = this.escapeHtml(formatted);
                 // Truncate long URLs for display
-                const displayUrl = formatted.length > 40 
-                    ? formatted.substring(0, 37) + '...' 
+                const displayUrl = formatted.length > 40
+                    ? formatted.substring(0, 37) + '...'
                     : formatted;
                 return `<a href="${escaped}" target="_blank" rel="noopener noreferrer" class="metadata-link">${this.escapeHtml(displayUrl)}</a>`;
             }
-            
+
             return this.escapeHtml(formatted);
         },
-        
+
         // Get priority metadata fields (shown in collapsed view)
         getPriorityMetadataFields() {
             if (!this.noteMetadata) return [];
-            
+
             // Fields to show in collapsed view, in order of priority
             const priority = ['date', 'created', 'author', 'status', 'priority', 'type', 'category'];
             const fields = [];
-            
+
             for (const key of priority) {
                 if (this.noteMetadata[key] !== undefined && !Array.isArray(this.noteMetadata[key])) {
                     const formatted = this.formatMetadataValue(key, this.noteMetadata[key]);
                     const isUrl = this.isUrl(formatted);
-                    fields.push({ 
-                        key, 
+                    fields.push({
+                        key,
                         value: formatted,
                         valueHtml: isUrl ? this.formatMetadataValueHtml(key, this.noteMetadata[key]) : this.escapeHtml(formatted),
                         isUrl
                     });
                 }
             }
-            
+
             return fields.slice(0, 3); // Show max 3 fields in collapsed view
         },
-        
+
         // Get all metadata fields except tags (for expanded view)
         getAllMetadataFields() {
             if (!this.noteMetadata) return [];
-            
+
             return Object.entries(this.noteMetadata)
                 .filter(([key]) => key !== 'tags') // Tags shown separately
                 .map(([key, value]) => {
@@ -7778,24 +8098,24 @@ function noteApp() {
                     };
                 });
         },
-        
+
         // Check if note has any displayable metadata
         getHasMetadata() {
             const has = this.noteMetadata && Object.keys(this.noteMetadata).length > 0;
             return has;
         },
-        
+
         // Get tags from metadata
         getMetadataTags() {
             if (!this.noteMetadata || !this.noteMetadata.tags) return [];
             return Array.isArray(this.noteMetadata.tags) ? this.noteMetadata.tags : [this.noteMetadata.tags];
         },
-        
+
         // Save sidebar width to localStorage
         saveSidebarWidth() {
             localStorage.setItem('sidebarWidth', this.sidebarWidth.toString());
         },
-        
+
         // Save view mode to localStorage
         saveViewMode() {
             try {
@@ -7804,7 +8124,7 @@ function noteApp() {
                 console.error('Error saving view mode:', error);
             }
         },
-        
+
         saveTagsExpanded() {
             try {
                 localStorage.setItem('tagsExpanded', this.tagsExpanded.toString());
@@ -7812,24 +8132,24 @@ function noteApp() {
                 console.error('Error saving tags expanded state:', error);
             }
         },
-        
+
         // Start resizing sidebar
         startResize(event) {
             this.isResizing = true;
             event.preventDefault();
-            
+
             const resize = (e) => {
                 if (!this.isResizing) return;
-                
+
                 // Calculate new width based on mouse position
                 const newWidth = e.clientX;
-                
+
                 // Clamp between min and max
                 if (newWidth >= 200 && newWidth <= 600) {
                     this.sidebarWidth = newWidth;
                 }
             };
-            
+
             const stopResize = () => {
                 if (this.isResizing) {
                     this.isResizing = false;
@@ -7838,31 +8158,31 @@ function noteApp() {
                     document.removeEventListener('mouseup', stopResize);
                 }
             };
-            
+
             document.addEventListener('mousemove', resize);
             document.addEventListener('mouseup', stopResize);
         },
-        
+
         // Start resizing split panes (editor/preview)
         startSplitResize(event) {
             this.isResizingSplit = true;
             event.preventDefault();
-            
+
             const container = event.target.parentElement;
-            
+
             const resize = (e) => {
                 if (!this.isResizingSplit) return;
-                
+
                 const containerRect = container.getBoundingClientRect();
                 const mouseX = e.clientX - containerRect.left;
                 const percentage = (mouseX / containerRect.width) * 100;
-                
+
                 // Clamp between 20% and 80%
                 if (percentage >= 20 && percentage <= 80) {
                     this.editorWidth = percentage;
                 }
             };
-            
+
             const stopResize = () => {
                 if (this.isResizingSplit) {
                     this.isResizingSplit = false;
@@ -7871,43 +8191,43 @@ function noteApp() {
                     document.removeEventListener('mouseup', stopResize);
                 }
             };
-            
+
             document.addEventListener('mousemove', resize);
             document.addEventListener('mouseup', stopResize);
         },
-        
+
         // Setup mobile view mode handler (auto-switch from split to edit on mobile)
         setupMobileViewMode() {
             const MOBILE_BREAKPOINT = 768; // Match CSS breakpoint
             let previousWidth = window.innerWidth;
-            
+
             const handleResize = () => {
                 const currentWidth = window.innerWidth;
                 const wasMobile = previousWidth <= MOBILE_BREAKPOINT;
                 const isMobile = currentWidth <= MOBILE_BREAKPOINT;
-                
+
                 // If switching from desktop to mobile and in split mode
                 if (!wasMobile && isMobile && this.viewMode === 'split') {
                     this.viewMode = 'edit';
                 }
-                
+
                 previousWidth = currentWidth;
             };
-            
+
             // Listen for window resize
             window.addEventListener('resize', handleResize);
-            
+
             // Check initial state
             if (window.innerWidth <= MOBILE_BREAKPOINT && this.viewMode === 'split') {
                 this.viewMode = 'edit';
             }
         },
-        
+
         // Save editor width to localStorage
         saveEditorWidth() {
             localStorage.setItem('editorWidth', this.editorWidth.toString());
         },
-        
+
         /**
          * Restore the saved scroll percentage for the current note in both panes. Called from
          * loadNote() (after the new content has been laid out) and from the viewMode watcher
@@ -7946,32 +8266,32 @@ function noteApp() {
         scrollToTop() {
             // Disable scroll sync temporarily to prevent interference
             this.isScrolling = true;
-            
+
             // Use cached references (refresh if not available)
             if (!this._domCache.editor || !this._domCache.previewContainer) {
                 this.refreshDOMCache();
             }
-            
+
             // Only scroll the visible panes based on viewMode
             if (this.viewMode === 'edit' || this.viewMode === 'split') {
                 if (this._domCache.editor) {
                     this._domCache.editor.scrollTop = 0;
                 }
             }
-            
+
             if (this.viewMode === 'preview' || this.viewMode === 'split') {
                 // Scroll the preview container (parent of .markdown-preview)
                 if (this._domCache.previewContainer) {
                     this._domCache.previewContainer.scrollTop = 0;
                 }
             }
-            
+
             // Re-enable scroll sync after a short delay
             setTimeout(() => {
                 this.isScrolling = false;
             }, CONFIG.SCROLL_SYNC_DELAY);
         },
-        
+
         // Export current note as raw Markdown (.md). Frontmatter preserved as-is.
         async exportToMarkdown() {
             if (!this.currentNote || !this.noteContent) {
@@ -8008,20 +8328,20 @@ function noteApp() {
                 this.toast(this.t('notes.no_content'), { type: 'info' });
                 return;
             }
-            
+
             try {
                 // Build API URL with current theme
                 const currentTheme = this.currentTheme || 'light';
                 const encodedPath = this.currentNote.split('/').map(s => encodeURIComponent(s)).join('/');
                 const url = `/api/export/${encodedPath}?theme=${encodeURIComponent(currentTheme)}`;
-                
+
                 // Fetch the exported HTML from backend
                 const response = await fetch(url);
                 if (!response.ok) {
                     const error = await response.json().catch(() => ({ detail: 'Export failed' }));
                     throw new Error(error.detail || 'Export failed');
                 }
-                
+
                 // Get filename from Content-Disposition header or use note name
                 let filename = (this.currentNoteName || 'note') + '.html';
                 const contentDisposition = response.headers.get('Content-Disposition');
@@ -8031,7 +8351,7 @@ function noteApp() {
                         filename = match[1];
                     }
                 }
-                
+
                 // Download as blob
                 const blob = await response.blob();
                 const blobUrl = URL.createObjectURL(blob);
@@ -8040,42 +8360,42 @@ function noteApp() {
                 a.download = filename;
                 document.body.appendChild(a);
                 a.click();
-                
+
                 // Cleanup
                 URL.revokeObjectURL(blobUrl);
                 document.body.removeChild(a);
-                
+
             } catch (error) {
                 console.error('HTML export failed:', error);
                 this.toast(this.t('export.failed', { error: error.message }), { type: 'error' });
             }
         },
-        
+
         // Open print preview in new window
         printPreview() {
             if (!this.currentNote || !this.noteContent) {
                 this.toast(this.t('notes.no_content'), { type: 'info' });
                 return;
             }
-            
+
             // Build API URL with current theme and download=false for inline display
             const currentTheme = this.currentTheme || 'light';
             const encodedPath = this.currentNote.split('/').map(s => encodeURIComponent(s)).join('/');
             const url = `/api/export/${encodedPath}?theme=${encodeURIComponent(currentTheme)}&download=false`;
-            
+
             // Open in new window/tab
             window.open(url, '_blank');
         },
-        
+
         // Copy current note link to clipboard
         async copyNoteLink() {
             if (!this.currentNote) return;
-            
+
             // Build the full URL
             const pathWithoutExtension = this.currentNote.replace('.md', '');
             const encodedPath = pathWithoutExtension.split('/').map(segment => encodeURIComponent(segment)).join('/');
             const url = `${window.location.origin}/${encodedPath}`;
-            
+
             try {
                 await navigator.clipboard.writeText(url);
             } catch (error) {
@@ -8087,18 +8407,18 @@ function noteApp() {
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
             }
-            
+
             // Show brief "Copied!" feedback
             this.linkCopied = true;
             setTimeout(() => {
                 this.linkCopied = false;
             }, 1500);
         },
-        
+
         // ============================================================================
         // Share Functions
         // ============================================================================
-        
+
         // Load list of shared note paths (for visual indicators and Shared sidebar panel)
         async loadSharedNotePaths() {
             try {
@@ -8131,16 +8451,16 @@ function noteApp() {
                 return { path, name, folder: folder || 'Root' };
             });
         },
-        
+
         // Check if a note is currently shared (O(1) lookup)
         isNoteShared(notePath) {
             return this._sharedNotePaths.has(notePath);
         },
-        
+
         // ============================================
         // Quick Switcher (Ctrl/Cmd+K)
         // ============================================
-        
+
         openQuickSwitcher() {
             const textarea = document.getElementById('note-editor');
             this.linkInsertCursorPos = (document.activeElement === textarea)
@@ -8160,7 +8480,7 @@ function noteApp() {
                 if (input) input.focus();
             });
         },
-        
+
         closeQuickSwitcher() {
             this.showQuickSwitcher = false;
             this.quickSwitcherQuery = '';
@@ -8180,7 +8500,7 @@ function noteApp() {
             textarea.focus();
             textarea.selectionStart = textarea.selectionEnd = pos + wikilink.length;
         },
-        
+
         // Filter notes for quick switcher based on query
         filterQuickSwitcher(query) {
             // Only include actual notes, not images; exclude system folders when setting is on
@@ -8200,11 +8520,11 @@ function noteApp() {
                 )
                 .slice(0, 10);
         },
-        
+
         // Handle keyboard navigation in quick switcher
         handleQuickSwitcherKeydown(e) {
             const results = this.quickSwitcherResults;
-            
+
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 this.quickSwitcherIndex = Math.min(this.quickSwitcherIndex + 1, results.length - 1);
@@ -8229,7 +8549,7 @@ function noteApp() {
                 this.closeQuickSwitcher();
             }
         },
-        
+
         // Scroll selected item into view in quick switcher
         scrollQuickSwitcherIntoView() {
             this.$nextTick(() => {
@@ -8239,13 +8559,13 @@ function noteApp() {
                 }
             });
         },
-        
+
         // Select note from quick switcher by click
         selectQuickSwitcherNote(note) {
             this.loadNote(note.path);
             this.closeQuickSwitcher();
         },
-        
+
         // Close share modal and reset state after animation
         closeShareModal() {
             this.showShareModal = false;
@@ -8256,7 +8576,7 @@ function noteApp() {
                 this.shareLoading = false;
             }, 200);
         },
-        
+
         // Generate QR code for share URL
         generateQRCode(url) {
             if (!url || typeof qrcode === 'undefined') return '';
@@ -8270,22 +8590,22 @@ function noteApp() {
                 return '';
             }
         },
-        
+
         // Open share modal and fetch current share status
         async openShareModal() {
             if (!this.currentNote) return;
-            
+
             // Reset state BEFORE showing modal to prevent flicker
             this.showShareQR = false;
             this.shareInfo = null;
             this.shareLoading = true;
             this.showShareModal = true;
-            
+
             try {
                 const notePath = this.currentNote.replace('.md', '');
                 const encodedPath = notePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
                 const response = await fetch(`/api/share/${encodedPath}`);
-                
+
                 if (response.ok) {
                     this.shareInfo = await response.json();
                 } else {
@@ -8298,13 +8618,13 @@ function noteApp() {
                 this.shareLoading = false;
             }
         },
-        
+
         // Create a share link for the current note (with current theme)
         async createShareLink() {
             if (!this.currentNote) return;
-            
+
             this.shareLoading = true;
-            
+
             try {
                 const notePath = this.currentNote.replace('.md', '');
                 const encodedPath = notePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
@@ -8313,7 +8633,7 @@ function noteApp() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ theme: this.currentTheme || 'light' })
                 });
-                
+
                 if (response.ok) {
                     this.shareInfo = await response.json();
                     this.shareInfo.shared = true;
@@ -8331,11 +8651,11 @@ function noteApp() {
                 this.shareLoading = false;
             }
         },
-        
+
         // Copy share link to clipboard
         async copyShareLink() {
             if (!this.shareInfo?.url) return;
-            
+
             try {
                 await navigator.clipboard.writeText(this.shareInfo.url);
             } catch (error) {
@@ -8347,33 +8667,33 @@ function noteApp() {
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
             }
-            
+
             this.shareLinkCopied = true;
             setTimeout(() => {
                 this.shareLinkCopied = false;
             }, 2000);
         },
-        
+
         // Revoke share link
         async revokeShareLink() {
             if (!this.currentNote) return;
-            
+
             const ok = await this.confirmModalAsk({
                 message: this.t('share.confirm_revoke'),
                 danger: false,
                 confirmLabel: this.t('common.yes'),
             });
             if (!ok) return;
-            
+
             this.shareLoading = true;
-            
+
             try {
                 const notePath = this.currentNote.replace('.md', '');
                 const encodedPath = notePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
                 const response = await fetch(`/api/share/${encodedPath}`, {
                     method: 'DELETE'
                 });
-                
+
                 if (response.ok) {
                     this.shareInfo = { shared: false };
                     // Update the shared paths set
@@ -8390,7 +8710,7 @@ function noteApp() {
                 this.shareLoading = false;
             }
         },
-        
+
         // Toggle Zen Mode (full immersive writing experience)
         async toggleZenMode() {
             if (!this.zenMode) {
@@ -8399,7 +8719,7 @@ function noteApp() {
                 this.viewMode = 'edit';
                 this.mobileSidebarOpen = false;
                 this.zenMode = true;
-                
+
                 // Request fullscreen
                 try {
                     const elem = document.documentElement;
@@ -8414,7 +8734,7 @@ function noteApp() {
                     // Fullscreen not supported or denied, continue anyway
                     console.log('Fullscreen not available:', e);
                 }
-                
+
                 // Focus editor after transition
                 setTimeout(() => {
                     const editor = document.getElementById('note-editor');
@@ -8424,7 +8744,7 @@ function noteApp() {
                 // Exiting Zen Mode
                 this.zenMode = false;
                 this.viewMode = this.previousViewMode;
-                
+
                 // Exit fullscreen
                 try {
                     if (document.exitFullscreen) {
@@ -8439,12 +8759,12 @@ function noteApp() {
                 }
             }
         },
-        
+
         // Homepage folder navigation methods
         goToHomepageFolder(folderPath) {
             this.showGraph = false; // Close graph when navigating
             this.selectedHomepageFolder = folderPath || '';
-            
+
             // Clear editor state to show landing page
             this.currentNote = '';
             this.currentNoteName = '';
@@ -8453,7 +8773,7 @@ function noteApp() {
             this.outline = [];
             this.backlinks = [];
             document.title = this.appName;
-            
+
             // Invalidate cache to force recalculation
             this._homepageCache = {
                 folderPath: null,
@@ -8461,10 +8781,10 @@ function noteApp() {
                 folders: null,
                 breadcrumb: null
             };
-            
+
             window.history.pushState({ homepageFolder: folderPath || '' }, '', '/');
         },
-        
+
         // Navigate to homepage root and clear all editor state
         goHome() {
             this.showGraph = false; // Close graph when going home
@@ -8477,12 +8797,12 @@ function noteApp() {
             this.backlinks = [];
             this.mobileSidebarOpen = false;
             document.title = this.appName;
-            
+
             // Clear undo/redo history
             this.undoHistory = [];
             this.redoHistory = [];
             this.hasPendingHistoryChanges = false;
-            
+
             // Invalidate cache to force recalculation
             this._homepageCache = {
                 folderPath: null,
@@ -8490,10 +8810,10 @@ function noteApp() {
                 folders: null,
                 breadcrumb: null
             };
-            
+
             window.history.pushState({ homepageFolder: '' }, '', '/');
         },
-        
+
         // Mobile files/home tab - context-aware behavior
         mobileFilesTabClick() {
             if (this.currentNote || this.currentMedia || this.showGraph) {
@@ -8505,9 +8825,9 @@ function noteApp() {
                 this.mobileSidebarOpen = !this.mobileSidebarOpen;
             }
         },
-        
+
         // ==================== GRAPH VIEW ====================
-        
+
         // Initialize the graph visualization
         async initGraph() {
             // Check if vis is loaded
@@ -8515,30 +8835,30 @@ function noteApp() {
                 console.error('vis-network library not loaded');
                 return;
             }
-            
+
             this.graphLoaded = false;
-            
+
             try {
                 // Fetch graph data from API
                 const response = await fetch('/api/graph');
                 if (!response.ok) throw new Error('Failed to fetch graph data');
                 const data = await response.json();
                 this.graphData = data;
-                
+
                 // Get container
                 const container = document.getElementById('graph-overlay');
                 if (!container) return;
-                
+
                 // Get theme colors (force reflow to ensure CSS is applied)
                 document.body.offsetHeight; // Force reflow
                 const style = getComputedStyle(document.documentElement);
-                
+
                 // Helper to get CSS variable with fallback
                 const getCssVar = (name, fallback) => {
                     const value = style.getPropertyValue(name).trim();
                     return value || fallback;
                 };
-                
+
                 const accentPrimary = getCssVar('--accent-primary', '#7c3aed');
                 const accentSecondary = getCssVar('--accent-secondary', '#a78bfa');
                 const textPrimary = getCssVar('--text-primary', '#111827');
@@ -8546,7 +8866,7 @@ function noteApp() {
                 const bgPrimary = getCssVar('--bg-primary', '#ffffff');
                 const bgSecondary = getCssVar('--bg-secondary', '#f3f4f6');
                 const borderColor = getCssVar('--border-primary', '#e5e7eb');
-                
+
                 // Prepare nodes with styling - all nodes same base color
                 const nodes = new vis.DataSet(data.nodes.map(n => ({
                     id: n.id,
@@ -8578,7 +8898,7 @@ function noteApp() {
                         }
                     }
                 })));
-                
+
                 // Prepare edges with styling based on type
                 const edges = new vis.DataSet(data.edges.map((e, i) => ({
                     id: i,
@@ -8602,7 +8922,7 @@ function noteApp() {
                         }
                     }
                 })));
-                
+
                 // Network options
                 const options = {
                     nodes: {
@@ -8659,31 +8979,31 @@ function noteApp() {
                         randomSeed: 42
                     }
                 };
-                
+
                 // Destroy existing instance if any
                 if (this.graphInstance) {
                     this.graphInstance.destroy();
                     this.graphInstance = null;
                 }
-                
+
                 // Clear container to ensure clean state
                 const graphCanvas = container.querySelector('canvas');
                 if (graphCanvas) graphCanvas.remove();
                 const visElements = container.querySelectorAll('.vis-network, .vis-navigation');
                 visElements.forEach(el => el.remove());
-                
+
                 // Create the network
                 this.graphInstance = new vis.Network(container, { nodes, edges }, options);
-                
+
                 // Store reference for callbacks
                 const graphRef = this.graphInstance;
                 const currentNoteRef = this.currentNote;
-                
+
                 // Wait for stabilization
                 this.graphInstance.once('stabilizationIterationsDone', () => {
                     graphRef.setOptions({ physics: { enabled: false } });
                     this.graphLoaded = true;
-                    
+
                     // Focus and select current note if one is loaded
                     if (currentNoteRef) {
                         setTimeout(() => {
@@ -8709,7 +9029,7 @@ function noteApp() {
                         }, 150);
                     }
                 });
-                
+
                 // Click event - open note
                 this.graphInstance.on('click', (params) => {
                     if (params.nodes.length > 0) {
@@ -8718,7 +9038,7 @@ function noteApp() {
                         // Node is already selected by vis-network on click, no need to call selectNodes
                     }
                 });
-                
+
                 // Double-click event - open note and close graph
                 this.graphInstance.on('doubleClick', (params) => {
                     if (params.nodes.length > 0) {
@@ -8728,13 +9048,13 @@ function noteApp() {
                         this.loadNote(noteId);
                     }
                 });
-                
+
                 // Hover event - highlight connections
                 this.graphInstance.on('hoverNode', (params) => {
                     const nodeId = params.node;
                     const connectedNodes = this.graphInstance.getConnectedNodes(nodeId);
                     const connectedEdges = this.graphInstance.getConnectedEdges(nodeId);
-                    
+
                     // Dim all nodes except hovered and connected
                     const allNodes = nodes.getIds();
                     const updates = allNodes.map(id => ({
@@ -8743,29 +9063,29 @@ function noteApp() {
                     }));
                     nodes.update(updates);
                 });
-                
+
                 this.graphInstance.on('blurNode', () => {
                     // Reset all nodes to full opacity
                     const allNodes = nodes.getIds();
                     const updates = allNodes.map(id => ({ id, opacity: 1 }));
                     nodes.update(updates);
                 });
-                
+
                 // Add legend to container
                 this.addGraphLegend(container, accentPrimary, borderColor, textSecondary);
-                
+
             } catch (error) {
                 console.error('Failed to initialize graph:', error);
                 this.graphLoaded = true; // Stop loading indicator
             }
         },
-        
+
         // Add legend to graph container
         addGraphLegend(container, wikiColor, mdColor, textColor) {
             // Remove existing legend if any
             const existingLegend = container.querySelector('.graph-legend');
             if (existingLegend) existingLegend.remove();
-            
+
             const legend = document.createElement('div');
             legend.className = 'graph-legend';
             legend.innerHTML = `
@@ -8783,7 +9103,7 @@ function noteApp() {
             `;
             container.appendChild(legend);
         },
-        
+
         // Refresh graph when theme changes
         refreshGraph() {
             if (this.viewMode === 'graph' && this.graphInstance) {

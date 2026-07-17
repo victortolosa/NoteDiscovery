@@ -9,19 +9,39 @@ NoteDiscovery supports environment variables to override configuration settings,
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `PORT` | integer | `8000` | HTTP port for the application (Docker, run.py) |
-| `NOTES_DIR` | path | `config.yaml` | Override the Markdown vault directory for isolated or deployment-specific runs |
 
 > **Note**: Advanced server settings (CORS origins, debug mode) are configured via `config.yaml` only, not via environment variables. See [config.yaml](#advanced-server-configuration) for details.
 
-#### Example: disposable development vault
+### Storage
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `NOTES_DIR` | string | `./data` | Path to the notes vault |
+| `PLUGINS_DIR` | string | `./plugins` | Path to the plugins directory |
+
+The resolved paths are logged at startup so you can confirm what's in use:
+
+```
+INFO:     Notes directory: /home/me/MyVault (from NOTES_DIR env var)
+INFO:     Plugins directory: ./plugins (from config.yaml)
+```
+
+#### Example: Pointing at an existing vault
+
+```bash
+# Local
+NOTES_DIR=/home/me/MyVault python run.py
+
+# Docker
+docker run -e NOTES_DIR=/vault -v /home/me/MyVault:/vault ...
+```
+
+For isolated development, use an explicit disposable path and do not point this
+variable at files you are not prepared to edit through NoteDiscovery:
 
 ```bash
 NOTES_DIR=/tmp/notediscovery-live-preview PORT=8002 python run.py
 ```
-
-The directory is created if it does not exist. Use an explicit disposable path;
-do not point this variable at files you are not prepared to edit through
-NoteDiscovery.
 
 ### Authentication
 

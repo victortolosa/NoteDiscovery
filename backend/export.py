@@ -8,6 +8,7 @@ replaced with placeholder HTML since they would make exports too large.
 """
 
 import base64
+import logging
 import re
 from pathlib import Path
 from typing import Optional, Tuple
@@ -15,6 +16,59 @@ import mimetypes
 
 # Import shared media type definitions and scanner from utils to avoid duplication
 from backend.utils import MEDIA_EXTENSIONS, get_media_type, scan_notes_fast_walk
+
+logger = logging.getLogger("uvicorn.error")
+
+
+# Regex used by parse_image_size_spec — see docstring below.
+_SIZE_RE = re.compile(r'^(\d+)(?:[xX](\d+))?$')
+
+
+def parse_image_size_spec(text: str, allow_solo: bool = False) -> Tuple[str, Optional[int], Optional[int]]:
+    """
+    Parse an Obsidian-style inline image size annotation.
+
+    Returns (clean_alt, width, height). width/height are None when unspecified.
+    A dimension of 0 is treated as "unset" (Obsidian convention: |0x200 means height only).
+
+    Rules:
+      "caption"              -> ("caption",     None, None)
+      "caption|100"          -> ("caption",     100,  None)
+      "caption|100x200"      -> ("caption",     100,  200)
+      "100"     (solo)       -> ("",            100,  None)   # only when allow_solo=True
+      "100x200" (solo)       -> ("",            100,  200)    # only when allow_solo=True
+
+    allow_solo=True is for wikilinks where `![[img|100]]` unambiguously means
+    "size 100" because there's no ambiguity with alt text. For standard markdown
+    `![100](x)` the default (allow_solo=False) leaves "100" as alt text.
+    """
+    if not text:
+        return "", None, None
+    trimmed = text.strip()
+    if allow_solo:
+        solo = _SIZE_RE.match(trimmed)
+        if solo:
+            w = int(solo.group(1))
+            h = int(solo.group(2)) if solo.group(2) is not None else None
+            return (
+                "",
+                w if w > 0 else None,
+                h if (h is not None and h > 0) else None,
+            )
+    idx = trimmed.rfind('|')
+    if idx == -1:
+        return trimmed, None, None
+    size = trimmed[idx + 1:].strip()
+    m = _SIZE_RE.match(size)
+    if not m:
+        return trimmed, None, None
+    w = int(m.group(1))
+    h = int(m.group(2)) if m.group(2) is not None else None
+    return (
+        trimmed[:idx].strip(),
+        w if w > 0 else None,
+        h if (h is not None and h > 0) else None,
+    )
 
 
 def get_media_as_base64(media_path: Path) -> Optional[Tuple[str, str]]:
@@ -41,7 +95,7 @@ def get_media_as_base64(media_path: Path) -> Optional[Tuple[str, str]]:
         base64_data = base64.b64encode(media_data).decode('utf-8')
         return (f"data:{mime_type};base64,{base64_data}", media_type)
     except Exception as e:
-        print(f"Failed to read media {media_path}: {e}")
+        logger.error("Failed to read media %s: %s", media_path, e)
         return None
 
 
@@ -165,16 +219,24 @@ def process_media_for_export(markdown_content: str, note_folder: Path, notes_dir
     """
     
     # First, handle wikilink media: ![[file.png]] or ![[file.mp3|alt text]]
+    # Also supports Obsidian-style inline sizing:
+    #   ![[img.jpg|100]]           -> width 100
+    #   ![[img.jpg|100x200]]       -> width 100, height 200
+    #   ![[img.jpg|caption|100]]   -> alt "caption", width 100
     wikilink_pattern = r'!\[\[([^\]|]+)(?:\|([^\]]+))?\]\]'
     
     def replace_wikilink_media(match):
         media_name = match.group(1).strip()
-        alt_text = match.group(2).strip() if match.group(2) else media_name.split('/')[-1].rsplit('.', 1)[0]
+        raw_alt = match.group(2).strip() if match.group(2) else ''
+        # Wikilink alt-group: solo `|<digits>` is a size, no ambiguity.
+        clean_alt, width, height = parse_image_size_spec(raw_alt, allow_solo=True)
+        alt_text = clean_alt if clean_alt else media_name.split('/')[-1].rsplit('.', 1)[0]
         
         # Check media type first
         media_type = get_media_type(media_name)
         
-        # For non-image media (audio, video, PDF), show placeholder without embedding
+        # For non-image media (audio, video, PDF), show placeholder without embedding.
+        # Size specs are silently dropped — they only make sense for images.
         if media_type in ('audio', 'video', 'document'):
             return generate_media_placeholder(media_type, alt_text)
         
@@ -184,6 +246,27 @@ def process_media_for_export(markdown_content: str, note_folder: Path, notes_dir
         if resolved_path:
             base64_url = get_image_as_base64(resolved_path)
             if base64_url:
+                # If a size was specified, emit raw <img> HTML directly so the
+                # dimensions survive the markdown round-trip. Marked.js passes
+                # raw HTML through and DOMPurify allows width/height on <img>.
+                # Without size, keep emitting standard markdown for consistency.
+                if width or height:
+                    safe_alt = alt_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+                    # Emit width/height as BOTH attributes and inline style; the
+                    # style beats stylesheet rules that otherwise force
+                    # `height: auto` (e.g. Tailwind Preflight in the app; harmless
+                    # in the standalone export).
+                    size_attrs = ''
+                    style_pieces = []
+                    if width:
+                        size_attrs += f' width="{width}"'
+                        style_pieces.append(f'width:{width}px')
+                    if height:
+                        size_attrs += f' height="{height}"'
+                        style_pieces.append(f'height:{height}px')
+                    if style_pieces:
+                        size_attrs += f' style="{";".join(style_pieces)}"'
+                    return f'<img src="{base64_url}" alt="{safe_alt}" title="{safe_alt}"{size_attrs}>'
                 return f'![{alt_text}]({base64_url})'
         
         # Image not found
@@ -281,19 +364,26 @@ def convert_wikilinks_to_html(markdown_content: str) -> str:
     """
     Convert wikilinks [[note]] or [[note|display text]] to HTML links.
     In standalone export mode, these are non-functional decorative links.
+    Wikilinks inside fenced or inline code are left literal, mirroring the
+    in-app preview pipeline.
     """
-    # Pattern for wikilinks: [[target]] or [[target|display text]]
-    # But NOT image wikilinks (those start with !)
     wikilink_pattern = r'(?<!!)\[\[([^\]|]+)(?:\|([^\]]+))?\]\]'
-    
+
     def replace_wikilink(match):
         target = match.group(1).strip()
         display = match.group(2).strip() if match.group(2) else target
-        
-        # Create a decorative link (href="#" since it's standalone)
         return f'<a href="#" class="wikilink" title="{target}" style="color: var(--accent-primary, #0366d6); text-decoration: none; border-bottom: 1px dashed currentColor;">{display}</a>'
-    
-    return re.sub(wikilink_pattern, replace_wikilink, markdown_content)
+
+    code_blocks: list = []
+
+    def stash(match):
+        code_blocks.append(match.group(0))
+        return f"\x00CODEBLOCK{len(code_blocks) - 1}\x00"
+
+    protected = re.sub(r'```[\s\S]*?```', stash, markdown_content)
+    protected = re.sub(r'`[^`]+`', stash, protected)
+    converted = re.sub(wikilink_pattern, replace_wikilink, protected)
+    return re.sub(r'\x00CODEBLOCK(\d+)\x00', lambda m: code_blocks[int(m.group(1))], converted)
 
 
 def generate_export_html(
@@ -527,7 +617,35 @@ def generate_export_html(
             border-left: 4px solid var(--accent-primary, #0366d6);
             color: var(--text-secondary, #6a737d);
         }}
-        
+
+        /* Callouts — mirror the in-app preview. */
+        .markdown-preview .callout {{
+            margin: 1rem 0;
+            padding: 0.75rem 1rem;
+            border-left: 4px solid var(--callout-color, var(--accent-primary, #0366d6));
+            border-radius: 0.375rem;
+            background: var(--callout-bg, var(--bg-secondary, #f6f8fa));
+        }}
+        .markdown-preview .callout-title {{
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            color: var(--callout-color, var(--accent-primary, #0366d6));
+            margin-bottom: 0.25rem;
+        }}
+        .markdown-preview .callout-icon {{
+            font-size: 1.1em;
+            line-height: 1;
+        }}
+        .markdown-preview .callout-body > :first-child {{ margin-top: 0; }}
+        .markdown-preview .callout-body > :last-child  {{ margin-bottom: 0; }}
+        .markdown-preview .callout-note      {{ --callout-color: #0969da; --callout-bg: rgba(9, 105, 218, 0.08); }}
+        .markdown-preview .callout-tip       {{ --callout-color: #1a7f37; --callout-bg: rgba(26, 127, 55, 0.08); }}
+        .markdown-preview .callout-important {{ --callout-color: #8250df; --callout-bg: rgba(130, 80, 223, 0.08); }}
+        .markdown-preview .callout-warning   {{ --callout-color: #9a6700; --callout-bg: rgba(154, 103, 0, 0.08); }}
+        .markdown-preview .callout-caution   {{ --callout-color: #d1242f; --callout-bg: rgba(209, 36, 47, 0.08); }}
+
         .markdown-preview ul,
         .markdown-preview ol {{
             padding-left: 2em;
@@ -568,6 +686,10 @@ def generate_export_html(
         /* Task list styling */
         .markdown-preview input[type="checkbox"] {{
             margin-right: 0.5em;
+        }}
+        .markdown-preview li:has(> input[type="checkbox"]) {{
+            list-style: none;
+            margin-left: -1.25em;
         }}
         
         /* Enhanced Shell/Bash Syntax Highlighting */
@@ -766,12 +888,114 @@ def generate_export_html(
 
         // Raw markdown content
         const markdown = `{escaped_content}`;
-        
+
+        // GFM/GLFM callouts. Runs BEFORE code-block extraction so fences
+        // nested in a callout blockquote lose their `> ` prefix on the closer
+        // — otherwise the restored block sits inside <div class="callout-body">
+        // without a valid CommonMark fence closer and runs unclosed.
+        // Fence-aware so literal `> [!TIP]` inside a top-level code block
+        // is not misread. Mirrors the in-app preview preprocessor.
+        let processed;
+        {{
+            const CALLOUT_RE = /^>\\s*\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\]\\s*(.*)$/i;
+            const CALLOUT_ICONS = {{ note: 'ℹ️', tip: '💡', important: '❗', warning: '⚠️', caution: '🛑' }};
+            const CALLOUT_TITLES = {{ note: 'Note', tip: 'Tip', important: 'Important', warning: 'Warning', caution: 'Caution' }};
+            const FENCE_OPEN_RE = /^\\s{{0,3}}(`{{3,}}|~{{3,}})/;
+            const escapeAttr = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            const srcLines = markdown.split('\\n');
+            const outLines = [];
+            let li = 0;
+            let fenceChar = null;
+            let fenceLen = 0;
+            while (li < srcLines.length) {{
+                const line = srcLines[li];
+                if (fenceChar) {{
+                    outLines.push(line);
+                    const closeRe = new RegExp('^\\\\s{{0,3}}' + (fenceChar === '`' ? '`' : '~') + '{{' + fenceLen + ',}}\\\\s*$');
+                    if (closeRe.test(line)) {{ fenceChar = null; fenceLen = 0; }}
+                    li++;
+                    continue;
+                }}
+                const fenceOpen = line.match(FENCE_OPEN_RE);
+                if (fenceOpen) {{
+                    fenceChar = fenceOpen[1][0];
+                    fenceLen = fenceOpen[1].length;
+                    outLines.push(line);
+                    li++;
+                    continue;
+                }}
+                const m = line.match(CALLOUT_RE);
+                if (!m) {{ outLines.push(line); li++; continue; }}
+                const type = m[1].toLowerCase();
+                const title = escapeAttr((m[2] || '').trim() || CALLOUT_TITLES[type]);
+                const icon = CALLOUT_ICONS[type];
+                const bodyLines = [];
+                li++;
+                while (li < srcLines.length && srcLines[li].startsWith('>')) {{
+                    bodyLines.push(srcLines[li].replace(/^>\\s?/, ''));
+                    li++;
+                }}
+                outLines.push(
+                    '',
+                    '<div class="callout callout-' + type + '">',
+                    '<div class="callout-title"><span class="callout-icon" aria-hidden="true">' + icon + '</span><span class="callout-title-text">' + title + '</span></div>',
+                    '<div class="callout-body">',
+                    '',
+                    bodyLines.join('\\n'),
+                    '',
+                    '</div>',
+                    '</div>',
+                    ''
+                );
+            }}
+            processed = outLines.join('\\n');
+
+            // Escape same-line block-starters after a task marker so they
+            // render as literal text. Matches Obsidian. Issue #247.
+            processed = processed.replace(
+                /^(\\s*[-*+]\\s+\\[[xX ]\\]\\s+)(\\d+)\\.(\\s)/gm,
+                '$1$2\\\\.$3'
+            );
+            processed = processed.replace(
+                /^(\\s*[-*+]\\s+\\[[xX ]\\]\\s+)([#>*+\\-])(\\s)/gm,
+                '$1\\\\$2$3'
+            );
+        }}
+
         // Render markdown with XSS sanitization
         // DOMPurify strips scripts, iframes, and event handlers while allowing safe HTML/SVG
-        const rawHtml = marked.parse(markdown);
+        const rawHtml = marked.parse(processed);
         const safeHtml = DOMPurify.sanitize(rawHtml);
         document.getElementById('content').innerHTML = safeHtml;
+
+        // Apply Obsidian-style inline image sizing to images whose alt text
+        // carries a `|<w>` or `|<w>x<h>` suffix. Wikilink images with a size
+        // were already emitted with width/height attributes server-side; this
+        // walker handles the standard-markdown case `![alt|100](x)`. Mirrors
+        // parseImageSizeSpec() in frontend/app.js (allowSolo=false here, since
+        // standard markdown `![100](x)` should stay as alt="100").
+        document.querySelectorAll('.markdown-preview img').forEach(img => {{
+            const rawAlt = img.getAttribute('alt') || '';
+            const idx = rawAlt.lastIndexOf('|');
+            if (idx === -1) return;
+            const size = rawAlt.slice(idx + 1).trim();
+            const m = size.match(/^(\\d+)(?:[xX](\\d+))?$/);
+            if (!m) return;
+            const w = parseInt(m[1], 10);
+            const h = m[2] !== undefined ? parseInt(m[2], 10) : null;
+            if (w > 0 && !img.hasAttribute('width')) {{
+                img.setAttribute('width', String(w));
+                img.style.width = w + 'px';
+            }}
+            if (h !== null && h > 0 && !img.hasAttribute('height')) {{
+                img.setAttribute('height', String(h));
+                img.style.height = h + 'px';
+            }}
+            const cleanAlt = rawAlt.slice(0, idx).trim();
+            img.setAttribute('alt', cleanAlt);
+            if (img.getAttribute('title') === rawAlt) img.setAttribute('title', cleanAlt);
+        }});
         
         // Typeset math after content is inserted
         if (typeof MathJax !== 'undefined' && MathJax.typeset) {{
