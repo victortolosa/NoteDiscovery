@@ -63,6 +63,10 @@ const LOCAL_SETTINGS = {
         valid: ['chooser', 'note', 'folder', 'template', 'drawing']
     },
     lastUsedTemplate: { key: 'lastUsedTemplate', type: 'string', default: '' },
+    editorMode: {
+        key: 'editorMode', type: 'string', default: 'classic',
+        valid: ['classic', 'live-preview']
+    },
     // Number settings with validation
     sidebarWidth: { key: 'sidebarWidth', type: 'number', default: CONFIG.DEFAULT_SIDEBAR_WIDTH, min: 200, max: 600 },
     editorWidth: { key: 'editorWidth', type: 'number', default: 50, min: 20, max: 80 },
@@ -279,6 +283,11 @@ function noteApp() {
         currentNote: '',
         currentNoteName: '',
         noteContent: '',
+        editorMode: 'classic',
+        livePreviewLoading: false,
+        livePreviewError: '',
+        _livePreviewEditor: null,
+        _livePreviewModulePromise: null,
         viewMode: 'split', // 'edit', 'split', 'preview'
         searchQuery: '',
         
@@ -861,9 +870,16 @@ function noteApp() {
                     });
                 });
             });
+
+            this.$watch('editorMode', () => {
+                this.syncEditorSurface();
+            });
             
             // Watch for changes in note content to re-apply search highlights
-            this.$watch('noteContent', () => {
+            this.$watch('noteContent', (newContent) => {
+                if (this._livePreviewEditor) {
+                    this._livePreviewEditor.setContent(newContent);
+                }
                 if (this.currentSearchHighlight) {
                     // Re-apply highlights after content changes (with small delay for render)
                     this.$nextTick(() => {
@@ -873,6 +889,10 @@ function noteApp() {
                         }, 50);
                     });
                 }
+            });
+
+            this.$nextTick(() => {
+                this.syncEditorSurface();
             });
             
             // Watch tags panel expanded state and save to localStorage
@@ -944,6 +964,9 @@ function noteApp() {
                     
                     // Ctrl/Cmd + Z for undo (drawing vs note editor)
                     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+                        if (this.editorMode === 'live-preview' && document.activeElement?.closest('.cm-editor')) {
+                            return;
+                        }
                         if (this.currentMedia && this.currentMediaType === 'drawing') {
                             e.preventDefault();
                             this.drawingUndo();
@@ -955,6 +978,9 @@ function noteApp() {
                     
                     // Ctrl/Cmd + Y OR Ctrl/Cmd+Shift+Z for redo
                     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+                        if (this.editorMode === 'live-preview' && document.activeElement?.closest('.cm-editor')) {
+                            return;
+                        }
                         if (this.currentMedia && this.currentMediaType === 'drawing') {
                             e.preventDefault();
                             this.drawingRedo();
@@ -964,6 +990,9 @@ function noteApp() {
                         }
                     }
                     if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+                        if (this.editorMode === 'live-preview' && document.activeElement?.closest('.cm-editor')) {
+                            return;
+                        }
                         if (this.currentMedia && this.currentMediaType === 'drawing') {
                             e.preventDefault();
                             this.drawingRedo();
@@ -1167,6 +1196,62 @@ function noteApp() {
             
             // Special case: favorites also needs to update the Set for O(1) lookups
             this.favoritesSet = new Set(this.favorites);
+        },
+
+        async setEditorMode(mode) {
+            if (!['classic', 'live-preview'].includes(mode)) return;
+
+            if (this._livePreviewEditor) {
+                this.noteContent = this._livePreviewEditor.getContent();
+            }
+
+            this.editorMode = mode;
+            localStorage.setItem('editorMode', mode);
+            await this.syncEditorSurface();
+        },
+
+        async syncEditorSurface() {
+            if (this.editorMode !== 'live-preview') {
+                if (this._livePreviewEditor) {
+                    this.noteContent = this._livePreviewEditor.getContent();
+                    this._livePreviewEditor.destroy();
+                    this._livePreviewEditor = null;
+                }
+                this.livePreviewError = '';
+                return;
+            }
+
+            await this.$nextTick();
+            const parent = document.getElementById('live-preview-editor');
+            if (!parent || this._livePreviewEditor || this.livePreviewLoading) return;
+
+            this.livePreviewLoading = true;
+            this.livePreviewError = '';
+
+            try {
+                if (!this._livePreviewModulePromise) {
+                    this._livePreviewModulePromise = import('/static/dist/live-preview.js');
+                }
+                const { createLivePreviewEditor } = await this._livePreviewModulePromise;
+
+                // The mode may have changed while the editor bundle was loading.
+                if (this.editorMode !== 'live-preview') return;
+
+                this._livePreviewEditor = createLivePreviewEditor({
+                    parent,
+                    content: this.noteContent,
+                    onChange: (content) => {
+                        this.noteContent = content;
+                        this.autoSave();
+                    },
+                });
+            } catch (error) {
+                this._livePreviewModulePromise = null;
+                this.livePreviewError = 'Live Preview failed to load. Run npm run build:live-preview.';
+                ErrorHandler.handle('load Live Preview editor', error, false);
+            } finally {
+                this.livePreviewLoading = false;
+            }
         },
         
         // Readable line length toggle (for preview max-width)
@@ -8694,4 +8779,3 @@ function noteApp() {
         }
     }
 }
-

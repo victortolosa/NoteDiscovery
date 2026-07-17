@@ -1,0 +1,131 @@
+import { EditorState } from '@codemirror/state';
+import {
+    drawSelection,
+    EditorView,
+    highlightActiveLine,
+    keymap,
+    lineNumbers,
+} from '@codemirror/view';
+import {
+    defaultKeymap,
+    history,
+    historyKeymap,
+} from '@codemirror/commands';
+
+/**
+ * Create the experimental CodeMirror editor behind a small application adapter.
+ * Code outside this module should not manipulate EditorView directly.
+ */
+export function createLivePreviewEditor({ parent, content = '', onChange = () => {} }) {
+    if (!(parent instanceof HTMLElement)) {
+        throw new Error('Live Preview requires a valid parent element.');
+    }
+
+    let applyingExternalContent = false;
+
+    const view = new EditorView({
+        parent,
+        state: EditorState.create({
+            doc: content,
+            extensions: [
+                lineNumbers(),
+                history(),
+                drawSelection(),
+                highlightActiveLine(),
+                EditorView.lineWrapping,
+                keymap.of([...defaultKeymap, ...historyKeymap]),
+                EditorView.updateListener.of((update) => {
+                    if (update.docChanged && !applyingExternalContent) {
+                        onChange(update.state.doc.toString());
+                    }
+                }),
+                EditorView.theme({
+                    '&': {
+                        height: '100%',
+                        backgroundColor: 'var(--bg-primary)',
+                        color: 'var(--text-primary)',
+                    },
+                    '.cm-scroller': {
+                        fontFamily: 'inherit',
+                        fontSize: 'calc(1rem * var(--font-scale, 1))',
+                        lineHeight: '1.6',
+                        overflow: 'auto',
+                    },
+                    '.cm-content': {
+                        caretColor: 'var(--text-primary)',
+                        padding: '1rem',
+                    },
+                    '.cm-gutters': {
+                        backgroundColor: 'var(--bg-secondary)',
+                        borderColor: 'var(--border-primary)',
+                        color: 'var(--text-tertiary)',
+                    },
+                    '.cm-activeLine, .cm-activeLineGutter': {
+                        backgroundColor: 'var(--bg-tertiary)',
+                    },
+                    '&.cm-focused': {
+                        outline: 'none',
+                    },
+                    '&.cm-focused .cm-selectionBackground, ::selection': {
+                        backgroundColor: 'var(--accent-light)',
+                    },
+                }),
+            ],
+        }),
+    });
+
+    return {
+        destroy() {
+            view.destroy();
+        },
+
+        getContent() {
+            return view.state.doc.toString();
+        },
+
+        setContent(markdown) {
+            const nextContent = String(markdown ?? '');
+            if (nextContent === view.state.doc.toString()) return;
+
+            applyingExternalContent = true;
+            try {
+                view.dispatch({
+                    changes: {
+                        from: 0,
+                        to: view.state.doc.length,
+                        insert: nextContent,
+                    },
+                });
+            } finally {
+                applyingExternalContent = false;
+            }
+        },
+
+        focus() {
+            view.focus();
+        },
+
+        getSelection() {
+            const { from, to } = view.state.selection.main;
+            return { from, to };
+        },
+
+        setSelection(from, to = from) {
+            view.dispatch({
+                selection: { anchor: from, head: to },
+                scrollIntoView: true,
+            });
+        },
+
+        getScrollPosition() {
+            return {
+                top: view.scrollDOM.scrollTop,
+                left: view.scrollDOM.scrollLeft,
+            };
+        },
+
+        setScrollPosition({ top = 0, left = 0 } = {}) {
+            view.scrollDOM.scrollTo({ top, left });
+        },
+    };
+}

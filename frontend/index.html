@@ -774,6 +774,31 @@
             overflow-y: scroll; /* Always show scrollbar for consistent text width */
             overflow-x: auto;
         }
+
+        .live-preview-editor {
+            flex: 1;
+            width: 100%;
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .live-preview-editor .cm-editor {
+            width: 100%;
+            height: 100%;
+        }
+
+        .live-preview-status {
+            padding: 1rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .live-preview-status-error {
+            color: var(--error);
+        }
         
         /* Syntax Highlighting Overlay */
         .editor-wrapper {
@@ -2492,6 +2517,22 @@
                                 
                                 <!-- Syntax Highlighting Toggle -->
                                 <div class="mb-4">
+                                    <label for="editor-mode-setting" class="block text-xs font-medium mb-2" style="color: var(--text-secondary);">Editor mode</label>
+                                    <select
+                                        id="editor-mode-setting"
+                                        x-model="editorMode"
+                                        @change="setEditorMode(editorMode)"
+                                        class="w-full px-2 py-2 text-sm rounded focus:outline-none focus:ring-2 focus:ring-opacity-50"
+                                        style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary); cursor: pointer;"
+                                    >
+                                        <option value="classic">Classic</option>
+                                        <option value="live-preview">Live Preview (Experimental)</option>
+                                    </select>
+                                    <p class="text-xs mt-1" style="color: var(--text-tertiary);">Live Preview is an incomplete development prototype.</p>
+                                </div>
+
+                                <!-- Syntax Highlighting Toggle -->
+                                <div class="mb-4">
                                     <label class="flex items-center justify-between gap-3 cursor-pointer">
                                         <span class="text-xs font-medium flex-1 min-w-0" style="color: var(--text-secondary);" x-text="t('syntax_highlight.title')"></span>
                                         <div 
@@ -3501,7 +3542,7 @@
                             :style="(viewMode === 'split' ? `width: ${editorWidth}%;` : 'width: 100%;') + '; display: ' + ((viewMode === 'edit' || viewMode === 'split') ? 'flex' : 'none') + ';'"
                         >
                             <!-- Markdown Formatting Toolbar -->
-                            <div class="flex items-center gap-1 px-2 py-1.5 border-b flex-shrink-0" style="background-color: var(--bg-secondary); border-color: var(--border-primary);">
+                            <div x-show="editorMode === 'classic'" class="flex items-center gap-1 px-2 py-1.5 border-b flex-shrink-0" style="background-color: var(--bg-secondary); border-color: var(--border-primary);">
                                 <button @click="formatText('bold')" class="format-btn" :title="t('format.bold') + ' (Ctrl+B)'">
                                     <span class="font-bold">B</span>
                                 </button>
@@ -3584,11 +3625,12 @@
                                 <div
                                     id="syntax-overlay"
                                     class="syntax-overlay"
-                                    x-show="syntaxHighlightEnabled"
-                                    x-html="syntaxHighlightEnabled ? highlightMarkdown(noteContent) : ''"
+                                    x-show="editorMode === 'classic' && syntaxHighlightEnabled"
+                                    x-html="editorMode === 'classic' && syntaxHighlightEnabled ? highlightMarkdown(noteContent) : ''"
                                 ></div>
                                 <textarea
                                     id="note-editor"
+                                    x-show="editorMode === 'classic'"
                                     x-model="noteContent"
                                     @input="autoSave(); updateSyntaxHighlight()"
                                     @scroll="syncOverlayScroll()"
@@ -3603,6 +3645,21 @@
                                     :style="'background-color: var(--bg-primary); color: var(--text-primary);' + (draggedItem && dropTarget === 'editor' ? ' outline: 2px dashed var(--accent-primary); outline-offset: -2px; box-shadow: 0 0 20px var(--accent-light);' : '')"
                                     :placeholder="draggedItem && dropTarget === 'editor' ? t('editor.drop_hint') : t('editor.placeholder')"
                                 ></textarea>
+                                <div
+                                    id="live-preview-editor"
+                                    x-show="editorMode === 'live-preview' && !livePreviewError"
+                                    class="live-preview-editor"
+                                    aria-label="Live Preview Markdown editor"
+                                ></div>
+                                <div
+                                    x-show="editorMode === 'live-preview' && livePreviewLoading"
+                                    class="live-preview-status"
+                                >Loading Live Preview…</div>
+                                <div
+                                    x-show="editorMode === 'live-preview' && livePreviewError"
+                                    class="live-preview-status live-preview-status-error"
+                                    x-text="livePreviewError"
+                                ></div>
                             </div>
                         </div>
                         
@@ -4729,4 +4786,3 @@
     </div>
 </body>
 </html>
-

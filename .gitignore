@@ -49,6 +49,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Generated frontend assets and Node dependencies
+node_modules/
+frontend/dist/
+
 # Environment
 .env
 

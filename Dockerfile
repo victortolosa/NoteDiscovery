@@ -3,15 +3,17 @@ FROM node:20-alpine AS minifier
 
 WORKDIR /build
 
-# Install minification tools (esbuild for JS, html-minifier-terser for HTML)
-RUN npm install -g esbuild html-minifier-terser
+# Install the locked frontend dependencies and the HTML minifier.
+COPY package.json package-lock.json ./
+RUN npm ci && npm install -g html-minifier-terser
 
 # Copy frontend files
 COPY frontend/ ./frontend/
 
-# Minify JavaScript (esbuild is ~100x faster than terser)
-RUN esbuild frontend/app.js --minify --outfile=frontend/app.js --allow-overwrite && \
-    esbuild frontend/sw.js --minify --outfile=frontend/sw.js --allow-overwrite
+# Build the experimental editor, then minify the standalone application files.
+RUN npm run build:live-preview:minify && \
+    ./node_modules/.bin/esbuild frontend/app.js --minify --outfile=frontend/app.js --allow-overwrite && \
+    ./node_modules/.bin/esbuild frontend/sw.js --minify --outfile=frontend/sw.js --allow-overwrite
 
 # Minify HTML files (handles inline CSS and JS too)
 RUN html-minifier-terser \
