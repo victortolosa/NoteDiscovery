@@ -5,8 +5,19 @@ import {
     StateField,
     Transaction,
 } from '@codemirror/state';
+import { javascript } from '@codemirror/lang-javascript';
+import { json } from '@codemirror/lang-json';
 import { markdown } from '@codemirror/lang-markdown';
-import { Table, TaskList } from '@lezer/markdown';
+import { python } from '@codemirror/lang-python';
+import {
+    HighlightStyle,
+    LanguageDescription,
+    StreamLanguage,
+    syntaxHighlighting,
+} from '@codemirror/language';
+import { shell } from '@codemirror/legacy-modes/mode/shell';
+import { tags } from '@lezer/highlight';
+import { Autolink, Strikethrough, Table, TaskList } from '@lezer/markdown';
 import {
     drawSelection,
     Decoration,
@@ -22,6 +33,49 @@ import {
 import { livePreviewDecorations } from './live-preview-decorations.js';
 
 const setSearch = StateEffect.define();
+
+const codeLanguages = [
+    LanguageDescription.of({
+        name: 'JavaScript',
+        alias: ['js', 'jsx'],
+        extensions: ['js', 'mjs', 'cjs', 'jsx'],
+        support: javascript({ jsx: true }),
+    }),
+    LanguageDescription.of({
+        name: 'TypeScript',
+        alias: ['ts', 'tsx'],
+        extensions: ['ts', 'tsx'],
+        support: javascript({ jsx: true, typescript: true }),
+    }),
+    LanguageDescription.of({
+        name: 'Python',
+        alias: ['py'],
+        extensions: ['py'],
+        support: python(),
+    }),
+    LanguageDescription.of({
+        name: 'JSON',
+        alias: ['jsonc'],
+        extensions: ['json', 'jsonc'],
+        support: json(),
+    }),
+    LanguageDescription.of({
+        name: 'Shell',
+        alias: ['bash', 'sh', 'zsh', 'shell'],
+        extensions: ['sh', 'bash', 'zsh'],
+        support: StreamLanguage.define(shell),
+    }),
+];
+
+const codeHighlightStyle = HighlightStyle.define([
+    { tag: tags.keyword, color: 'color-mix(in srgb, var(--accent-primary) 45%, var(--text-primary))', fontWeight: '600' },
+    { tag: [tags.string, tags.special(tags.string)], color: 'color-mix(in srgb, var(--success-color, #2e8b57) 50%, var(--text-primary))' },
+    { tag: [tags.number, tags.bool, tags.null], color: 'color-mix(in srgb, var(--warning-color, #b7791f) 55%, var(--text-primary))' },
+    { tag: [tags.comment, tags.lineComment, tags.blockComment], color: 'var(--text-secondary)', fontStyle: 'italic' },
+    { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: 'color-mix(in srgb, var(--accent-primary) 45%, var(--text-primary))' },
+    { tag: [tags.typeName, tags.className], color: 'color-mix(in srgb, var(--accent-primary) 35%, var(--text-primary))' },
+    { tag: [tags.operator, tags.punctuation], color: 'var(--text-secondary)' },
+]);
 
 const buildSearchState = (doc, query, requestedIndex = 0) => {
     const searchQuery = String(query ?? '').trim();
@@ -101,7 +155,11 @@ export function createLivePreviewEditor({
             doc,
             extensions: [
                 history(),
-                markdown({ extensions: [Table, TaskList] }),
+                markdown({
+                    codeLanguages,
+                    extensions: [Table, TaskList, Strikethrough, Autolink],
+                }),
+                syntaxHighlighting(codeHighlightStyle),
                 decorationsCompartment.of(livePreviewDecorations(editorLabels)),
                 searchField,
                 drawSelection(),
@@ -152,7 +210,7 @@ export function createLivePreviewEditor({
                         borderLeftColor: 'var(--text-primary)',
                     },
                     '.cm-activeLine': {
-                        backgroundColor: 'var(--bg-tertiary)',
+                        backgroundColor: 'color-mix(in srgb, var(--bg-tertiary) 55%, transparent)',
                     },
                     '.cm-live-heading': {
                         fontWeight: '700',
@@ -179,6 +237,9 @@ export function createLivePreviewEditor({
                     '.cm-live-emphasis': {
                         fontStyle: 'italic',
                     },
+                    '.cm-live-strikethrough': {
+                        textDecoration: 'line-through',
+                    },
                     '.cm-live-inline-code': {
                         padding: '0.08em 0.25em',
                         border: '1px solid var(--border-primary)',
@@ -189,13 +250,17 @@ export function createLivePreviewEditor({
                         fontSize: '0.9em',
                     },
                     '.cm-live-link': {
-                        color: 'var(--accent-primary)',
+                        color: 'color-mix(in srgb, var(--accent-primary) 45%, var(--text-primary))',
                         textDecoration: 'underline',
                         textUnderlineOffset: '0.15em',
                     },
                     '.cm-live-list-mark': {
                         color: 'var(--accent-primary)',
                         fontWeight: '700',
+                    },
+                    '.cm-live-list-line': {
+                        paddingLeft: 'var(--cm-live-list-hang, 1em)',
+                        textIndent: 'var(--cm-live-list-hang-negative, -1em)',
                     },
                     '.cm-live-checkbox': {
                         width: '1em',
@@ -208,6 +273,34 @@ export function createLivePreviewEditor({
                     '.cm-live-task-complete': {
                         color: 'var(--text-tertiary)',
                         textDecoration: 'line-through',
+                    },
+                    '.cm-live-blockquote-line': {
+                        color: 'var(--text-secondary)',
+                        borderLeft: '3px solid var(--accent-primary)',
+                        paddingLeft: '0.75em',
+                    },
+                    '.cm-live-code-line': {
+                        backgroundColor: 'var(--bg-tertiary)',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    },
+                    '.cm-live-code-first-line': {
+                        borderTopLeftRadius: '0.3rem',
+                        borderTopRightRadius: '0.3rem',
+                    },
+                    '.cm-live-code-last-line': {
+                        borderBottomLeftRadius: '0.3rem',
+                        borderBottomRightRadius: '0.3rem',
+                    },
+                    '.cm-live-hidden-line': {
+                        display: 'none',
+                    },
+                    '.cm-live-horizontal-rule': {
+                        display: 'inline-block',
+                        width: '100%',
+                        height: '1px',
+                        margin: '0.8em 0',
+                        backgroundColor: 'var(--border-primary)',
+                        verticalAlign: 'middle',
                     },
                     '.cm-live-preview-only-line': {
                         backgroundColor: 'var(--bg-tertiary)',
@@ -228,8 +321,12 @@ export function createLivePreviewEditor({
                     '&.cm-focused': {
                         outline: 'none',
                     },
-                    '&.cm-focused .cm-selectionBackground, ::selection': {
-                        backgroundColor: 'var(--accent-light)',
+                    '&.cm-focused .cm-selectionBackground': {
+                        backgroundColor: 'color-mix(in srgb, var(--accent-primary) 70%, var(--text-primary)) !important',
+                    },
+                    '.cm-content .cm-line.cm-line::selection, .cm-content .cm-line.cm-line *::selection': {
+                        backgroundColor: 'color-mix(in srgb, var(--accent-primary) 70%, var(--text-primary)) !important',
+                        color: 'var(--bg-primary) !important',
                     },
                 }),
             ],
@@ -243,7 +340,7 @@ export function createLivePreviewEditor({
             selection: { from: selection.from, to: selection.to },
             ...options,
         });
-        if (!result?.changed) return false;
+        if (!result?.changed) return Boolean(result?.handled);
         targetView.dispatch({
             changes: result.change,
             selection: {

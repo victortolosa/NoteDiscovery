@@ -1498,7 +1498,10 @@ function noteApp() {
                 event.shiftKey,
                 true
             );
-            if (!result.changed) return;
+            if (!result.changed) {
+                if (result.handled) event.preventDefault();
+                return;
+            }
             event.preventDefault();
             this.applyEditorCommand(result);
         },

@@ -243,6 +243,61 @@ parity work during the MVP.
 
 ## Session log
 
+### 2026-07-17: expanded Markdown styling
+
+#### Objective
+
+Extend the conservative Live Preview presentation without replacing the full
+Preview renderer.
+
+#### Completed
+
+- Added strikethrough and bare-URL parsing.
+- Styled Setext headings, blockquotes, and horizontal rules while keeping their
+  source visible on the active line.
+- Added fenced-code presentation and language-aware highlighting for
+  JavaScript, TypeScript, Python, JSON, and shell blocks.
+- Kept tables, images, HTML, Mermaid, and math on the preview-only cue path.
+
+#### Verification
+
+- Frontend contract tests and minified bundle build passed.
+- Disposable-vault browser checks passed in a dark theme for inactive and
+  active syntax, link contrast, block styling, and nested code highlighting.
+
+### 2026-07-17: structural list indentation
+
+#### Completed
+
+- Made Tab indent bullet, numbered, and task-list markers from anywhere on the
+  item line instead of inserting whitespace after the marker.
+- Made Shift+Tab outdent nested items and remain in the editor when a list item
+  is already at the top level.
+- Made empty nested items outdent one level before a second Enter exits the
+  list.
+- Made new task-list continuations unchecked, including after completed tasks.
+- Made bullet, numbered, and task toolbar actions convert whole lines and
+  toggle matching list formatting off.
+- Added hanging indentation for wrapped Live Preview list items.
+- Included each item's nesting indentation in its hanging indent so wrapped
+  child text remains aligned with that child's first-line content.
+- Added a theme-aware selection foreground and stronger selection background
+  so highlighted rendered text and visible Markdown source remain legible.
+
+#### Verification
+
+- Added focused command coverage for list nesting, task continuation, nested
+  empty-item exit, list conversion, and list toggling.
+- Dark, light, and 390 px disposable-vault browser checks passed without
+  horizontal overflow or source loss.
+- Nested bullet, task, and numbered wrapping remained aligned through three
+  levels in desktop and 390 px browser checks.
+- Styled prose and raw Markdown selections passed dark- and light-theme visual
+  checks with explicit foreground and background contrast.
+- The lazy minified bundle is approximately 565 KB uncompressed and 199 KB
+  gzip-compressed, about 60 KB larger than the previous Markdown bundle due to
+  the curated embedded-code parsers.
+
 ### 2026-07-17: preview-only syntax cues
 
 #### Objective

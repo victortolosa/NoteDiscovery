@@ -53,11 +53,10 @@
         if (taskMatch) {
             const inner = taskMatch[1];
             const ch = taskMatch[2];
-            const mark = taskMatch[3];
             const cont = taskMatch[4];
-            const marker = ch + ' [' + mark + '] ';
+            const marker = ch + ' [ ] ';
             const isEmpty = cont.trim() === '';
-            return { continuePrefix: quoteFull + inner + marker, isEmpty };
+            return { continuePrefix: quoteFull + inner + marker, inner, marker, quoteFull, isEmpty };
         }
 
         const bulletMatch = rest.match(/^(\s*)([-*+])\s+(.*)$/);
@@ -67,7 +66,7 @@
             const cont = bulletMatch[3];
             const marker = ch + ' ';
             const isEmpty = cont.trim() === '';
-            return { continuePrefix: quoteFull + inner + marker, isEmpty };
+            return { continuePrefix: quoteFull + inner + marker, inner, marker, quoteFull, isEmpty };
         }
 
         const orderedMatch = rest.match(/^(\s*)(\d+)([.)])\s+(.*)$/);
@@ -78,7 +77,7 @@
             const cont = orderedMatch[4];
             const marker = (num + 1) + sep + ' ';
             const isEmpty = cont.trim() === '';
-            return { continuePrefix: quoteFull + inner + marker, isEmpty };
+            return { continuePrefix: quoteFull + inner + marker, inner, marker, quoteFull, isEmpty };
         }
 
         if (quoteFull) {
@@ -113,6 +112,12 @@
         if (!ctx) return { handled: false };
 
         if (ctx.isEmpty) {
+            if (ctx.inner) {
+                const outdented = ctx.inner.replace(/^(\t| {1,4})/, '');
+                const insert = ctx.quoteFull + outdented + ctx.marker;
+                const newText = text.slice(0, lineStart) + insert + text.slice(lineEnd);
+                return { handled: true, text: newText, cursor: lineStart + insert.length };
+            }
             let delEnd = lineEnd;
             if (delEnd < text.length && text.charAt(delEnd) === '\n') {
                 delEnd += 1;

@@ -6,10 +6,11 @@ import {
     WidgetType,
 } from '@codemirror/view';
 
-const headingPattern = /^ATXHeading([1-6])$/;
+const headingPattern = /^(?:ATX|Setext)Heading([1-6])$/;
 
 const strongDecoration = Decoration.mark({ class: 'cm-live-strong' });
 const emphasisDecoration = Decoration.mark({ class: 'cm-live-emphasis' });
+const strikethroughDecoration = Decoration.mark({ class: 'cm-live-strikethrough' });
 const inlineCodeDecoration = Decoration.mark({ class: 'cm-live-inline-code' });
 const linkDecoration = Decoration.mark({ class: 'cm-live-link' });
 const listMarkDecoration = Decoration.mark({ class: 'cm-live-list-mark' });
@@ -17,14 +18,21 @@ const completedTaskDecoration = Decoration.mark({ class: 'cm-live-task-complete'
 const previewOnlyLineDecoration = Decoration.line({ class: 'cm-live-preview-only-line' });
 const previewOnlyInlineDecoration = Decoration.mark({ class: 'cm-live-preview-only-inline' });
 const hiddenSyntaxDecoration = Decoration.replace({});
+const hiddenLineDecoration = Decoration.line({ class: 'cm-live-hidden-line' });
 
 const previewOnlyBlockNames = new Set([
-    'Blockquote',
-    'FencedCode',
-    'HorizontalRule',
     'HTMLBlock',
     'Table',
 ]);
+
+class HorizontalRuleWidget extends WidgetType {
+    toDOM() {
+        const rule = document.createElement('span');
+        rule.className = 'cm-live-horizontal-rule';
+        rule.setAttribute('role', 'separator');
+        return rule;
+    }
+}
 
 class CheckboxWidget extends WidgetType {
     constructor(from, checked, labels) {
@@ -158,6 +166,30 @@ function buildDecorations(view, labels, sourceRanges = []) {
     const previewOnlyBlocks = new Set();
     const previewOnlyLineStarts = new Set();
     const previewOnlyCoveredRanges = [...sourceRanges];
+    const decoratedLines = new Set();
+    const decoratedListLines = new Set();
+    const addLineClass = (lineFrom, className) => {
+        const key = `${lineFrom}:${className}`;
+        if (decoratedLines.has(key)) return;
+        decoratedLines.add(key);
+        decorations.push(Decoration.line({ class: className }).range(lineFrom));
+    };
+    const addListLine = (line, markerClass, markerWidth) => {
+        if (decoratedListLines.has(line.from)) return;
+        decoratedListLines.add(line.from);
+        const leadingWhitespace = /^\s*/.exec(line.text)?.[0] || '';
+        let indentation = 0;
+        for (const character of leadingWhitespace) {
+            indentation += character === '\t' ? 1 : 0.25;
+        }
+        const hangingIndent = indentation + markerWidth;
+        decorations.push(Decoration.line({
+            class: `cm-live-list-line ${markerClass}`.trim(),
+            attributes: {
+                style: `--cm-live-list-hang: ${hangingIndent}em; --cm-live-list-hang-negative: -${hangingIndent}em`,
+            },
+        }).range(line.from));
+    };
     const addPreviewOnlyBlock = (from, to) => {
         const firstLine = view.state.doc.lineAt(from);
         const lastLine = view.state.doc.lineAt(Math.max(from, to - 1));
@@ -215,6 +247,37 @@ function buildDecorations(view, labels, sourceRanges = []) {
                     return;
                 }
 
+                if (node.name === 'Blockquote') {
+                    const firstLine = view.state.doc.lineAt(node.from).number;
+                    const lastLine = view.state.doc.lineAt(Math.max(node.from, node.to - 1)).number;
+                    for (let lineNumber = firstLine; lineNumber <= lastLine; lineNumber++) {
+                        addLineClass(view.state.doc.line(lineNumber).from, 'cm-live-blockquote-line');
+                    }
+                    return;
+                }
+
+                if (node.name === 'FencedCode') {
+                    const firstLine = view.state.doc.lineAt(node.from).number;
+                    const lastLine = view.state.doc.lineAt(Math.max(node.from, node.to - 1)).number;
+                    for (let lineNumber = firstLine; lineNumber <= lastLine; lineNumber++) {
+                        const line = view.state.doc.line(lineNumber);
+                        addLineClass(line.from, 'cm-live-code-line');
+                        if (lineNumber === firstLine) addLineClass(line.from, 'cm-live-code-first-line');
+                        if (lineNumber === lastLine) addLineClass(line.from, 'cm-live-code-last-line');
+                    }
+                    return;
+                }
+
+                if (node.name === 'HorizontalRule') {
+                    if (isActiveRange(node.from, node.to, contexts)) return;
+                    const range = Decoration.replace({
+                        widget: new HorizontalRuleWidget(),
+                    }).range(node.from, node.to);
+                    decorations.push(range);
+                    atomicRanges.push(range);
+                    return;
+                }
+
                 if (node.name === 'StrongEmphasis') {
                     decorations.push(strongDecoration.range(node.from, node.to));
                     return;
@@ -222,6 +285,11 @@ function buildDecorations(view, labels, sourceRanges = []) {
 
                 if (node.name === 'Emphasis') {
                     decorations.push(emphasisDecoration.range(node.from, node.to));
+                    return;
+                }
+
+                if (node.name === 'Strikethrough') {
+                    decorations.push(strikethroughDecoration.range(node.from, node.to));
                     return;
                 }
 
@@ -236,8 +304,17 @@ function buildDecorations(view, labels, sourceRanges = []) {
                 }
 
                 if (node.name === 'ListMark') {
+                    const line = view.state.doc.lineAt(node.from);
                     const listItem = node.node.parent;
                     const task = listItem?.getChild('Task');
+                    const marker = view.state.sliceDoc(node.from, node.to);
+                    if (task) {
+                        addListLine(line, 'cm-live-task-line', 1.6);
+                    } else if (/^\d/.test(marker)) {
+                        addListLine(line, 'cm-live-ordered-line', 1.3);
+                    } else {
+                        addListLine(line, '', 1);
+                    }
                     if (task && !isActiveRange(task.from, task.to, contexts)) {
                         addHiddenRange(node.from, node.to);
                     } else {
@@ -303,7 +380,21 @@ function buildDecorations(view, labels, sourceRanges = []) {
                     return;
                 }
 
-                if (!['HeaderMark', 'EmphasisMark', 'CodeMark'].includes(node.name)) return;
+                if (node.name === 'URL' && ![
+                    'Link',
+                    'Autolink',
+                ].includes(node.node.parent?.name)) {
+                    decorations.push(linkDecoration.range(node.from, node.to));
+                    return;
+                }
+
+                if (![
+                    'HeaderMark',
+                    'EmphasisMark',
+                    'StrikethroughMark',
+                    'CodeMark',
+                    'QuoteMark',
+                ].includes(node.name)) return;
 
                 const parent = node.node.parent;
                 if (node.name === 'CodeMark' && parent?.name !== 'InlineCode') return;
@@ -312,6 +403,9 @@ function buildDecorations(view, labels, sourceRanges = []) {
                 if (isActiveRange(activeFrom, activeTo, contexts)) return;
 
                 const range = syntaxRange(node, view.state);
+                if (node.name === 'HeaderMark' && parent?.name.startsWith('SetextHeading')) {
+                    decorations.push(hiddenLineDecoration.range(view.state.doc.lineAt(node.from).from));
+                }
                 const hiddenRange = hiddenSyntaxDecoration.range(range.from, range.to);
                 decorations.push(hiddenRange);
                 atomicRanges.push(hiddenRange);

@@ -23,11 +23,17 @@ Choose the editor under Settings → Editor mode.
 - Classic is the default editor and supports Edit, Split, and Preview views.
 - Live Preview is an experimental, opt-in CodeMirror editor with Edit and
   Preview views. Split remains Classic-only.
-- Live Preview styles headings, emphasis, inline code, lists, links, and task
-  checkboxes while preserving plain Markdown as the stored source.
+- Live Preview styles ATX and Setext headings, emphasis, strikethrough, inline
+  code, lists, links, bare URLs, task checkboxes, blockquotes, and horizontal
+  rules while preserving plain Markdown as the stored source.
+- Fenced JavaScript, TypeScript, Python, JSON, and shell code uses
+  language-aware syntax highlighting.
 - Formatting toolbar actions, keyboard shortcuts, list continuation, task
   toggling, autosave, undo and redo, search highlighting, and external-file
   conflict handling are integrated with Live Preview.
+- List controls operate on complete lines: Tab and Shift+Tab change nesting,
+  empty nested items outdent before exiting, and the bullet, numbered, and task
+  toolbar actions convert or remove existing list markers.
 - Markdown that receives additional rendering in Preview remains editable
   source with a subtle background, left rail, or dotted inline cue.
 - Switch back to Classic at any time. The editor preference is stored locally.
@@ -57,8 +63,8 @@ extended Markdown.
 - **Rename anything** - Files and folders, instantly
 - **Visual tree view** - Expandable/collapsible navigation
 - **Hide system folders** - Toggle to hide `_attachments`, `_templates` and other underscore-prefixed folders from sidebar
-- **Tab inserts tab** - Toggle so Tab inserts a literal tab in the editor instead of changing focus; when this is on, Shift+Tab outdents (one leading tab or up to four leading spaces per line in the selection), and if nothing is removed, Shift+Tab still moves focus backward
-- **List & quote continuation (Enter)** - At the end of a line, Enter continues blockquotes (`>`), bullets (`-` / `*` / `+`), ordered lists (`1.` / `1)`), and task lists (`- [ ]` / `- [x]`); pressing Enter again on an empty continued line exits the list or quote. Disabled inside fenced code blocks and when using Shift+Enter (plain newline)
+- **Tab inserts tab** - Toggle so Tab indents list items from anywhere on the line or inserts a literal tab in ordinary text. Shift+Tab outdents list items and selected lines without moving focus out of a top-level list item.
+- **List & quote continuation (Enter)** - At the end of a line, Enter continues blockquotes (`>`), bullets (`-` / `*` / `+`), ordered lists (`1.` / `1)`), and task lists. New tasks start unchecked. Enter on an empty nested item outdents one level; Enter on an empty top-level item exits the list or quote. Disabled inside fenced code blocks and when using Shift+Enter (plain newline).
 
 ### Export & Print
 - **HTML Export** - Download notes as standalone HTML files with all styling, images, diagrams, and math embedded

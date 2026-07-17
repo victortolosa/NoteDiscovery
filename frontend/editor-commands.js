@@ -61,6 +61,58 @@
         return replacement(text, from, to, insert, selected ? from + leadingNewline.length : selectedFrom, selectedTo);
     }
 
+    function listFormat(text, selection, type) {
+        const { from, to } = normalizeSelection(text, selection);
+        const blockStart = text.lastIndexOf('\n', Math.max(0, from - 1)) + 1;
+        const effectiveTo = to > from && text[to - 1] === '\n' ? to - 1 : to;
+        let blockEnd = text.indexOf('\n', effectiveTo);
+        if (blockEnd === -1) blockEnd = text.length;
+        const source = text.slice(blockStart, blockEnd);
+        const lines = source.split('\n');
+        const parsed = lines.map((line) => {
+            const match = /^(\s*)([-*+]|\d+[.)])\s+(?:\[([ xX])\]\s+)?(.*)$/.exec(line);
+            if (!match) return null;
+            const marker = match[2];
+            return {
+                indentation: match[1],
+                type: match[3] !== undefined
+                    ? 'checkbox'
+                    : (/^\d/.test(marker) ? 'numbered' : 'bullet'),
+                content: match[4],
+            };
+        });
+        const nonblank = lines.map((line, index) => ({ line, index }))
+            .filter(({ line }) => line.trim());
+        const remove = nonblank.length > 0
+            && nonblank.every(({ index }) => parsed[index]?.type === type);
+        let number = 1;
+        const output = lines.map((line, index) => {
+            if (!line.trim()) return line;
+            const item = parsed[index];
+            const indentation = item?.indentation ?? (/^\s*/.exec(line)?.[0] || '');
+            const content = item?.content ?? line.slice(indentation.length);
+            if (remove) return indentation + content;
+            if (type === 'numbered') return `${indentation}${number++}. ${content}`;
+            if (type === 'checkbox') return `${indentation}- [ ] ${content}`;
+            return `${indentation}- ${content}`;
+        });
+
+        if (!source && from === to) {
+            const prefixes = { bullet: '- ', numbered: '1. ', checkbox: '- [ ] ' };
+            const placeholders = { bullet: 'item', numbered: 'item', checkbox: 'task' };
+            const prefix = prefixes[type];
+            const value = placeholders[type];
+            return replacement(text, blockStart, blockEnd, prefix + value, blockStart + prefix.length, blockStart + prefix.length + value.length);
+        }
+
+        const insert = output.join('\n');
+        const offset = insert.length - source.length;
+        const cursor = remove
+            ? Math.max(blockStart, from + offset)
+            : Math.min(blockStart + insert.length, from + Math.max(0, offset));
+        return replacement(text, blockStart, blockEnd, insert, cursor, to > from ? blockStart + insert.length : cursor);
+    }
+
     function link(text, selection) {
         const { from, to } = normalizeSelection(text, selection);
         const label = text.slice(from, to) || 'link text';
@@ -172,6 +224,30 @@
     function indent(text, selection, shiftKey, enabled) {
         if (!enabled) return { changed: false };
         const { from, to } = normalizeSelection(text, selection);
+        if (from === to) {
+            const lineStart = text.lastIndexOf('\n', Math.max(0, from - 1)) + 1;
+            let lineEnd = text.indexOf('\n', from);
+            if (lineEnd === -1) lineEnd = text.length;
+            const line = text.slice(lineStart, lineEnd);
+            const listItem = /^(\s*)(?:[-*+]|\d+[.)])\s+/.exec(line);
+
+            if (listItem) {
+                if (!shiftKey) {
+                    return replacement(text, lineStart, lineStart, '\t', from + 1);
+                }
+
+                const indentation = /^(\t| {1,4})/.exec(line);
+                if (!indentation) return { changed: false, handled: true };
+                const removed = indentation[0].length;
+                return replacement(
+                    text,
+                    lineStart,
+                    lineStart + removed,
+                    '',
+                    Math.max(lineStart, from - removed)
+                );
+            }
+        }
         if (!shiftKey) {
             if (to > from && text.slice(from, to).includes('\n')) {
                 const blockStart = text.lastIndexOf('\n', Math.max(0, from - 1)) + 1;
@@ -252,9 +328,9 @@
         if (wraps[type]) return wrap(text, selection, ...wraps[type]);
         if (type === 'heading') return linePrefix(text, selection, '## ', 'Heading');
         if (type === 'quote') return linePrefix(text, selection, '> ', 'quote');
-        if (type === 'bullet') return linePrefix(text, selection, '- ', 'item');
-        if (type === 'numbered') return linePrefix(text, selection, '1. ', 'item');
-        if (type === 'checkbox') return linePrefix(text, selection, '- [ ] ', 'task');
+        if (['bullet', 'numbered', 'checkbox'].includes(type)) {
+            return listFormat(text, selection, type);
+        }
         if (type === 'link') return link(text, selection);
         if (type === 'table') return table(text, selection);
         if (type === 'prettify-table') return prettifyTable(text, selection);
@@ -265,6 +341,7 @@
         format,
         fromFullText,
         indent,
+        listFormat,
         linePrefix,
         link,
         normalizeSelection,

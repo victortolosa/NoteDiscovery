@@ -80,17 +80,31 @@ test('the Live Preview cursor uses the active theme text color', async () => {
     assert.match(source, /borderLeftColor: 'var\(--text-primary\)'/);
 });
 
-test('preview-only Markdown uses non-document decorations', async () => {
+test('Live Preview selections contrast with styled and source text', async () => {
+    const source = await readFile(new URL('frontend/src/live-preview.js', root), 'utf8');
+    assert.match(source, /'\.cm-content \.cm-line\.cm-line::selection/);
+    assert.match(source, /color: 'var\(--bg-primary\) !important'/);
+    assert.match(source, /var\(--accent-primary\) 70%/);
+});
+
+test('Live Preview Markdown features use non-document decorations', async () => {
     const editor = await readFile(new URL('frontend/src/live-preview.js', root), 'utf8');
     const decorations = await readFile(
         new URL('frontend/src/live-preview-decorations.js', root),
         'utf8'
     );
-    assert.match(editor, /markdown\(\{ extensions: \[Table, TaskList\] \}\)/);
+    assert.match(editor, /extensions: \[Table, TaskList, Strikethrough, Autolink\]/);
+    assert.match(editor, /codeLanguages,/);
+    assert.match(editor, /syntaxHighlighting\(codeHighlightStyle\)/);
     assert.match(decorations, /class: 'cm-live-preview-only-line'/);
     assert.match(decorations, /class: 'cm-live-preview-only-inline'/);
     assert.doesNotMatch(decorations, /PreviewOnlyBadge/);
-    assert.match(decorations, /'Blockquote'/);
-    assert.match(decorations, /'FencedCode'/);
     assert.match(decorations, /'Table'/);
+    assert.match(decorations, /node\.name === 'Blockquote'/);
+    assert.match(decorations, /node\.name === 'FencedCode'/);
+    assert.match(decorations, /node\.name === 'HorizontalRule'/);
+    assert.match(decorations, /node\.name === 'Strikethrough'/);
+    assert.match(decorations, /\(\?:ATX\|Setext\)Heading/);
+    assert.match(decorations, /--cm-live-list-hang:/);
+    assert.match(editor, /paddingLeft: 'var\(--cm-live-list-hang, 1em\)'/);
 });

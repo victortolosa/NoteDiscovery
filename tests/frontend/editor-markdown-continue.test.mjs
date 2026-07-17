@@ -26,7 +26,7 @@ test('continues common Markdown block prefixes', () => {
     });
     assert.equal(atEnd('4. item').text, '4. item\n5. ');
     assert.equal(atEnd('> quoted').text, '> quoted\n> ');
-    assert.equal(atEnd('- [x] done').text, '- [x] done\n- [x] ');
+    assert.equal(atEnd('- [x] done').text, '- [x] done\n- [ ] ');
 });
 
 test('exits an empty list item', () => {
@@ -34,6 +34,19 @@ test('exits an empty list item', () => {
         handled: true,
         text: 'before\n',
         cursor: 7,
+    });
+});
+
+test('an empty nested item outdents before exiting the list', () => {
+    assert.deepEqual(atEnd('- parent\n\t- '), {
+        handled: true,
+        text: '- parent\n- ',
+        cursor: 11,
+    });
+    assert.deepEqual(atEnd('- parent\n    - '), {
+        handled: true,
+        text: '- parent\n- ',
+        cursor: 11,
     });
 });
 

@@ -23,6 +23,22 @@ test('line formats support multiline numbered and task lists', () => {
     assert.equal(commands.format('', { from: 0, to: 0 }, 'checkbox').text, '- [ ] task');
 });
 
+test('list toolbar formats convert and toggle complete lines', () => {
+    const bullet = commands.format('first\nsecond', { from: 0, to: 12 }, 'bullet');
+    assert.equal(bullet.text, '- first\n- second');
+    assert.equal(commands.format(bullet.text, { from: 0, to: bullet.text.length }, 'bullet').text, 'first\nsecond');
+
+    assert.equal(
+        commands.format('* first\n2. second', { from: 0, to: 17 }, 'checkbox').text,
+        '- [ ] first\n- [ ] second'
+    );
+    assert.equal(commands.format('- existing', { from: 5, to: 5 }, 'bullet').text, 'existing');
+    assert.equal(
+        commands.format('first\nsecond\nthird', { from: 0, to: 13 }, 'bullet').text,
+        '- first\n- second\nthird'
+    );
+});
+
 test('table insertion and prettification are editor-independent', () => {
     const inserted = commands.format('intro', { from: 5, to: 5 }, 'table');
     assert.match(inserted.text, /^intro\n\n\| Header 1/);
@@ -37,6 +53,27 @@ test('Tab indents selections and Shift-Tab reverses them', () => {
     const outdented = commands.indent(indented.text, indented.selection, true, true);
     assert.equal(outdented.text, 'one\ntwo');
     assert.deepEqual(commands.indent('text', { from: 0, to: 0 }, false, false), { changed: false });
+});
+
+test('Tab and Shift-Tab change list nesting from anywhere in an item', () => {
+    const bullet = commands.indent('- child', { from: 7, to: 7 }, false, true);
+    assert.equal(bullet.text, '\t- child');
+    assert.deepEqual(bullet.selection, { from: 8, to: 8 });
+
+    const outdented = commands.indent(bullet.text, bullet.selection, true, true);
+    assert.equal(outdented.text, '- child');
+    assert.deepEqual(outdented.selection, { from: 7, to: 7 });
+
+    const task = commands.indent('- [ ] task', { from: 6, to: 6 }, false, true);
+    assert.equal(task.text, '\t- [ ] task');
+
+    const numbered = commands.indent('1. item', { from: 3, to: 3 }, false, true);
+    assert.equal(numbered.text, '\t1. item');
+
+    assert.deepEqual(
+        commands.indent('- top level', { from: 4, to: 4 }, true, true),
+        { changed: false, handled: true }
+    );
 });
 
 test('task toggling and full-text diffs emit one source replacement', () => {
