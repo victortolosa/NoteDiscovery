@@ -84,9 +84,10 @@ docker-compose up        # build from source (docker-compose.ghcr.yml = prebuilt
 - Underscore-prefixed folders are system folders: `_attachments` (media),
   `_templates` (note templates). `.share-tokens.json` in the data dir stores
   share tokens.
-- PWA was deliberately removed: `frontend/sw.js` is a self-unregistering
-  stub and `manifest.json` is vestigial. Don't reintroduce service-worker
-  caching.
+- PWA installation metadata is supported, but offline caching is deliberately
+  disabled: `frontend/sw.js` only unregisters old workers and clears their
+  caches. Keep the manifest links credentialed for Cloudflare Access, and don't
+  reintroduce service-worker caching.
 - Links between notes: wikilinks `[[note]]` / `[[note|text]]` /
   `[[note#heading]]` AND markdown `[text](note.md)`. Graph + backlinks parse
   both — new link features must handle both syntaxes.

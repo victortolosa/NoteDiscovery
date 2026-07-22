@@ -429,6 +429,7 @@ NoteDiscovery can be installed as a standalone app on your device:
 
 - **Install as app** - Add to home screen on mobile, or install via browser on desktop
 - **Standalone mode** - Runs without browser chrome for a native app feel
+- **Network required** - Installation does not cache notes or application files for offline use
 
 ### How to Install
 - **Desktop (Chrome/Edge)**: Click the install icon in the address bar, or Menu → "Install NoteDiscovery"

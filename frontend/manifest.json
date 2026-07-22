@@ -2,6 +2,7 @@
   "name": "NoteDiscovery",
   "short_name": "Notes",
   "description": "A beautiful, self-hosted markdown notes application",
+  "id": "/",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
@@ -10,24 +11,17 @@
   "scope": "/",
   "icons": [
     {
-      "src": "/static/logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/static/pwa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/static/logo.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/static/logo.svg",
+      "src": "/static/pwa-icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ],
   "categories": ["productivity", "utilities"]
 }
-

@@ -298,18 +298,15 @@ plugin_manager.run_hook('on_app_startup')
 static_path = Path(__file__).parent.parent / "frontend"
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
-# PWA Service Worker - must be served from root for proper scope
+# Legacy service-worker cleanup - must remain at root to reach old registrations
 @app.get("/sw.js", include_in_schema=False)
 @limiter.limit("30/minute")
 async def service_worker(request: Request):
-    """Serve the PWA service worker from root path for proper scope.
-    Injects the app version from VERSION file for cache invalidation."""
+    """Serve the self-unregistering worker that removes legacy PWA caches."""
     sw_path = static_path / "sw.js"
     if sw_path.exists():
         async with aiofiles.open(sw_path, 'r', encoding='utf-8') as f:
             content = await f.read()
-        # Inject app version into cache name
-        content = content.replace('__APP_VERSION__', version)
         return Response(content=content, media_type="application/javascript")
     raise HTTPException(status_code=404, detail="Service worker not found")
 

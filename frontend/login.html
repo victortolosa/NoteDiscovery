@@ -6,8 +6,9 @@
     <title>Login - NoteDiscovery</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="/static/manifest.json">
+    <!-- Install metadata only; credentials are required behind Cloudflare Access. -->
+    <link rel="manifest" href="/static/manifest.json" crossorigin="use-credentials">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/pwa-icon-180.png">
     <meta name="theme-color" content="#667eea">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -282,4 +283,3 @@
     </script>
 </body>
 </html>
-
