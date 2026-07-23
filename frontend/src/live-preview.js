@@ -13,6 +13,7 @@ import {
     HighlightStyle,
     LanguageDescription,
     StreamLanguage,
+    syntaxTree,
     syntaxHighlighting,
 } from '@codemirror/language';
 import { shell } from '@codemirror/legacy-modes/mode/shell';
@@ -130,6 +131,25 @@ const searchField = StateField.define({
     provide: (field) => EditorView.decorations.from(field, value => value.decorations),
 });
 
+export function linkTargetAtPosition(state, position) {
+    const line = state.doc.lineAt(position);
+    const wikilinkPattern = /\[\[([^\]\n|]+)(?:\|[^\]\n]+)?\]\]/g;
+    let wikilink;
+    while ((wikilink = wikilinkPattern.exec(line.text)) !== null) {
+        const from = line.from + wikilink.index;
+        const to = from + wikilink[0].length;
+        if (position >= from && position <= to) return wikilink[1].trim();
+    }
+
+    let node = syntaxTree(state).resolveInner(position, -1);
+    while (node && !['Link', 'Autolink'].includes(node.name)) node = node.parent;
+    if (!node) return '';
+
+    const url = node.getChild('URL');
+    if (!url) return '';
+    return state.sliceDoc(url.from, url.to).replace(/^<|>$/g, '');
+}
+
 /**
  * Create the experimental CodeMirror editor behind a small application adapter.
  * Code outside this module should not manipulate EditorView directly.
@@ -139,6 +159,7 @@ export function createLivePreviewEditor({
     content = '',
     labels = {},
     onChange = () => {},
+    onOpenLink = () => false,
     onSourceCommand = () => null,
 }) {
     if (!(parent instanceof HTMLElement)) {
@@ -149,6 +170,10 @@ export function createLivePreviewEditor({
     const scrollListeners = new Set();
     const decorationsCompartment = new Compartment();
     let editorLabels = labels;
+    const activateLink = (targetView, position = targetView.state.selection.main.head) => {
+        const target = linkTargetAtPosition(targetView.state, position);
+        return target ? onOpenLink(target) !== false : false;
+    };
 
     const createState = (doc) => (
         EditorState.create({
@@ -182,9 +207,25 @@ export function createLivePreviewEditor({
                         key: 'Mod-Enter',
                         run: (view) => runSourceCommand(view, 'toggleTask'),
                     },
+                    {
+                        key: 'Mod-Shift-Enter',
+                        run: (view) => activateLink(view),
+                    },
                     ...defaultKeymap,
                     ...historyKeymap,
                 ]),
+                EditorView.domEventHandlers({
+                    mousedown(event, targetView) {
+                        if (event.button !== 0 || (!event.metaKey && !event.ctrlKey)) return false;
+                        const position = targetView.posAtCoords({
+                            x: event.clientX,
+                            y: event.clientY,
+                        });
+                        if (position === null || !activateLink(targetView, position)) return false;
+                        event.preventDefault();
+                        return true;
+                    },
+                }),
                 EditorView.updateListener.of((update) => {
                     if (update.docChanged && !applyingExternalContent) {
                         onChange(update.state.doc.toString());

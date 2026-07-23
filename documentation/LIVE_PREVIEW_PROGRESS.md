@@ -7,11 +7,11 @@
 - Original base: `custom` at `8317241`
 - Upstream integrated: `0cb11ae` (version 0.28.3)
 - Initial deployed feature commit: `9e09a80`
-- Current session: initial custom-branch rollout complete
-- Next session: collect daily-use feedback, then complete the remaining parity gates
+- Current session: local reliability and navigation fixes complete; pending deployment
+- Next session: verify Safari on macOS and iPhone, then collect daily-use feedback
 - Direction: keep Classic as the default and Live Preview available through the
   Settings toggle
-- Last updated: 2026-07-17
+- Last updated: 2026-07-23
 
 See [LIVE_PREVIEW_MVP_PLAN.md](LIVE_PREVIEW_MVP_PLAN.md) for scope, architecture,
 acceptance criteria, and the go/no-go checkpoint.
@@ -71,8 +71,8 @@ baseline; all other Markdown remains editable source.
 
 ### Session 4: evaluation and decision
 
-- [ ] Run all disposable fixtures.
-- [ ] Verify byte-for-byte preservation of untouched source.
+- [x] Run all disposable fixtures.
+- [x] Verify byte-for-byte preservation of untouched source.
 - [ ] Test Safari and Chrome on macOS.
 - [ ] Test Safari on iPhone.
 - [ ] Record cursor and selection observations.
@@ -96,9 +96,9 @@ baseline; all other Markdown remains editable source.
 - [x] Render sidebar search matches as CodeMirror decorations.
 - [x] Restore F3 and Shift+F3 current-match movement.
 - [x] Restore search context when a note or editor surface opens.
-- [ ] Move outline navigation to exact source offsets.
-- [ ] Verify backlink and history focus behavior.
-- [ ] Restore wikilink insertion and deliberate link activation.
+- [x] Move outline navigation to exact source offsets.
+- [x] Verify backlink and history focus behavior.
+- [x] Restore wikilink insertion and deliberate link activation.
 
 ## Verification record
 
@@ -134,6 +134,8 @@ baseline; all other Markdown remains editable source.
 | 2026-07-17 | Presentation cues | Disposable vault on port 8002 | Preview-only syntax styling | Pass | Frontmatter, tables, fences, display math, blockquotes, HTML, images, and wikilinks received non-document cues; fixture bytes remained identical |
 | 2026-07-17 | `9e09a80` | GitHub `origin/custom` | Fast-forward deployment | Pass | Local and remote `custom` matched; Classic remained the default and Live Preview remained opt-in through Settings |
 | 2026-07-17 | `18804a2` | GitHub Actions and repository docs | Custom update workflow | Pass | Recorded `/opt/stacks/notediscovery/compose.yml`, the manual pull/recreate command, verification steps, and rollback procedure |
+| 2026-07-23 | Reliability pass | Frontend checks | Full frontend build, 30 contract tests, syntax, audit, and whitespace | Pass | Self-hosted production assets built successfully; production dependency audit reported zero vulnerabilities |
+| 2026-07-23 | Reliability pass | Disposable vault and in-app Chromium | Live Preview, Preview signpost, cache refresh, navigation, rich rendering, graph, and 390×844 layout | Pass | No browser console errors; Safari and physical iPhone testing remain open |
 
 ## Decisions
 
@@ -362,10 +364,7 @@ Markdown syntax.
 
 #### Issues
 
-- Session 6 outline, backlink, wikilink, and deliberate link activation work
-  remains.
-- The pre-existing `stickyHeading` and `stickySubHeading` Alpine errors remain
-  unchanged.
+- These issues were subsequently resolved in the 2026-07-23 reliability pass.
 
 #### Next step
 
@@ -406,8 +405,8 @@ editor path.
 #### Issues
 
 - Browser reload exposed pre-existing Alpine errors for undefined
-  `stickyHeading` and `stickySubHeading`; the same missing state exists on
-  `custom` and was not added to this patch.
+  `stickyHeading` and `stickySubHeading`. The 2026-07-23 reliability pass
+  resolved them with a Preview-only heading signpost implementation.
 - Disposable note editing remains for Session 2 so verification does not touch
   the real `data/` vault.
 
@@ -563,6 +562,46 @@ Continue with Session 4 evaluation before adding more syntax or editor parity.
 - `frontend/dist/` is generated locally and ignored by Git.
 - Session 1 uses only direct CodeMirror state, view, and commands packages.
 - The experimental preference is visible in Settings and clearly labeled.
+
+### 2026-07-23: reliability, navigation, and production assets
+
+#### Objective
+
+Resolve the Live Preview startup failure and close the related reliability
+findings without changing the experimental Markdown presentation scope.
+
+#### Completed
+
+- Scoped the sticky heading and subheading signpost to full Preview mode.
+- Replaced line-break decorations that CodeMirror rejects with safe inline cues.
+- Distinguished a missing bundle from a runtime mount failure and added Retry
+  and Classic recovery actions.
+- Automatically accepted a newer server version when the local editor was
+  pristine while preserving the conflict prompt for unsaved local edits.
+- Moved outline navigation to exact source offsets, including Setext headings.
+- Restored Live Preview wikilink insertion, deliberate link activation, and
+  note-surface focus after navigation.
+- Self-hosted Alpine, Tailwind, Marked, DOMPurify, Highlight.js, MathJax,
+  Mermaid, QR generation, and vis-network.
+- Removed synchronous translation loading and avoided the optional custom
+  shortcuts request when no `_shortcuts` template exists.
+
+#### Verification
+
+- `npm run check:frontend`: passed with 30 tests and a complete frontend build.
+- `npm audit --omit=dev`: passed with zero vulnerabilities.
+- `node --check frontend/app.js`: passed.
+- `git diff --check`: passed.
+- Disposable-vault browser checks passed for the editor mount, Preview-only
+  signpost, pristine cache refresh, wikilink insertion, Mermaid, MathJax,
+  graph loading, and a 390×844 responsive viewport.
+- Initial page load made no requests to third-party frontend CDNs and produced
+  no browser console errors.
+
+#### Remaining gate
+
+Run the fixture set in Safari on macOS and exercise editing on a physical
+iPhone before closing Session 4 or changing the default editor.
 
 Add one entry per working session using this structure:
 

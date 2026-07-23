@@ -10,8 +10,9 @@ RUN npm ci
 # Copy frontend files
 COPY frontend/ ./frontend/
 
-# Build the experimental editor, then minify the standalone application files.
-RUN npm run build:live-preview:minify && \
+# Build self-hosted frontend dependencies and the experimental editor, then
+# minify the standalone application files.
+RUN npm run build:frontend:minify && \
     ./node_modules/.bin/esbuild frontend/app.js --minify --outfile=frontend/app.js --allow-overwrite && \
     ./node_modules/.bin/esbuild frontend/sw.js --minify --outfile=frontend/sw.js --allow-overwrite
 

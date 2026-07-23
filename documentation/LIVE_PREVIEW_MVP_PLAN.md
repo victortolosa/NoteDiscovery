@@ -128,11 +128,12 @@ Local development commands:
 
 ```bash
 npm install
-npm run build:live-preview
+npm run build:frontend
 .venv/bin/python run.py
 ```
 
-Run the build again after changing files under `frontend/src/`. The generated
+Run the build again after changing files under `frontend/src/`, the Tailwind
+configuration, or production dependency versions. The generated
 `frontend/dist/` directory is intentionally ignored by Git.
 
 ### Session 2: editing and persistence

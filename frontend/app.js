@@ -327,6 +327,7 @@ function noteApp() {
         saveTimeout: null,
         staleContent: false,
         staleServerContent: '',
+        _savedContent: '',
         _staleServerSignature: '',
         _staleCheckInFlight: false,
         _staleCheckInterval: null,
@@ -363,6 +364,9 @@ function noteApp() {
         _cachedRenderedHTML: '',
         _mathDebounceTimeout: null,
         _mermaidDebounceTimeout: null,
+        _mathJaxPromise: null,
+        _mermaidModulePromise: null,
+        _visModulePromise: null,
 
         // Theme state
         currentTheme: 'light',
@@ -422,6 +426,7 @@ function noteApp() {
         outline: [], // [{level: 1, text: 'Heading', slug: 'heading'}, ...]
         stickyHeading: null,
         stickySubHeading: null,
+        _stickyHeadingFrame: null,
 
         // Backlinks state
         backlinks: [], // [{path: 'note.md', name: 'Note', references: [{line_number: 5, context: '...', type: 'wikilink'}]}]
@@ -474,6 +479,7 @@ function noteApp() {
         // Template state
         showTemplateModal: false,
         availableTemplates: [],
+        _hasCustomShortcutsTemplate: false,
         selectedTemplate: '',
         newTemplateNoteName: '',
         templateSearch: '',
@@ -773,7 +779,7 @@ function noteApp() {
             await this.loadThemes();
             await this.initTheme();
             await this.loadAvailableLocales();
-            // Note: Translations are preloaded synchronously before Alpine init (see index.html)
+            // Translations are preloaded before Alpine starts (see vendor.js).
             // loadLocale() is only called when user changes language from settings
             await this.loadNotes();
             await this.loadSharedNotePaths();
@@ -863,7 +869,6 @@ function noteApp() {
             this.setupMobileViewMode();
 
             // Detect when another device has modified the currently open note
-            this._savedContent = '';
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible' && this.currentNote) {
                     this.checkNoteStale();
@@ -888,6 +893,7 @@ function noteApp() {
                 this.$nextTick(() => {
                     requestAnimationFrame(() => {
                         this._restoreNoteScroll();
+                        this.scheduleStickyHeadingForScroll();
                         if (this.currentSearchHighlight) {
                             this.highlightSearchTerm(this.currentSearchHighlight, false);
                         }
@@ -1334,6 +1340,7 @@ function noteApp() {
                     onSourceCommand: (command, context) => (
                         this.runLivePreviewSourceCommand(command, context)
                     ),
+                    onOpenLink: (href) => this.openEditorLink(href),
                     onChange: (content) => {
                         this.noteContent = content;
                         this.autoSave({ recordHistory: false });
@@ -1347,11 +1354,22 @@ function noteApp() {
                 }
             } catch (error) {
                 this._livePreviewModulePromise = null;
-                this.livePreviewError = this.t('editor.live_preview_load_error');
+                await this.checkLivePreviewAvailability();
+                this.livePreviewError = this.livePreviewAvailable
+                    ? this.t('editor.live_preview_load_error')
+                    : this.t('editor.live_preview_unavailable');
                 ErrorHandler.handle('load Live Preview editor', error, false);
             } finally {
                 this.livePreviewLoading = false;
             }
+        },
+
+        async retryLivePreview() {
+            if (this.livePreviewLoading || this.editorMode !== 'live-preview') return;
+            document.getElementById('live-preview-editor')?.replaceChildren();
+            this._livePreviewModulePromise = null;
+            this.livePreviewError = '';
+            await this.syncEditorSurface();
         },
 
         async checkLivePreviewAvailability() {
@@ -1431,14 +1449,14 @@ function noteApp() {
             this.fontSizeScale = Math.min(1.5, parseFloat((this.fontSizeScale + 0.125).toFixed(3)));
             localStorage.setItem('fontSizeScale', this.fontSizeScale);
             document.documentElement.style.setProperty('--font-scale', this.fontSizeScale);
-            this.scheduleStickyHeadingRefresh();
+            this.scheduleStickyHeadingForScroll();
         },
 
         decreaseFontSize() {
             this.fontSizeScale = Math.max(0.75, parseFloat((this.fontSizeScale - 0.125).toFixed(3)));
             localStorage.setItem('fontSizeScale', this.fontSizeScale);
             document.documentElement.style.setProperty('--font-scale', this.fontSizeScale);
-            this.scheduleStickyHeadingRefresh();
+            this.scheduleStickyHeadingForScroll();
         },
 
         // Hide underscore folders toggle (hides _attachments, _templates, etc. from sidebar, folder view, and search)
@@ -1713,10 +1731,10 @@ function noteApp() {
                 const highlightTheme = document.getElementById('highlight-theme');
                 if (highlightTheme) {
                     if (themeId === 'light') {
-                        highlightTheme.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';
+                        highlightTheme.href = '/static/dist/highlight-github.css';
                     } else {
                         // Use dark theme for dark/custom themes
-                        highlightTheme.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css';
+                        highlightTheme.href = '/static/dist/highlight-github-dark.css';
                     }
                 }
 
@@ -2089,7 +2107,11 @@ function noteApp() {
             try {
                 const response = await fetch('/api/templates');
                 const data = await response.json();
-                this.availableTemplates = (data.templates || []).filter(t => t.name !== '_shortcuts');
+                const templates = data.templates || [];
+                this._hasCustomShortcutsTemplate = templates.some((template) => (
+                    template.name === '_shortcuts'
+                ));
+                this.availableTemplates = templates.filter(t => t.name !== '_shortcuts');
             } catch (error) {
                 ErrorHandler.handle('load templates', error, false); // Optional: no toast
             }
@@ -2097,6 +2119,7 @@ function noteApp() {
 
         // Load custom shortcuts from _templates/_shortcuts.md frontmatter
         async loadCustomShortcuts() {
+            if (!this._hasCustomShortcutsTemplate) return;
             try {
                 const response = await fetch('/api/templates/_shortcuts');
                 if (!response.ok) return;
@@ -2269,6 +2292,36 @@ function noteApp() {
             const headings = [];
             const lines = content.split('\n');
             const slugCounts = {}; // Track duplicate slugs
+            const lineStarts = [];
+            let sourceOffset = 0;
+            for (const line of lines) {
+                lineStarts.push(sourceOffset);
+                sourceOffset += line.length + 1;
+            }
+            const addHeading = (level, rawText, lineIndex) => {
+                const text = rawText.trim();
+                let slug = text
+                    .toLowerCase()
+                    .replace(/[^\w\s-]/g, '')
+                    .replace(/\s+/g, '-')
+                    .replace(/-+/g, '-');
+
+                if (slugCounts[slug] !== undefined) {
+                    slugCounts[slug]++;
+                    slug = `${slug}-${slugCounts[slug]}`;
+                } else {
+                    slugCounts[slug] = 0;
+                }
+
+                headings.push({
+                    level,
+                    text,
+                    slug,
+                    line: lineIndex + 1,
+                    from: lineStarts[lineIndex],
+                    index: headings.length,
+                });
+            };
 
             // Skip frontmatter and code blocks
             let inFrontmatter = false;
@@ -2301,30 +2354,14 @@ function noteApp() {
                 // Match heading lines (# to ######)
                 const match = line.match(/^(#{1,6})\s+(.+)$/);
                 if (match) {
-                    const level = match[1].length;
-                    const text = match[2].trim();
+                    addHeading(match[1].length, match[2], i);
+                    continue;
+                }
 
-                    // Generate slug (GitHub-style)
-                    let slug = text
-                        .toLowerCase()
-                        .replace(/[^\w\s-]/g, '') // Remove special chars
-                        .replace(/\s+/g, '-')     // Spaces to dashes
-                        .replace(/-+/g, '-');     // Multiple dashes to single
-
-                    // Handle duplicate slugs
-                    if (slugCounts[slug] !== undefined) {
-                        slugCounts[slug]++;
-                        slug = `${slug}-${slugCounts[slug]}`;
-                    } else {
-                        slugCounts[slug] = 0;
-                    }
-
-                    headings.push({
-                        level,
-                        text,
-                        slug,
-                        line: i + 1 // 1-indexed line number
-                    });
+                const setext = lines[i + 1]?.match(/^\s{0,3}(=+|-+)\s*$/);
+                if (line.trim() && setext) {
+                    addHeading(setext[1][0] === '=' ? 1 : 2, line, i);
+                    i++;
                 }
             }
 
@@ -2337,19 +2374,16 @@ function noteApp() {
                 // In preview/split mode, scroll the preview pane
                 const preview = document.querySelector('.markdown-preview');
                 if (preview) {
-                    // Find the heading element by text content (more reliable than ID)
-                    const headingElements = preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
-                    for (const el of headingElements) {
-                        if (el.textContent.trim() === heading.text) {
-                            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            // Add a brief highlight effect
-                            el.style.transition = 'background-color 0.3s';
-                            el.style.backgroundColor = 'var(--accent-light)';
-                            setTimeout(() => {
-                                el.style.backgroundColor = '';
-                            }, 1000);
-                            return;
-                        }
+                    const selector = `[data-source-offset="${heading.from}"]`;
+                    const target = preview.querySelector(selector);
+                    if (target) {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        target.style.transition = 'background-color 0.3s';
+                        target.style.backgroundColor = 'var(--accent-light)';
+                        setTimeout(() => {
+                            target.style.backgroundColor = '';
+                        }, 1000);
+                        return;
                     }
                 }
             }
@@ -2358,12 +2392,10 @@ function noteApp() {
                 // In edit/split mode, scroll the editor to the line
                 if (heading.line) {
                     const lines = this.noteContent.split('\n');
-                    let charPos = 0;
-
-                    // Calculate character position of the heading line
-                    for (let i = 0; i < heading.line - 1 && i < lines.length; i++) {
-                        charPos += lines[i].length + 1; // +1 for newline
-                    }
+                    const charPos = Number.isInteger(heading.from)
+                        ? heading.from
+                        : lines.slice(0, heading.line - 1)
+                            .reduce((position, line) => position + line.length + 1, 0);
 
                     if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
                         this._livePreviewEditor.setSelection(charPos);
@@ -2387,9 +2419,99 @@ function noteApp() {
             }
         },
 
+        scheduleStickyHeadingForScroll() {
+            if (this._stickyHeadingFrame) return;
+            this._stickyHeadingFrame = requestAnimationFrame(() => {
+                this._stickyHeadingFrame = null;
+                this.updateStickyHeadingFromPreview();
+            });
+        },
+
+        updateStickyHeadingFromPreview() {
+            if (this.viewMode !== 'preview' || !this.currentNote || this.currentMedia) {
+                this.stickyHeading = null;
+                this.stickySubHeading = null;
+                return;
+            }
+
+            if (!this._domCache.previewContainer || !this._domCache.previewContent) {
+                this.refreshDOMCache();
+            }
+            const preview = this._domCache.previewContainer;
+            const content = this._domCache.previewContent;
+            if (!preview || !content) return;
+
+            const headingElements = Array.from(
+                content.querySelectorAll('h1, h2, h3, h4, h5, h6')
+            );
+            const signpost = preview.querySelector('.sticky-signpost-preview');
+            const threshold = preview.scrollTop + (signpost?.offsetHeight || 0) + 8;
+
+            let activeIndex = -1;
+            for (let index = 0; index < headingElements.length; index++) {
+                if (headingElements[index].offsetTop > threshold) break;
+                activeIndex = index;
+            }
+
+            if (activeIndex < 0) {
+                this.stickyHeading = null;
+                this.stickySubHeading = null;
+                return;
+            }
+
+            const headingData = (element, index) => ({
+                index,
+                level: Number(element.tagName.slice(1)),
+                text: element.textContent.trim(),
+            });
+            const active = headingData(headingElements[activeIndex], activeIndex);
+            let primary = null;
+            for (let index = activeIndex; index >= 0; index--) {
+                const candidate = headingData(headingElements[index], index);
+                if (candidate.level <= 2) {
+                    primary = candidate;
+                    break;
+                }
+            }
+
+            this.stickyHeading = primary || active;
+            this.stickySubHeading = primary && active.level >= 3 ? active : null;
+        },
+
+        scrollToStickyHeading(heading) {
+            const preview = this._domCache.previewContainer;
+            const content = this._domCache.previewContent;
+            if (!preview || !content || !heading) return;
+
+            const headings = content.querySelectorAll('h1, h2, h3, h4, h5, h6');
+            const target = headings[heading.index];
+            if (!target) return;
+
+            const signpost = preview.querySelector('.sticky-signpost-preview');
+            preview.scrollTo({
+                top: Math.max(0, target.offsetTop - (signpost?.offsetHeight || 0) - 8),
+                behavior: 'smooth',
+            });
+        },
+
+        focusNoteSurface() {
+            this.$nextTick(() => {
+                requestAnimationFrame(() => {
+                    if (this.viewMode === 'preview') {
+                        this._domCache.previewContainer?.focus({ preventScroll: true });
+                    } else if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                        this._livePreviewEditor.focus();
+                    } else {
+                        document.getElementById('note-editor')?.focus({ preventScroll: true });
+                    }
+                });
+            });
+        },
+
         // Navigate to a backlink (note that links to current note)
-        navigateToBacklink(backlinkPath) {
-            this.loadNote(backlinkPath);
+        async navigateToBacklink(backlinkPath) {
+            await this.loadNote(backlinkPath);
+            this.focusNoteSurface();
         },
 
         // Unified filtering logic combining tags and text search
@@ -2725,6 +2847,7 @@ function noteApp() {
                 const sig = response.headers.get('etag') || response.headers.get('last-modified') || '';
                 if (sig) this._staleServerSignature = sig;
                 if (data.content !== this._savedContent) {
+                    if (this.acceptServerContentIfPristine(data.content, sig)) return;
                     this.staleServerContent = data.content;
                     this.staleContent = true;
                 }
@@ -5007,7 +5130,20 @@ function noteApp() {
 
             // Prevent default navigation for internal links
             event.preventDefault();
+            this.navigateInternalHref(href);
+        },
 
+        openEditorLink(href) {
+            const externalProtocols = ['http://', 'https://', '//', 'mailto:', 'tel:', 'ssh:', 'ftp:', 'sftp:', 'slack:', 'discord:', 'teams:', 'vscode:', 'zoom:', 'whatsapp:', 'telegram:', 'signal:', 'spotify:', 'steam:', 'magnet:', '/api/'];
+            if (externalProtocols.some((protocol) => href.startsWith(protocol))) {
+                window.open(href, '_blank', 'noopener,noreferrer');
+                return true;
+            }
+            this.navigateInternalHref(href);
+            return true;
+        },
+
+        navigateInternalHref(href) {
             // Parse href into note path and anchor (e.g., "note.md#section" -> notePath="note.md", anchor="section")
             const decodedHref = decodeURIComponent(href);
             const hashIndex = decodedHref.indexOf('#');
@@ -5017,6 +5153,7 @@ function noteApp() {
             // If it's just an anchor link (#heading), scroll within current note
             if (!notePath && anchor) {
                 this.scrollToAnchor(anchor);
+                this.focusNoteSurface();
                 return;
             }
 
@@ -5054,6 +5191,7 @@ function noteApp() {
                         // Small delay to ensure content is rendered
                         setTimeout(() => this.scrollToAnchor(anchor), 100);
                     }
+                    this.focusNoteSurface();
                 });
             } else {
                 this.confirmModalAsk({
@@ -6859,6 +6997,24 @@ function noteApp() {
         },
 
         // Check if the current note was modified on another device since we last loaded/saved it
+        acceptServerContentIfPristine(serverContent, signature = '') {
+            if (this.noteContent !== this._savedContent) return false;
+
+            this.replaceLivePreviewDocument(serverContent, { resetHistory: true });
+            this.noteContent = serverContent;
+            this._savedContent = serverContent;
+            this._staleServerSignature = signature || this._staleServerSignature;
+            this.staleContent = false;
+            this.staleServerContent = '';
+            this.extractOutline(serverContent);
+            this.parseMetadata();
+            if (this.statsPluginEnabled) this.calculateStats();
+            this.undoHistory = [{ content: serverContent, cursorPos: 0 }];
+            this.redoHistory = [];
+            this.hasPendingHistoryChanges = false;
+            return true;
+        },
+
         async checkNoteStale() {
             const notePath = this.currentNote; // snapshot before async gap
             if (!notePath || this._staleCheckInFlight) return;
@@ -6884,8 +7040,9 @@ function noteApp() {
                 this._staleServerSignature = responseSignature || this._staleServerSignature;
 
                 if (serverContent === this._savedContent) return; // no remote change
+                if (this.acceptServerContentIfPristine(serverContent, responseSignature)) return;
 
-                // Always show the conflict banner when the server version differs
+                // Preserve unsaved local edits and ask which version should win.
                 this.staleServerContent = serverContent;
                 this.staleContent = true;
             } catch (_) {
@@ -7059,26 +7216,60 @@ function noteApp() {
             await this.applyFilters();
         },
 
+        loadMathJax() {
+            if (window.MathJax?.typesetPromise) return Promise.resolve(window.MathJax);
+            if (this._mathJaxPromise) return this._mathJaxPromise;
+
+            this._mathJaxPromise = new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = '/static/dist/mathjax.js';
+                script.onload = async () => {
+                    try {
+                        await window.MathJax?.startup?.promise;
+                        resolve(window.MathJax);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                script.onerror = () => reject(new Error('MathJax failed to load'));
+                document.head.appendChild(script);
+            });
+            return this._mathJaxPromise;
+        },
+
         // Trigger MathJax typesetting after DOM update
-        typesetMath() {
-            if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
-                // Use a small delay to ensure DOM is updated
+        async typesetMath() {
+            if (!/(?:\$\$|\\\[|\\\(|(^|[^\\])\$)/m.test(this.noteContent)) return;
+            try {
+                const mathJax = await this.loadMathJax();
                 setTimeout(() => {
                     const previewContent = document.querySelector('.markdown-preview');
-                    if (previewContent) {
-                        MathJax.typesetPromise([previewContent]).catch((err) => {
-                            console.error('MathJax typesetting failed:', err);
-                        });
-                    }
+                    if (!previewContent) return;
+                    mathJax.typesetPromise([previewContent]).catch((error) => {
+                        console.error('MathJax typesetting failed:', error);
+                    });
                 }, 10);
+            } catch (error) {
+                console.error('MathJax failed to load:', error);
             }
         },
 
         // Render Mermaid diagrams
         async renderMermaid() {
+            const previewContent = document.querySelector('.markdown-preview');
+            if (!previewContent?.querySelector('pre code.language-mermaid')) return;
+
             if (typeof window.mermaid === 'undefined') {
-                console.warn('Mermaid not loaded yet');
-                return;
+                try {
+                    if (!this._mermaidModulePromise) {
+                        this._mermaidModulePromise = import('/static/dist/mermaid-vendor.js');
+                    }
+                    window.mermaid = (await this._mermaidModulePromise).default;
+                } catch (error) {
+                    this._mermaidModulePromise = null;
+                    console.error('Mermaid failed to load:', error);
+                    return;
+                }
             }
 
             // Use requestAnimationFrame for better performance than setTimeout
@@ -7512,6 +7703,12 @@ function noteApp() {
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = html;
 
+            tempDiv.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading, index) => {
+                const outlineHeading = this.outline[index];
+                if (!outlineHeading) return;
+                heading.dataset.sourceOffset = String(outlineHeading.from);
+            });
+
             // Find all links
             const links = tempDiv.querySelectorAll('a');
             links.forEach(link => {
@@ -7678,6 +7875,7 @@ function noteApp() {
                             video.preload = 'metadata';
                         }
                     });
+                    this.scheduleStickyHeadingForScroll();
                 }
             }, 0);
 
@@ -7886,11 +8084,6 @@ function noteApp() {
                     return;
                 }
 
-                if ((this.viewMode === 'edit' || this.viewMode === 'split')
-                    && typeof this.scheduleStickyHeadingForScroll === 'function') {
-                    this.scheduleStickyHeadingForScroll('editor');
-                }
-
                 const metrics = providedMetrics || this.getActiveEditorScrollMetrics();
                 if (!metrics) return;
                 const scrollableHeight = metrics.scrollHeight - metrics.clientHeight;
@@ -7921,7 +8114,7 @@ function noteApp() {
 
                 if (this.viewMode === 'preview'
                     && typeof this.scheduleStickyHeadingForScroll === 'function') {
-                    this.scheduleStickyHeadingForScroll('preview');
+                    this.scheduleStickyHeadingForScroll();
                 }
 
                 const scrollableHeight = preview.scrollHeight - preview.clientHeight;
@@ -7942,9 +8135,6 @@ function noteApp() {
                 if (editorScrollableHeight > 0) {
                     this.isScrolling = true;
                     this.setActiveEditorScrollPercentage(scrollPercentage);
-                    if (typeof this.scheduleStickyHeadingForScroll === 'function') {
-                        this.scheduleStickyHeadingForScroll('editor');
-                    }
                 }
             };
 
@@ -8467,6 +8657,10 @@ function noteApp() {
                     preview.scrollTop = pct * scrollable;
                 }
             }
+            requestAnimationFrame(() => {
+                this.isScrolling = false;
+                this.scheduleStickyHeadingForScroll();
+            });
         },
 
         // Scroll to top of editor and preview
@@ -8668,9 +8862,13 @@ function noteApp() {
 
         openQuickSwitcher() {
             const textarea = document.getElementById('note-editor');
-            this.linkInsertCursorPos = (document.activeElement === textarea)
-                ? textarea.selectionStart
-                : null;
+            if (this.editorMode === 'live-preview' && this._livePreviewEditor?.hasFocus()) {
+                this.linkInsertCursorPos = this._livePreviewEditor.getSelection().from;
+            } else {
+                this.linkInsertCursorPos = (document.activeElement === textarea)
+                    ? textarea.selectionStart
+                    : null;
+            }
             this.showQuickSwitcher = true;
             this.quickSwitcherQuery = '';
             this.quickSwitcherIndex = 0;
@@ -8695,9 +8893,26 @@ function noteApp() {
 
         insertWikiLink(note) {
             if (!note) return;
-            const linkPath = note.path.replace(/.md$/, '');
+            const linkPath = note.path.replace(/\.md$/, '');
             const wikilink = `[[${linkPath}]]`;
+            if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                const fallback = this._livePreviewEditor.getContent().length;
+                const position = this.linkInsertCursorPos ?? fallback;
+                this._livePreviewEditor.replaceRange({
+                    from: position,
+                    insert: wikilink,
+                    selection: {
+                        anchor: position + wikilink.length,
+                        head: position + wikilink.length,
+                    },
+                    userEvent: 'input.complete',
+                });
+                this._livePreviewEditor.focus();
+                return;
+            }
+
             const textarea = document.getElementById('note-editor');
+            if (!textarea) return;
             const pos = this.linkInsertCursorPos ?? textarea.value.length;
             textarea.setRangeText(wikilink, pos, pos, 'end');
             this.noteContent = textarea.value;
@@ -9035,9 +9250,15 @@ function noteApp() {
 
         // Initialize the graph visualization
         async initGraph() {
-            // Check if vis is loaded
-            if (typeof vis === 'undefined') {
-                console.error('vis-network library not loaded');
+            let visApi;
+            try {
+                if (!this._visModulePromise) {
+                    this._visModulePromise = import('/static/dist/vis-network-vendor.js');
+                }
+                visApi = await this._visModulePromise;
+            } catch (error) {
+                this._visModulePromise = null;
+                console.error('vis-network failed to load:', error);
                 return;
             }
 
@@ -9073,7 +9294,7 @@ function noteApp() {
                 const borderColor = getCssVar('--border-primary', '#e5e7eb');
 
                 // Prepare nodes with styling - all nodes same base color
-                const nodes = new vis.DataSet(data.nodes.map(n => ({
+                const nodes = new visApi.DataSet(data.nodes.map(n => ({
                     id: n.id,
                     label: n.label,
                     title: n.id, // Tooltip shows full path
@@ -9105,7 +9326,7 @@ function noteApp() {
                 })));
 
                 // Prepare edges with styling based on type
-                const edges = new vis.DataSet(data.edges.map((e, i) => ({
+                const edges = new visApi.DataSet(data.edges.map((e, i) => ({
                     id: i,
                     from: e.source,
                     to: e.target,
@@ -9198,7 +9419,7 @@ function noteApp() {
                 visElements.forEach(el => el.remove());
 
                 // Create the network
-                this.graphInstance = new vis.Network(container, { nodes, edges }, options);
+                this.graphInstance = new visApi.Network(container, { nodes, edges }, options);
 
                 // Store reference for callbacks
                 const graphRef = this.graphInstance;

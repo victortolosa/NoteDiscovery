@@ -27,8 +27,14 @@ docker compose up -d --force-recreate notediscovery
 cd /opt/stacks/notediscovery
 docker compose ps notediscovery
 docker inspect notediscovery --format '{{.Config.Image}}'
-docker exec notediscovery test -f /app/frontend/dist/live-preview.js \
-  && echo "Live Preview bundle installed"
+docker exec notediscovery sh -c \
+  'test -f /app/frontend/dist/vendor.js &&
+   test -f /app/frontend/dist/tailwind.css &&
+   test -f /app/frontend/dist/live-preview.js &&
+   test -f /app/frontend/dist/mathjax.js &&
+   test -f /app/frontend/dist/mermaid-vendor.js &&
+   test -f /app/frontend/dist/vis-network-vendor.js' \
+  && echo "Frontend bundles installed"
 docker logs --tail 50 notediscovery
 ```
 
