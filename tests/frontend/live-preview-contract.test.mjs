@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
+import { Text } from '@codemirror/state';
+import { lineBoundedRanges } from '../../frontend/src/live-preview-decorations.js';
 
 const root = new URL('../../', import.meta.url);
 const requiredEditorKeys = [
@@ -47,6 +49,15 @@ test('the generated bundle remains a lazy-loaded artifact', async () => {
     const html = await readFile(new URL('frontend/index.html', root), 'utf8');
     assert.match(app, /import\('\/static\/dist\/live-preview\.js'\)/);
     assert.doesNotMatch(html, /<script[^>]+live-preview\.js/);
+});
+
+test('hidden Live Preview syntax ranges never replace line breaks', () => {
+    const doc = Text.of(['[text](', 'url', ')']);
+    assert.deepEqual(lineBoundedRanges(doc, 6, doc.length), [
+        { from: 6, to: 7 },
+        { from: 8, to: 11 },
+        { from: 12, to: 13 },
+    ]);
 });
 
 test('shared editor commands load before the Alpine application', async () => {

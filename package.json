@@ -1,6 +1,7 @@
 {
   "name": "notediscovery-frontend",
   "private": true,
+  "type": "module",
   "scripts": {
     "build:live-preview": "esbuild frontend/src/live-preview.js --bundle --format=esm --platform=browser --target=es2020 --outfile=frontend/dist/live-preview.js",
     "build:live-preview:minify": "npm run build:live-preview -- --minify",

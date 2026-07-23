@@ -121,6 +121,23 @@ function isActiveRange(from, to, contexts) {
     });
 }
 
+export function lineBoundedRanges(doc, from, to) {
+    const ranges = [];
+    let cursor = from;
+
+    while (cursor < to) {
+        const line = doc.lineAt(cursor);
+        const lineTo = Math.min(to, line.to);
+        if (cursor < lineTo) {
+            ranges.push({ from: cursor, to: lineTo });
+        }
+        if (lineTo >= to || line.number >= doc.lines) break;
+        cursor = doc.line(line.number + 1).from;
+    }
+
+    return ranges;
+}
+
 function syntaxRange(node, state) {
     if (node.name !== 'HeaderMark') return { from: node.from, to: node.to };
 
@@ -159,9 +176,11 @@ function buildDecorations(view, labels, sourceRanges = []) {
     const tree = syntaxTree(view.state);
     const addHiddenRange = (from, to) => {
         if (from >= to) return;
-        const hiddenRange = hiddenSyntaxDecoration.range(from, to);
-        decorations.push(hiddenRange);
-        atomicRanges.push(hiddenRange);
+        for (const range of lineBoundedRanges(view.state.doc, from, to)) {
+            const hiddenRange = hiddenSyntaxDecoration.range(range.from, range.to);
+            decorations.push(hiddenRange);
+            atomicRanges.push(hiddenRange);
+        }
     };
     const previewOnlyBlocks = new Set();
     const previewOnlyLineStarts = new Set();

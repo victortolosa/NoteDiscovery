@@ -420,6 +420,8 @@ function noteApp() {
 
         // Outline (TOC) state
         outline: [], // [{level: 1, text: 'Heading', slug: 'heading'}, ...]
+        stickyHeading: null,
+        stickySubHeading: null,
 
         // Backlinks state
         backlinks: [], // [{path: 'note.md', name: 'Note', references: [{line_number: 5, context: '...', type: 'wikilink'}]}]
