@@ -7,7 +7,10 @@ WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copy frontend files
+# Copy frontend files, plus the build inputs the npm scripts read from the
+# repository root: the Tailwind config and the static-asset copy script.
+COPY tailwind.config.cjs ./
+COPY scripts/ ./scripts/
 COPY frontend/ ./frontend/
 
 # Build self-hosted frontend dependencies and the experimental editor, then

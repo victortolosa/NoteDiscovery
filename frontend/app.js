@@ -7134,7 +7134,7 @@ function noteApp() {
             // The refresh happens unprompted (a background poll, or returning to
             // the tab), so the reading position and cursor have to survive it —
             // otherwise a note being read silently jumps back to the top.
-            const caret = this.getActiveEditorSelection();
+            const caret = this.captureEditorCaret();
 
             this.replaceLivePreviewDocument(serverContent, { resetHistory: true });
             this.noteContent = serverContent;
@@ -7152,15 +7152,22 @@ function noteApp() {
             this.$nextTick(() => {
                 requestAnimationFrame(() => {
                     this._restoreNoteScroll();
-                    this.restoreActiveEditorSelection(caret, serverContent.length);
+                    this.restoreEditorCaret(caret, serverContent.length);
                 });
             });
             this.toast(this.t('editor.note_refreshed_from_server'), { type: 'info' });
             return true;
         },
 
-        /** Cursor/selection offsets for whichever editor surface is active. */
-        getActiveEditorSelection() {
+        /**
+         * Caret to restore after an unprompted content refresh.
+         *
+         * Distinct from getActiveEditorSelection(), which the formatting
+         * helpers use: Classic reports a caret here only when the textarea
+         * actually has focus, so a background refresh never drags the caret
+         * into an editor the reader was not using.
+         */
+        captureEditorCaret() {
             if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
                 return this._livePreviewEditor.getSelection();
             }
@@ -7169,8 +7176,8 @@ function noteApp() {
             return { from: editor.selectionStart, to: editor.selectionEnd };
         },
 
-        /** Re-apply offsets from getActiveEditorSelection(), clamped to new content. */
-        restoreActiveEditorSelection(selection, maxOffset) {
+        /** Re-apply offsets from captureEditorCaret(), clamped to new content. */
+        restoreEditorCaret(selection, maxOffset) {
             if (!selection) return;
             const clamp = (value) => Math.max(0, Math.min(Number(value) || 0, maxOffset));
             const from = clamp(selection.from);

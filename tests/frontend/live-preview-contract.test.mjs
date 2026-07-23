@@ -143,6 +143,41 @@ test('backlink references and browser history land on the right source position'
     );
 });
 
+test('the Alpine application object declares each member once', async () => {
+    const app = await readFile(new URL('frontend/app.js', root), 'utf8');
+    // Every member of the ~8.7k-line object literal sits at exactly 8 spaces.
+    // A duplicate silently overrides the earlier definition, and neither
+    // `node --check` nor the local build catches it: app.js is only minified
+    // inside the Dockerfile, so the warning surfaces after a push.
+    const objectStart = app.indexOf('function noteApp() {');
+    assert.ok(objectStart > 0, 'could not locate the noteApp object');
+    const body = app.slice(objectStart);
+
+    // Control-flow keywords also appear at this indent inside methods.
+    const keywords = new Set([
+        'if', 'for', 'while', 'switch', 'catch', 'return', 'else', 'do', 'try',
+        'const', 'let', 'var', 'case', 'default', 'break', 'continue', 'throw',
+        'await', 'new', 'delete', 'typeof', 'function',
+    ]);
+    const seen = new Map();
+    const duplicates = [];
+    const memberPattern = /^ {8}(?:async )?([A-Za-z_$][\w$]*)\s*(?:\(|:)/gm;
+
+    for (const match of body.matchAll(memberPattern)) {
+        const name = match[1];
+        if (keywords.has(name)) continue;
+        const line = app.slice(0, objectStart + match.index).split('\n').length;
+        if (seen.has(name)) {
+            duplicates.push(`${name} (lines ${seen.get(name)} and ${line})`);
+        } else {
+            seen.set(name, line);
+        }
+    }
+
+    assert.deepEqual(duplicates, [], `duplicate members: ${duplicates.join(', ')}`);
+    assert.ok(seen.size > 200, `expected to scan the whole object, saw ${seen.size} members`);
+});
+
 test('every locale contains the backlink navigation string', async () => {
     const localeDirectory = new URL('locales/', root);
     const localeFiles = (await readdir(localeDirectory)).filter((name) => name.endsWith('.json'));
@@ -234,12 +269,15 @@ test('a pristine auto-refresh preserves the reading position and announces itsel
     // The caret is captured before the document is swapped, not after.
     assert.match(
         app,
-        /const caret = this\.getActiveEditorSelection\(\);[\s\S]*this\.replaceLivePreviewDocument\(serverContent/
+        /const caret = this\.captureEditorCaret\(\);[\s\S]*this\.replaceLivePreviewDocument\(serverContent/
     );
     assert.match(
         app,
-        /this\._restoreNoteScroll\(\);\s*this\.restoreActiveEditorSelection\(caret, serverContent\.length\)/
+        /this\._restoreNoteScroll\(\);\s*this\.restoreEditorCaret\(caret, serverContent\.length\)/
     );
+    // captureEditorCaret must stay distinct from the formatting helpers'
+    // getActiveEditorSelection, which reports a caret even without focus.
+    assert.match(app, /captureEditorCaret\(\) \{[\s\S]*?document\.activeElement !== editor\) return null/);
     // Offsets from the old document must be clamped against the new one.
     assert.match(app, /Math\.max\(0, Math\.min\(Number\(value\) \|\| 0, maxOffset\)\)/);
     assert.match(app, /this\.toast\(this\.t\('editor\.note_refreshed_from_server'\)/);
