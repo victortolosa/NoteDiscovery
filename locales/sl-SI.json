@@ -85,6 +85,7 @@
     "live_preview_loading": "Nalaganje predogleda v živo…",
     "live_preview_load_error": "Predogled v živo ni mogel odpreti tega zapiska. Poskusite znova ali preklopite na klasični urejevalnik.",
     "live_preview_retry": "Poskusi znova",
+    "note_refreshed_from_server": "Zapisek je posodobljen s spremembami z druge naprave.",
     "live_preview_aria": "Urejevalnik Markdown s predogledom v živo",
     "live_preview_task_complete": "Označi opravilo kot dokončano",
     "live_preview_task_incomplete": "Označi opravilo kot nedokončano",
@@ -185,7 +186,8 @@
     "no_backlinks": "Ni najdenih povratnih povezav",
     "hint": "Druge beležke se bodo pojavile tukaj, ko se bodo nanašale na to beležko",
     "select_note": "Izberite beležko za ogled povratnih povezav",
-    "more_refs": "več"
+    "more_refs": "več",
+    "go_to_line": "Pojdi na vrstico {{line}}"
   },
   "stats": {
     "words": "besed",

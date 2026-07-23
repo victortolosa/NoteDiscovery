@@ -86,6 +86,7 @@
     "live_preview_loading": "Live-Vorschau wird geladen…",
     "live_preview_load_error": "Die Live-Vorschau konnte diese Notiz nicht öffnen. Versuchen Sie es erneut oder wechseln Sie zum klassischen Editor.",
     "live_preview_retry": "Erneut versuchen",
+    "note_refreshed_from_server": "Notiz mit Änderungen von einem anderen Gerät aktualisiert.",
     "live_preview_aria": "Markdown-Editor mit Live-Vorschau",
     "live_preview_task_complete": "Aufgabe als erledigt markieren",
     "live_preview_task_incomplete": "Aufgabe als unerledigt markieren",
@@ -186,7 +187,8 @@
     "no_backlinks": "Keine Rückverweise gefunden",
     "hint": "Andere Notizen erscheinen hier, wenn sie auf diese Notiz verweisen",
     "select_note": "Wählen Sie eine Notiz um Rückverweise zu sehen",
-    "more_refs": "mehr"
+    "more_refs": "mehr",
+    "go_to_line": "Zu Zeile {{line}} springen"
   },
   "stats": {
     "words": "Wörter",

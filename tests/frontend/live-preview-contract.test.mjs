@@ -19,6 +19,7 @@ const requiredEditorKeys = [
     'live_preview_aria',
     'live_preview_task_complete',
     'live_preview_task_incomplete',
+    'note_refreshed_from_server',
 ];
 
 test('every locale contains the Live Preview strings', async () => {
@@ -120,7 +121,39 @@ test('outline and quick-switcher navigation use Live Preview source positions', 
     assert.match(app, /const charPos = Number\.isInteger\(heading\.from\)/);
     assert.match(app, /this\._livePreviewEditor\.getSelection\(\)\.from/);
     assert.match(app, /this\._livePreviewEditor\.replaceRange\(\{/);
-    assert.match(app, /async navigateToBacklink\(backlinkPath\)/);
+    assert.match(app, /async navigateToBacklink\(backlinkPath, lineNumber = null\)/);
+});
+
+test('backlink references and browser history land on the right source position', async () => {
+    const app = await readFile(new URL('frontend/app.js', root), 'utf8');
+    const html = await readFile(new URL('frontend/index.html', root), 'utf8');
+
+    // Each reference carries its own line number through to the jump.
+    assert.match(html, /@click="navigateToBacklink\(bl\.path, ref\.line_number\)"/);
+    // Nested buttons are invalid, so the card must not be one.
+    assert.doesNotMatch(html, /<button[^>]*@click="navigateToBacklink\(bl\.path\)"[\s\S]{0,900}?<button/);
+    assert.match(app, /goToSourceLine\(lineNumber\) \{/);
+    // Preview has no caret; it resolves the nearest preceding heading offset.
+    assert.match(app, /preview\.querySelectorAll\('\[data-source-offset\]'\)/);
+    assert.match(app, /this\._livePreviewEditor\.setSelection\(charPos\)/);
+    // Back/forward restores focus the same way in-app navigation does.
+    assert.match(
+        app,
+        /this\.loadNote\(e\.state\.notePath, false, searchQuery\)\s*\.then\(\(\) => this\.focusNoteSurface\(\)\)/
+    );
+});
+
+test('every locale contains the backlink navigation string', async () => {
+    const localeDirectory = new URL('locales/', root);
+    const localeFiles = (await readdir(localeDirectory)).filter((name) => name.endsWith('.json'));
+
+    for (const filename of localeFiles) {
+        const locale = JSON.parse(await readFile(new URL(filename, localeDirectory), 'utf8'));
+        const value = locale.backlinks?.go_to_line;
+        assert.equal(typeof value, 'string', `${filename} is missing backlinks.go_to_line`);
+        // Interpolation in this app is {{name}}; a single brace renders literally.
+        assert.match(value, /\{\{line\}\}/, `${filename} uses the wrong placeholder syntax`);
+    }
 });
 
 test('Split remains a Classic-only view', async () => {
@@ -139,6 +172,40 @@ test('sticky heading navigation belongs only to full Preview mode', async () => 
     assert.match(app, /this\.viewMode !== 'preview'/);
     assert.match(app, /updateStickyHeadingFromPreview\(\)/);
     assert.match(app, /scrollToStickyHeading\(heading\)/);
+});
+
+test('the sticky signpost is keyboard operable', async () => {
+    const html = await readFile(new URL('frontend/index.html', root), 'utf8');
+    const rows = html.match(/<\w+[^>]*class="sticky-signpost-row[^"]*"/g) || [];
+    assert.equal(rows.length, 2);
+    for (const row of rows) assert.match(row, /^<button/);
+    assert.match(html, /\.sticky-signpost-row:focus-visible \{/);
+});
+
+test('sticky heading offsets are measured against a positioned scroll container', async () => {
+    const html = await readFile(new URL('frontend/index.html', root), 'utf8');
+    // offsetTop is only comparable with the container's scrollTop when the
+    // container is itself the offsetParent.
+    assert.match(
+        html,
+        /class="overflow-y-auto overflow-x-hidden custom-scrollbar"\s+style="[^"]*position: relative;/
+    );
+});
+
+test('sticky heading state survives reflow and ignores hidden headings', async () => {
+    const app = await readFile(new URL('frontend/app.js', root), 'utf8');
+    // A single filtered list backs both the scan and the click target, so the
+    // indices stored in state cannot drift apart from the DOM.
+    assert.match(app, /getPreviewHeadingElements\(content\) \{[\s\S]*element\.offsetParent !== null/);
+    assert.equal((app.match(/this\.getPreviewHeadingElements\(content\)/g) || []).length, 2);
+    // Layout changes that move heading offsets must trigger a recompute.
+    assert.match(
+        app,
+        /toggleReadableLineLength\(\) \{[\s\S]*this\.scheduleStickyHeadingForScroll\(\)/
+    );
+    assert.match(app, /previousWidth = currentWidth;[\s\S]{0,200}scheduleStickyHeadingForScroll\(\)/);
+    // Identity churn would re-run the Alpine bindings on every scroll frame.
+    assert.match(app, /setStickyHeadings\(primary, secondary\) \{[\s\S]*a\?\.index === b\?\.index/);
 });
 
 test('the stale-content alert participates in editor layout', async () => {
@@ -160,6 +227,22 @@ test('external note changes auto-refresh only when the local note is pristine', 
     assert.match(app, /this\.replaceLivePreviewDocument\(serverContent, \{ resetHistory: true \}\)/);
     assert.match(app, /if \(this\.acceptServerContentIfPristine\(serverContent, responseSignature\)\) return/);
     assert.match(app, /if \(this\.acceptServerContentIfPristine\(data\.content, sig\)\) return/);
+});
+
+test('a pristine auto-refresh preserves the reading position and announces itself', async () => {
+    const app = await readFile(new URL('frontend/app.js', root), 'utf8');
+    // The caret is captured before the document is swapped, not after.
+    assert.match(
+        app,
+        /const caret = this\.getActiveEditorSelection\(\);[\s\S]*this\.replaceLivePreviewDocument\(serverContent/
+    );
+    assert.match(
+        app,
+        /this\._restoreNoteScroll\(\);\s*this\.restoreActiveEditorSelection\(caret, serverContent\.length\)/
+    );
+    // Offsets from the old document must be clamped against the new one.
+    assert.match(app, /Math\.max\(0, Math\.min\(Number\(value\) \|\| 0, maxOffset\)\)/);
+    assert.match(app, /this\.toast\(this\.t\('editor\.note_refreshed_from_server'\)/);
 });
 
 test('optional shortcut templates do not generate expected 404 requests', async () => {

@@ -85,6 +85,7 @@
     "live_preview_loading": "Caricamento anteprima dal vivo…",
     "live_preview_load_error": "L’anteprima dal vivo non ha potuto aprire questa nota. Riprova o passa all’editor classico.",
     "live_preview_retry": "Riprova",
+    "note_refreshed_from_server": "Nota aggiornata con le modifiche da un altro dispositivo.",
     "live_preview_aria": "Editor Markdown con anteprima dal vivo",
     "live_preview_task_complete": "Segna attività come completata",
     "live_preview_task_incomplete": "Segna attività come incompleta",
@@ -185,7 +186,8 @@
     "no_backlinks": "Nessun backlink trovato",
     "hint": "Altre note appariranno qui quando fanno riferimento a questa nota",
     "select_note": "Seleziona una nota per vedere i backlink",
-    "more_refs": "altri"
+    "more_refs": "altri",
+    "go_to_line": "Vai alla riga {{line}}"
   },
   "stats": {
     "words": "parole",

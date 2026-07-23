@@ -86,6 +86,7 @@
     "live_preview_loading": "Chargement de l’aperçu en direct…",
     "live_preview_load_error": "L’aperçu en direct n’a pas pu ouvrir cette note. Réessayez ou passez à l’éditeur classique.",
     "live_preview_retry": "Réessayer",
+    "note_refreshed_from_server": "Note actualisée avec les modifications d'un autre appareil.",
     "live_preview_aria": "Éditeur Markdown avec aperçu en direct",
     "live_preview_task_complete": "Marquer la tâche comme terminée",
     "live_preview_task_incomplete": "Marquer la tâche comme non terminée",
@@ -186,7 +187,8 @@
     "no_backlinks": "Aucun rétrolien trouvé",
     "hint": "D'autres notes apparaîtront ici lorsqu'elles feront référence à cette note",
     "select_note": "Sélectionnez une note pour voir les rétroliens",
-    "more_refs": "de plus"
+    "more_refs": "de plus",
+    "go_to_line": "Aller à la ligne {{line}}"
   },
   "stats": {
     "words": "mots",

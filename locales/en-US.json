@@ -89,6 +89,7 @@
     "live_preview_loading": "Loading Live Preview…",
     "live_preview_load_error": "Live Preview couldn't open this note. Retry or switch to Classic.",
     "live_preview_retry": "Retry",
+    "note_refreshed_from_server": "Note refreshed with changes from another device.",
     "live_preview_aria": "Live Preview Markdown editor",
     "live_preview_task_complete": "Mark task complete",
     "live_preview_task_incomplete": "Mark task incomplete",
@@ -191,7 +192,8 @@
     "no_backlinks": "No backlinks found",
     "hint": "Other notes will appear here when they link to this note",
     "select_note": "Select a note to see backlinks",
-    "more_refs": "more"
+    "more_refs": "more",
+    "go_to_line": "Go to line {{line}}"
   },
   "stats": {
     "words": "words",

@@ -813,7 +813,11 @@ function noteApp() {
                 if (e.state && e.state.notePath) {
                     // Navigating to a note
                     const searchQuery = e.state.searchQuery || '';
-                    this.loadNote(e.state.notePath, false, searchQuery); // false = don't update history
+                    // false = don't update history. Back/forward has to hand
+                    // focus back to the note surface the same way in-app
+                    // navigation does, or the keyboard is left on the sidebar.
+                    this.loadNote(e.state.notePath, false, searchQuery)
+                        .then(() => this.focusNoteSurface());
 
                     // Update search box and trigger search if needed
                     if (searchQuery) {
@@ -1442,6 +1446,9 @@ function noteApp() {
         toggleReadableLineLength() {
             this.readableLineLength = !this.readableLineLength;
             localStorage.setItem('readableLineLength', this.readableLineLength);
+            // Preview max-width changes reflow every heading, so the signpost's
+            // cached offsets are stale until recomputed.
+            this.scheduleStickyHeadingForScroll();
         },
 
         // Note font size controls
@@ -2378,11 +2385,7 @@ function noteApp() {
                     const target = preview.querySelector(selector);
                     if (target) {
                         target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        target.style.transition = 'background-color 0.3s';
-                        target.style.backgroundColor = 'var(--accent-light)';
-                        setTimeout(() => {
-                            target.style.backgroundColor = '';
-                        }, 1000);
+                        this.flashPreviewTarget(target);
                         return;
                     }
                 }
@@ -2419,6 +2422,68 @@ function noteApp() {
             }
         },
 
+        /** Brief tint so the reader can see where navigation landed. */
+        flashPreviewTarget(element) {
+            element.style.transition = 'background-color 0.3s';
+            element.style.backgroundColor = 'var(--accent-light)';
+            setTimeout(() => {
+                element.style.backgroundColor = '';
+            }, 1000);
+        },
+
+        /** Character offset of the start of a 1-based source line. */
+        sourceOffsetForLine(lineNumber) {
+            const lines = this.noteContent.split('\n');
+            const index = Math.max(0, Math.min(lineNumber - 1, lines.length - 1));
+            return lines
+                .slice(0, index)
+                .reduce((position, line) => position + line.length + 1, 0);
+        },
+
+        /**
+         * Land on a 1-based source line in whichever surface is active.
+         *
+         * Preview has no caret, and only headings carry `data-source-offset`, so
+         * there it scrolls to the section containing the line rather than to the
+         * line itself.
+         */
+        goToSourceLine(lineNumber) {
+            if (!Number.isInteger(lineNumber) || lineNumber < 1) return;
+            const charPos = this.sourceOffsetForLine(lineNumber);
+
+            if (this.viewMode === 'preview') {
+                const preview = this._domCache.previewContent
+                    || document.querySelector('.markdown-preview');
+                if (!preview) return;
+
+                let target = null;
+                preview.querySelectorAll('[data-source-offset]').forEach((element) => {
+                    if (Number(element.dataset.sourceOffset) <= charPos) target = element;
+                });
+                if (!target) return;
+
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                this.flashPreviewTarget(target);
+                return;
+            }
+
+            if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                this._livePreviewEditor.setSelection(charPos);
+                this._livePreviewEditor.focus();
+                return;
+            }
+
+            const textarea = document.querySelector('.editor-textarea');
+            if (!textarea) return;
+            textarea.focus();
+            textarea.setSelectionRange(charPos, charPos);
+            const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 24;
+            textarea.scrollTop = Math.max(
+                0,
+                ((lineNumber - 1) * lineHeight) - (textarea.clientHeight / 3)
+            );
+        },
+
         scheduleStickyHeadingForScroll() {
             if (this._stickyHeadingFrame) return;
             this._stickyHeadingFrame = requestAnimationFrame(() => {
@@ -2427,10 +2492,45 @@ function noteApp() {
             });
         },
 
+        /**
+         * Rendered headings that currently take part in layout.
+         *
+         * A heading inside a collapsed <details> reports offsetTop 0, which would
+         * both break the monotonic scan below and let a hidden section win the
+         * signpost. The scan and scrollToStickyHeading() must index into the same
+         * list, so both go through this helper.
+         */
+        getPreviewHeadingElements(content) {
+            return Array.from(content.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+                .filter((element) => element.offsetParent !== null);
+        },
+
+        /**
+         * Assign signpost state only when it actually changes.
+         *
+         * updateStickyHeadingFromPreview() runs once per animation frame for the
+         * whole duration of a scroll; handing Alpine a fresh object every frame
+         * would re-run the x-show/x-text bindings just as often.
+         *
+         * @returns {boolean} whether either row changed
+         */
+        setStickyHeadings(primary, secondary) {
+            const same = (a, b) => a?.index === b?.index && a?.text === b?.text;
+            let changed = false;
+            if (!same(this.stickyHeading, primary)) {
+                this.stickyHeading = primary;
+                changed = true;
+            }
+            if (!same(this.stickySubHeading, secondary)) {
+                this.stickySubHeading = secondary;
+                changed = true;
+            }
+            return changed;
+        },
+
         updateStickyHeadingFromPreview() {
             if (this.viewMode !== 'preview' || !this.currentNote || this.currentMedia) {
-                this.stickyHeading = null;
-                this.stickySubHeading = null;
+                this.setStickyHeadings(null, null);
                 return;
             }
 
@@ -2439,13 +2539,19 @@ function noteApp() {
             }
             const preview = this._domCache.previewContainer;
             const content = this._domCache.previewContent;
-            if (!preview || !content) return;
+            if (!preview || !content) {
+                this.setStickyHeadings(null, null);
+                return;
+            }
 
-            const headingElements = Array.from(
-                content.querySelectorAll('h1, h2, h3, h4, h5, h6')
-            );
+            const headingElements = this.getPreviewHeadingElements(content);
             const signpost = preview.querySelector('.sticky-signpost-preview');
-            const threshold = preview.scrollTop + (signpost?.offsetHeight || 0) + 8;
+            const signpostHeight = signpost?.offsetHeight || 0;
+            // The signpost sits in normal flow, so showing it pushes every heading
+            // down by exactly its own height — which is why that height is added
+            // here too. Both sides of the comparison move together, so the
+            // visibility boundary cannot oscillate. Keep them in step.
+            const threshold = preview.scrollTop + signpostHeight + 8;
 
             let activeIndex = -1;
             for (let index = 0; index < headingElements.length; index++) {
@@ -2454,8 +2560,9 @@ function noteApp() {
             }
 
             if (activeIndex < 0) {
-                this.stickyHeading = null;
-                this.stickySubHeading = null;
+                if (this.setStickyHeadings(null, null)) {
+                    this.compensateSignpostShift(preview, signpostHeight);
+                }
                 return;
             }
 
@@ -2474,8 +2581,25 @@ function noteApp() {
                 }
             }
 
-            this.stickyHeading = primary || active;
-            this.stickySubHeading = primary && active.level >= 3 ? active : null;
+            const changed = this.setStickyHeadings(
+                primary || active,
+                primary && active.level >= 3 ? active : null
+            );
+            if (changed) this.compensateSignpostShift(preview, signpostHeight);
+        },
+
+        /**
+         * Keep the reading position still when the signpost appears, disappears,
+         * or changes between one and two rows. Because the bar is in flow, any
+         * height change shifts the content below it by the same amount; absorbing
+         * that into scrollTop makes the change invisible.
+         */
+        compensateSignpostShift(preview, previousHeight) {
+            this.$nextTick(() => {
+                const signpost = preview.querySelector('.sticky-signpost-preview');
+                const delta = (signpost?.offsetHeight || 0) - previousHeight;
+                if (delta) preview.scrollTop += delta;
+            });
         },
 
         scrollToStickyHeading(heading) {
@@ -2483,8 +2607,7 @@ function noteApp() {
             const content = this._domCache.previewContent;
             if (!preview || !content || !heading) return;
 
-            const headings = content.querySelectorAll('h1, h2, h3, h4, h5, h6');
-            const target = headings[heading.index];
+            const target = this.getPreviewHeadingElements(content)[heading.index];
             if (!target) return;
 
             const signpost = preview.querySelector('.sticky-signpost-preview');
@@ -2508,9 +2631,17 @@ function noteApp() {
             });
         },
 
-        // Navigate to a backlink (note that links to current note)
-        async navigateToBacklink(backlinkPath) {
+        // Navigate to a backlink (note that links to current note). Passing a
+        // reference's line number lands on that reference instead of the top.
+        async navigateToBacklink(backlinkPath, lineNumber = null) {
             await this.loadNote(backlinkPath);
+            if (lineNumber) {
+                // Rendering and the CodeMirror mount both settle a frame later,
+                // and loadNote restores the saved scroll position in between.
+                this.$nextTick(() => {
+                    requestAnimationFrame(() => this.goToSourceLine(lineNumber));
+                });
+            }
             this.focusNoteSurface();
         },
 
@@ -7000,6 +7131,11 @@ function noteApp() {
         acceptServerContentIfPristine(serverContent, signature = '') {
             if (this.noteContent !== this._savedContent) return false;
 
+            // The refresh happens unprompted (a background poll, or returning to
+            // the tab), so the reading position and cursor have to survive it —
+            // otherwise a note being read silently jumps back to the top.
+            const caret = this.getActiveEditorSelection();
+
             this.replaceLivePreviewDocument(serverContent, { resetHistory: true });
             this.noteContent = serverContent;
             this._savedContent = serverContent;
@@ -7012,7 +7148,40 @@ function noteApp() {
             this.undoHistory = [{ content: serverContent, cursorPos: 0 }];
             this.redoHistory = [];
             this.hasPendingHistoryChanges = false;
+
+            this.$nextTick(() => {
+                requestAnimationFrame(() => {
+                    this._restoreNoteScroll();
+                    this.restoreActiveEditorSelection(caret, serverContent.length);
+                });
+            });
+            this.toast(this.t('editor.note_refreshed_from_server'), { type: 'info' });
             return true;
+        },
+
+        /** Cursor/selection offsets for whichever editor surface is active. */
+        getActiveEditorSelection() {
+            if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                return this._livePreviewEditor.getSelection();
+            }
+            const editor = this._domCache.editor;
+            if (!editor || document.activeElement !== editor) return null;
+            return { from: editor.selectionStart, to: editor.selectionEnd };
+        },
+
+        /** Re-apply offsets from getActiveEditorSelection(), clamped to new content. */
+        restoreActiveEditorSelection(selection, maxOffset) {
+            if (!selection) return;
+            const clamp = (value) => Math.max(0, Math.min(Number(value) || 0, maxOffset));
+            const from = clamp(selection.from);
+            const to = clamp(selection.to);
+
+            if (this.editorMode === 'live-preview' && this._livePreviewEditor) {
+                this._livePreviewEditor.setSelection(from, to);
+                return;
+            }
+            const editor = this._domCache.editor;
+            if (editor) editor.setSelectionRange(from, to);
         },
 
         async checkNoteStale() {
@@ -8107,14 +8276,17 @@ function noteApp() {
             };
 
             this._previewScrollHandler = () => {
-                if (this.isScrolling) {
-                    this.isScrolling = false;
-                    return;
-                }
-
+                // The signpost tracks the viewport, not the source of the scroll,
+                // so it must update before the sync guard bails out on
+                // programmatic scrolls.
                 if (this.viewMode === 'preview'
                     && typeof this.scheduleStickyHeadingForScroll === 'function') {
                     this.scheduleStickyHeadingForScroll();
+                }
+
+                if (this.isScrolling) {
+                    this.isScrolling = false;
+                    return;
                 }
 
                 const scrollableHeight = preview.scrollHeight - preview.clientHeight;
@@ -8612,6 +8784,8 @@ function noteApp() {
                 }
 
                 previousWidth = currentWidth;
+                // Any width change reflows the preview and moves heading offsets.
+                this.scheduleStickyHeadingForScroll();
             };
 
             // Listen for window resize

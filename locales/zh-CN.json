@@ -85,6 +85,7 @@
     "live_preview_loading": "正在加载实时预览…",
     "live_preview_load_error": "实时预览无法打开此笔记。请重试或切换到经典编辑器。",
     "live_preview_retry": "重试",
+    "note_refreshed_from_server": "已使用其他设备上的更改刷新笔记。",
     "live_preview_aria": "实时预览 Markdown 编辑器",
     "live_preview_task_complete": "将任务标记为已完成",
     "live_preview_task_incomplete": "将任务标记为未完成",
@@ -185,7 +186,8 @@
     "no_backlinks": "未找到反向链接",
     "hint": "当其他笔记链接到此笔记时，它们将显示在这里",
     "select_note": "选择一个笔记以查看反向链接",
-    "more_refs": "更多"
+    "more_refs": "更多",
+    "go_to_line": "跳转到第 {{line}} 行"
   },
   "stats": {
     "words": "字数",

@@ -98,6 +98,8 @@ baseline; all other Markdown remains editable source.
 - [x] Restore search context when a note or editor surface opens.
 - [x] Move outline navigation to exact source offsets.
 - [x] Verify backlink and history focus behavior.
+- [x] Land backlink references on their own source line (2026-07-23).
+- [x] Restore note-surface focus after browser back and forward (2026-07-23).
 - [x] Restore wikilink insertion and deliberate link activation.
 
 ## Verification record
@@ -602,6 +604,80 @@ findings without changing the experimental Markdown presentation scope.
 
 Run the fixture set in Safari on macOS and exercise editing on a physical
 iPhone before closing Session 4 or changing the default editor.
+
+### 2026-07-23: signpost correctness and refresh polish
+
+#### Objective
+
+Close the review findings against the sticky heading signpost and the pristine
+auto-refresh, without widening the frozen presentation scope.
+
+#### Completed
+
+- Recomputed the signpost after every reflow that moves heading offsets:
+  readable-line-length toggling and window resize joined the existing font-size
+  handlers.
+- Made the preview scroll container `position: relative`, so heading
+  `offsetTop` and the container's `scrollTop` are read in the same coordinate
+  space instead of relying on the pane sitting flush inside its flex parent.
+- Skipped headings that do not participate in layout (for example inside a
+  collapsed `<details>`), which previously reported `offsetTop` 0 and could win
+  the scan. The scan and the click target now share one filtered list, so their
+  indices cannot drift.
+- Cleared signpost state on the missing-container path, which previously left a
+  stale heading on screen.
+- Assigned signpost state only on real change, ending the per-frame Alpine
+  re-render caused by fresh object identities during scroll.
+- Absorbed the signpost's own height change into `scrollTop`, so showing,
+  hiding, or growing the bar no longer shifts the reading position.
+- Updated the signpost before the scroll-sync guard returns, so programmatic
+  scrolls also refresh it.
+- Rendered the signpost rows as `<button>` with a focus-visible outline and a
+  `title` for truncated text; they were previously mouse-only `<div>`s.
+- Preserved scroll position and cursor across a pristine auto-refresh, clamped
+  to the new content length, and announced it with a toast in all 11 locales.
+- Made each backlink reference its own control that lands on its own source
+  line, rather than opening the note at the top. Session 6 was checked off after
+  verifying focus behavior, but the exit criterion is landing on the correct
+  source position, which references did not do.
+- Restored note-surface focus after browser back and forward, which was the one
+  navigation path still leaving the keyboard on the sidebar.
+
+#### Verification
+
+- `npm test`: passed with 36 tests, including six new contract tests covering
+  keyboard operability, the positioned container, the hidden-heading filter and
+  reflow recomputes, the refresh position/toast behavior, backlink line
+  navigation with history focus, and the backlink locale string.
+- `npm run build:frontend`: passed.
+- `node --check frontend/app.js`: passed.
+- `git diff --check`: passed.
+- `html-minifier-terser` with the Dockerfile flags: `type="button"`,
+  `position: relative`, and the `:focus-visible` rule all survive the
+  production minification pass.
+- App served from a disposable fixture vault on `:8002` with `NOTES_DIR`;
+  `/health` and note rendering responded normally.
+- Added a collapsed-`<details>` case to the `sticky-headings.md` fixture.
+- Backlinks API against a disposable source note returned three references at
+  lines 7, 15, and 19; `sourceOffsetForLine` resolved each to the exact start of
+  its line, and clamped out-of-range input to the document bounds.
+
+#### Issues
+
+- Browser verification was not run: the Chrome extension was not connected in
+  this session. The signpost changes are geometric and need a real scroll pass
+  in both a light and a dark theme before deployment.
+- In Preview, a backlink reference lands on the nearest preceding heading rather
+  than the exact line, because only headings carry `data-source-offset`. Exact
+  Preview landing would require the renderer to emit source offsets for every
+  block; the editor surfaces already land exactly.
+- The backlink panel still lists only the first two references per note, so the
+  third reference in a note is reachable only by opening the note.
+
+#### Next step
+
+Run the signpost, backlink, and history checks in a browser, then close the
+Session 4 Safari and iPhone gate.
 
 Add one entry per working session using this structure:
 

@@ -86,6 +86,7 @@
     "live_preview_loading": "Cargando vista previa en vivo…",
     "live_preview_load_error": "La vista previa en vivo no pudo abrir esta nota. Inténtelo de nuevo o cambie al editor clásico.",
     "live_preview_retry": "Reintentar",
+    "note_refreshed_from_server": "Nota actualizada con cambios de otro dispositivo.",
     "live_preview_aria": "Editor Markdown con vista previa en vivo",
     "live_preview_task_complete": "Marcar tarea como completada",
     "live_preview_task_incomplete": "Marcar tarea como pendiente",
@@ -186,7 +187,8 @@
     "no_backlinks": "No se encontraron backlinks",
     "hint": "Otras notas aparecerán aquí cuando enlacen a esta nota",
     "select_note": "Selecciona una nota para ver backlinks",
-    "more_refs": "más"
+    "more_refs": "más",
+    "go_to_line": "Ir a la línea {{line}}"
   },
   "stats": {
     "words": "palabras",

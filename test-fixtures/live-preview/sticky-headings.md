@@ -57,3 +57,33 @@ This paragraph creates enough vertical space to test the preview signpost.
 This paragraph creates enough vertical space to test the preview signpost.
 
 This paragraph creates enough vertical space to test the preview signpost.
+
+## Collapsed section
+
+A heading inside a closed `<details>` reports `offsetTop` 0. The signpost must
+skip it instead of letting it win the scan.
+
+<details>
+<summary>Hidden details</summary>
+
+### Hidden heading
+
+Hidden context.
+
+</details>
+
+This paragraph creates enough vertical space to test the preview signpost.
+
+This paragraph creates enough vertical space to test the preview signpost.
+
+This paragraph creates enough vertical space to test the preview signpost.
+
+## Wrap-up
+
+Wrap-up context.
+
+This paragraph creates enough vertical space to test the preview signpost.
+
+This paragraph creates enough vertical space to test the preview signpost.
+
+This paragraph creates enough vertical space to test the preview signpost.

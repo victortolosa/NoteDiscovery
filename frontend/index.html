@@ -68,6 +68,15 @@
             top: 0;
         }
         .sticky-signpost-row {
+            /* Rendered as <button> for keyboard access; strip the native chrome. */
+            appearance: none;
+            background: none;
+            border: none;
+            font: inherit;
+            color: inherit;
+            display: block;
+            width: 100%;
+            text-align: left;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -79,6 +88,10 @@
         }
         .sticky-signpost-row:hover {
             background-color: var(--bg-hover);
+        }
+        .sticky-signpost-row:focus-visible {
+            outline: 2px solid var(--accent-primary);
+            outline-offset: -2px;
         }
         .sticky-signpost-primary {
             font-size: calc(0.8rem * var(--font-scale, 1));
@@ -2434,31 +2447,42 @@
                             <template x-if="currentNote && backlinks.length > 0">
                                 <div>
                                     <template x-for="(bl, index) in backlinks" :key="index">
-                                        <button
-                                            @click="navigateToBacklink(bl.path)"
-                                            class="hover-accent w-full text-left px-3 py-2 text-sm border-b"
-                                            style="color: var(--text-primary); border-color: var(--border-primary);"
-                                        >
-                                            <!-- Note name -->
-                                            <div class="flex items-center gap-2 mb-1">
-                                                <svg class="w-4 h-4 flex-shrink-0" style="color: var(--accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                                </svg>
-                                                <span class="font-medium truncate" x-text="bl.name"></span>
-                                            </div>
-                                            <!-- References/Context snippets -->
+                                        <!-- Each reference is its own control, so a
+                                             button cannot wrap the whole card. -->
+                                        <div class="border-b" style="border-color: var(--border-primary);">
+                                            <!-- Note name: opens the note at the top -->
+                                            <button
+                                                @click="navigateToBacklink(bl.path)"
+                                                class="hover-accent w-full text-left px-3 pt-2 pb-1 text-sm"
+                                                style="color: var(--text-primary);"
+                                            >
+                                                <div class="flex items-center gap-2">
+                                                    <svg class="w-4 h-4 flex-shrink-0" style="color: var(--accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                    </svg>
+                                                    <span class="font-medium truncate" x-text="bl.name"></span>
+                                                </div>
+                                            </button>
+                                            <!-- References: each opens the note at its own line -->
                                             <template x-for="(ref, refIdx) in bl.references.slice(0, 2)" :key="refIdx">
-                                                <div class="ml-6 text-xs truncate" style="color: var(--text-tertiary);">
+                                                <button
+                                                    @click="navigateToBacklink(bl.path, ref.line_number)"
+                                                    :title="t('backlinks.go_to_line', { line: ref.line_number })"
+                                                    :aria-label="t('backlinks.go_to_line', { line: ref.line_number })"
+                                                    class="hover-accent w-full text-left pl-9 pr-3 py-0.5 text-xs truncate"
+                                                    style="color: var(--text-tertiary);"
+                                                >
                                                     <span class="opacity-60" x-text="'L' + ref.line_number + ':'"></span>
                                                     <span x-text="ref.context"></span>
-                                                </div>
+                                                </button>
                                             </template>
                                             <template x-if="bl.references.length > 2">
-                                                <div class="ml-6 text-xs" style="color: var(--text-tertiary);">
+                                                <div class="ml-6 pb-2 text-xs" style="color: var(--text-tertiary);">
                                                     <span x-text="'+' + (bl.references.length - 2) + ' ' + t('backlinks.more_refs')"></span>
                                                 </div>
                                             </template>
-                                        </button>
+                                            <div x-show="bl.references.length <= 2" class="pb-1"></div>
+                                        </div>
                                     </template>
                                 </div>
                             </template>
@@ -3727,12 +3751,15 @@
                             @mouseout="if(!isResizingSplit) { $el.style.opacity='0.5'; $el.style.background='linear-gradient(90deg, transparent 0%, var(--border-secondary) 50%, transparent 100%)' }"
                         ></div>
                         
-                        <!-- Preview -->
+                        <!-- Preview.
+                             position: relative makes this the offsetParent for the rendered
+                             content, so heading offsetTop is measured in the same coordinate
+                             space as this element's scrollTop (see updateStickyHeadingFromPreview). -->
                         <div
                             x-show="(viewMode === 'preview' || viewMode === 'split') && !currentMedia"
                             tabindex="-1"
                             class="overflow-y-auto overflow-x-hidden custom-scrollbar"
-                            style="background-color: var(--bg-primary); min-height: 0;"
+                            style="background-color: var(--bg-primary); min-height: 0; position: relative;"
                             :style="(viewMode === 'split' ? `width: ${100 - editorWidth}%;` : 'width: 100%;') + '; display: ' + ((viewMode === 'preview' || viewMode === 'split') ? 'block' : 'none') + ';'"
                         >
                             <!-- Sticky heading signpost (preview pane) -->
@@ -3740,19 +3767,23 @@
                                 x-show="stickyHeading && currentNote && viewMode === 'preview'"
                                 class="sticky-signpost sticky-signpost-preview"
                             >
-                                <div
+                                <button
+                                    type="button"
                                     class="sticky-signpost-row sticky-signpost-primary"
                                     @click="scrollToStickyHeading(stickyHeading)"
+                                    :title="stickyHeading?.text"
                                     x-text="stickyHeading?.text"
-                                ></div>
-                                <div
+                                ></button>
+                                <button
+                                    type="button"
                                     x-show="stickySubHeading"
                                     class="sticky-signpost-row sticky-signpost-secondary"
                                     @click="scrollToStickyHeading(stickySubHeading)"
+                                    :title="stickySubHeading?.text"
                                 >
                                     <span class="sticky-signpost-chevron">›</span>
                                     <span x-text="stickySubHeading?.text"></span>
-                                </div>
+                                </button>
                             </div>
                             <!-- Note Properties/Metadata Panel -->
                             <div

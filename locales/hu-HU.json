@@ -86,6 +86,7 @@
     "live_preview_loading": "Élő előnézet betöltése…",
     "live_preview_load_error": "Az élő előnézet nem tudta megnyitni ezt a jegyzetet. Próbálja újra, vagy váltson a klasszikus szerkesztőre.",
     "live_preview_retry": "Újrapróbálkozás",
+    "note_refreshed_from_server": "A jegyzet frissült egy másik eszközön végzett módosításokkal.",
     "live_preview_aria": "Élő előnézetes Markdown-szerkesztő",
     "live_preview_task_complete": "Feladat megjelölése késznek",
     "live_preview_task_incomplete": "Feladat megjelölése befejezetlennek",
@@ -186,7 +187,8 @@
     "no_backlinks": "Nincsenek bejövő linkek",
     "hint": "Más jegyzetek itt jelennek meg, ha hivatkoznak erre a jegyzetre",
     "select_note": "Válassz ki egy jegyzetet a bejövő linkek megtekintéséhez",
-    "more_refs": "továbbiak"
+    "more_refs": "továbbiak",
+    "go_to_line": "Ugrás a(z) {{line}}. sorra"
   },
   "stats": {
     "words": "szavak",

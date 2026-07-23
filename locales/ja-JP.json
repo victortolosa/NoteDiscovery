@@ -85,6 +85,7 @@
     "live_preview_loading": "ライブプレビューを読み込み中…",
     "live_preview_load_error": "ライブプレビューでこのノートを開けませんでした。再試行するか、クラシックエディターに切り替えてください。",
     "live_preview_retry": "再試行",
+    "note_refreshed_from_server": "他のデバイスでの変更でノートを更新しました。",
     "live_preview_aria": "ライブプレビュー Markdown エディター",
     "live_preview_task_complete": "タスクを完了にする",
     "live_preview_task_incomplete": "タスクを未完了にする",
@@ -185,7 +186,8 @@
     "no_backlinks": "バックリンクが見つかりません",
     "hint": "他のノートがこのノートにリンクすると、ここに表示されます",
     "select_note": "バックリンクを表示するノートを選択",
-    "more_refs": "その他"
+    "more_refs": "その他",
+    "go_to_line": "{{line}} 行目へ移動"
   },
   "stats": {
     "words": "語",
