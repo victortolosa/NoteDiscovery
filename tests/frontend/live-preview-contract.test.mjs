@@ -385,6 +385,10 @@ test('Live Preview Markdown features use non-document decorations', async () => 
     assert.match(decorations, /'Table'/);
     assert.match(decorations, /'cm-live-table-line'/);
     assert.match(editor, /'\.cm-live-table-line'/);
+    // Text must sit the same distance from both inner edges: CodeMirror's own
+    // line padding is 6px left / 2px right, so the theme evens it up.
+    assert.match(editor, /'\.cm-line': \{\s*padding: '0 2px',/);
+    assert.match(editor, /padding: '1rem calc\(1\.5rem - 2px\)'/);
     assert.match(editor, /fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'/);
     assert.match(decorations, /node\.name === 'Blockquote'/);
     assert.match(decorations, /node\.name === 'FencedCode'/);
@@ -392,7 +396,7 @@ test('Live Preview Markdown features use non-document decorations', async () => 
     assert.match(decorations, /node\.name === 'Strikethrough'/);
     assert.match(decorations, /\(\?:ATX\|Setext\)Heading/);
     assert.match(decorations, /--cm-live-list-hang:/);
-    // The hanging indent adds to CodeMirror's own 6px line padding rather than
-    // replacing it, so list markers share a left edge with body text.
-    assert.match(editor, /paddingLeft: 'calc\(6px \+ var\(--cm-live-list-hang, 1em\)\)'/);
+    // The hanging indent adds to the line padding rather than replacing it, so
+    // list markers share a left edge with body text.
+    assert.match(editor, /paddingLeft: 'calc\(2px \+ var\(--cm-live-list-hang, 1em\)\)'/);
 });

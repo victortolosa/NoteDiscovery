@@ -101,7 +101,15 @@ const livePreviewTheme = EditorView.theme({
     },
     '.cm-content': {
         caretColor: 'var(--text-primary)',
-        padding: '1rem',
+        // Horizontally: 22px + the 2px line padding below lands text 24px from
+        // both inner edges, matching the classic textarea and the preview pane.
+        padding: '1rem calc(1.5rem - 2px)',
+    },
+    // CodeMirror's own line padding is asymmetric (6px left, 2px right), which
+    // read as the text block sitting off-centre. Even it up; the rules for list
+    // and blockquote lines below still override padding-left.
+    '.cm-line': {
+        padding: '0 2px',
     },
     '.cm-cursor, .cm-dropCursor': {
         borderLeftColor: 'var(--text-primary)',
@@ -156,9 +164,9 @@ const livePreviewTheme = EditorView.theme({
         fontWeight: '700',
     },
     '.cm-live-list-line': {
-        // The hanging indent is added to CodeMirror's own 6px line padding, not
-        // substituted for it, so the marker starts on the same column as body text.
-        paddingLeft: 'calc(6px + var(--cm-live-list-hang, 1em))',
+        // The hanging indent is added to the line padding above, not substituted
+        // for it, so the marker starts on the same column as body text.
+        paddingLeft: 'calc(2px + var(--cm-live-list-hang, 1em))',
         textIndent: 'var(--cm-live-list-hang-negative, -1em)',
     },
     '.cm-live-checkbox': {
