@@ -1942,6 +1942,7 @@ function noteApp() {
                 this.notes = data.notes;
                 this.allFolders = data.folders || [];
                 this.buildNoteLookupMaps();
+                this._pruneMissingTabs();
                 this.buildFolderTree();
                 await this.loadTags();
             } catch (error) {
@@ -2842,7 +2843,7 @@ function noteApp() {
                 this._persistTabs();
                 return;
             }
-            const name = notePath.split('/').pop().replace('.md', '');
+            const name = this._tabName(notePath);
             // Evict oldest non-active tab if at capacity
             if (this.openTabs.length >= this._maxTabs) {
                 const evictIdx = this.openTabs.findIndex(t => t.path !== this.currentNote);
@@ -2915,8 +2916,15 @@ function noteApp() {
             this.loadNote(tab.path);
         },
 
+        // Label shown on a tab. Anchored to the end of the filename so a note
+        // like "a.mdnotes.md" doesn't lose the ".md" in the middle.
+        _tabName(notePath) {
+            return notePath.split('/').pop().replace(/\.md$/i, '');
+        },
+
         // Remove a tab by note path (used by delete/rename)
         _removeTabByPath(notePath) {
+            this._clearTabCache(notePath);
             const idx = this.openTabs.findIndex(t => t.path === notePath);
             if (idx !== -1) {
                 this.openTabs.splice(idx, 1);
@@ -2924,14 +2932,92 @@ function noteApp() {
             }
         },
 
-        // Update a tab's path and name (used by rename)
+        // Update a tab's path and name (used by rename and single-note move).
+        // The cached content moves with it, so the tab stays instant and the old
+        // key can't be served to a different note later created at that path.
         _updateTabPath(oldPath, newPath) {
+            this._renameTabCache(oldPath, newPath);
             const tab = this.openTabs.find(t => t.path === oldPath);
-            if (tab) {
-                tab.path = newPath;
-                tab.name = newPath.split('/').pop().replace('.md', '');
+            if (!tab) return;
+            tab.path = newPath;
+            tab.name = this._tabName(newPath);
+            this._dedupeTabs();
+            this._persistTabs();
+        },
+
+        // Rewrite every tab sitting under a folder that was renamed or moved.
+        // Mirrors the favorites cascade in _finalizeRenameFolder.
+        _retargetTabsUnder(oldFolderPath, newFolderPath) {
+            if (oldFolderPath === newFolderPath) return;
+            const oldPrefix = oldFolderPath + '/';
+            const newPrefix = newFolderPath + '/';
+            let changed = false;
+            for (const tab of this.openTabs) {
+                if (!tab.path.startsWith(oldPrefix)) continue;
+                const nextPath = newPrefix + tab.path.substring(oldPrefix.length);
+                this._renameTabCache(tab.path, nextPath);
+                tab.path = nextPath;
+                changed = true;
+            }
+            // Notes under the folder that are cached but no longer tabbed would
+            // otherwise keep a key pointing at a path that no longer exists.
+            this._clearTabCacheUnder(oldFolderPath);
+            if (changed) {
+                this._dedupeTabs();
                 this._persistTabs();
             }
+        },
+
+        // Close every tab inside a folder that was deleted (cascade).
+        _removeTabsUnder(folderPath) {
+            const prefix = folderPath + '/';
+            const remaining = this.openTabs.filter(tab => !tab.path.startsWith(prefix));
+            this._clearTabCacheUnder(folderPath);
+            if (remaining.length === this.openTabs.length) return;
+            this.openTabs = remaining;
+            this._persistTabs();
+        },
+
+        // A move can land a note on a path that is already open; keep the first.
+        _dedupeTabs() {
+            const seen = new Set();
+            this.openTabs = this.openTabs.filter(tab => {
+                if (seen.has(tab.path)) return false;
+                seen.add(tab.path);
+                return true;
+            });
+        },
+
+        // Drop tabs whose note no longer exists — deleted or renamed on another
+        // device, or by a vault sync. Runs after every successful notes load.
+        // The open note keeps its tab even if the file vanished: it may hold
+        // unsaved edits, and _forgetMissingNote() handles it once confirmed gone.
+        _pruneMissingTabs() {
+            if (!this.openTabs.length || !this.notes.length) return;
+            const remaining = this.openTabs.filter(tab => {
+                if (tab.path === this.currentNote) return true;
+                if (this._noteLookup.byPath.has(tab.path)) return true;
+                this._clearTabCache(tab.path);
+                return false;
+            });
+            if (remaining.length === this.openTabs.length) return;
+            this.openTabs = remaining;
+            this._persistTabs();
+        },
+
+        // The server says this note is gone. Drop the tab and its cached copy so
+        // a reload can't resurrect phantom content out of localStorage.
+        _forgetMissingNote(notePath) {
+            this._removeTabByPath(notePath);
+            if (this.currentNote !== notePath) return;
+            this.currentNote = '';
+            this.noteContent = '';
+            this.currentNoteName = '';
+            this._lastRenderedContent = '';
+            this._lastRenderedNote = '';
+            this._cachedRenderedHTML = '';
+            document.title = this.appName;
+            window.history.replaceState({ homepageFolder: this.selectedHomepageFolder || '' }, '', '/');
         },
 
         // Persist tabs to localStorage
@@ -2966,13 +3052,53 @@ function noteApp() {
             } catch (e) { return null; }
         },
 
+        // Forget a note's cached content (deleted, or moved out from under this path)
+        _clearTabCache(notePath) {
+            try {
+                localStorage.removeItem('tabContent:' + notePath);
+            } catch (e) { /* private mode */ }
+        },
+
+        // Carry cached content across a rename/move so the tab stays instant
+        _renameTabCache(oldPath, newPath) {
+            if (oldPath === newPath) return;
+            try {
+                const raw = localStorage.getItem('tabContent:' + oldPath);
+                localStorage.removeItem('tabContent:' + oldPath);
+                if (raw !== null) localStorage.setItem('tabContent:' + newPath, raw);
+            } catch (e) { /* quota exceeded or private mode */ }
+        },
+
+        // Forget every cached note under a folder that was renamed, moved or deleted
+        _clearTabCacheUnder(folderPath) {
+            const prefix = 'tabContent:' + folderPath + '/';
+            try {
+                const doomed = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith(prefix)) doomed.push(key);
+                }
+                doomed.forEach(key => localStorage.removeItem(key));
+            } catch (e) { /* private mode */ }
+        },
+
         // Background revalidation after a cache hit — keeps cache warm and triggers the stale
         // banner if the server version differs from what the user currently sees.
         async _revalidateTabBackground(notePath) {
             try {
                 const response = await fetch(`/api/notes/${notePath}`);
-                if (!response.ok) return;
+                if (!response.ok) {
+                    // Served from cache, but the note is gone on the server —
+                    // deleted or renamed elsewhere since it was last opened.
+                    if (response.status === 404) this._forgetMissingNote(notePath);
+                    return;
+                }
                 const data = await response.json();
+                // The note may have been renamed, moved or closed while this was in
+                // flight; re-caching it here would resurrect the old path's key.
+                const stillOpen = this.currentNote === notePath
+                    || this.openTabs.some(tab => tab.path === notePath);
+                if (!stillOpen) return;
                 this._saveTabCache(notePath, data);
                 if (this.currentNote !== notePath) return;
                 const sig = response.headers.get('etag') || response.headers.get('last-modified') || '';
@@ -5426,6 +5552,7 @@ function noteApp() {
                 if (this.currentNote && this.currentNote.startsWith(oldPrefix)) {
                     this.currentNote = newPrefix + this.currentNote.substring(oldPrefix.length);
                 }
+                this._retargetTabsUnder(draggedPath, newPath);
 
                 try {
                     const response = await fetch('/api/folders/move', {
@@ -5469,6 +5596,7 @@ function noteApp() {
             }
             if (wasCurrentNote) this.currentNote = newPath;
             if (wasCurrentMedia) this.currentMedia = newPath;
+            if (isNote) this._updateTabPath(draggedPath, newPath);
 
             try {
                 const endpoint = isMedia ? '/api/media/move' : '/api/notes/move';
@@ -6501,6 +6629,7 @@ function noteApp() {
             if (this.currentNote && this.currentNote.startsWith(folderPrefix)) {
                 this.currentNote = newFolderPrefix + this.currentNote.substring(folderPrefix.length);
             }
+            this._retargetTabsUnder(folderPath, newPath);
 
             try {
                 const response = await fetch('/api/folders/rename', {
@@ -6541,6 +6670,7 @@ function noteApp() {
                 this.noteContent = '';
                 document.title = this.appName;
             }
+            this._removeTabsUnder(folderPath);
             const newStarred = this.starredFolders.filter(
                 path => path !== folderPath && !path.startsWith(folderPrefix)
             );

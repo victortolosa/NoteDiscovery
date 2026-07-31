@@ -178,6 +178,74 @@ test('the Alpine application object declares each member once', async () => {
     assert.ok(seen.size > 200, `expected to scan the whole object, saw ${seen.size} members`);
 });
 
+// Slice one method out of the noteApp object literal, so a tab-maintenance
+// assertion can't be satisfied by an unrelated call elsewhere in the file.
+const methodBody = (app, name) => {
+    const start = app.search(new RegExp(`^ {8}(?:async )?${name}\\(`, 'm'));
+    assert.ok(start > 0, `could not find ${name}()`);
+    const end = app.indexOf('\n        },', start);
+    assert.ok(end > start, `could not find the end of ${name}()`);
+    return app.slice(start, end);
+};
+
+test('every path mutation keeps the tab bar pointing at real notes', async () => {
+    const app = await readFile(new URL('frontend/app.js', root), 'utf8');
+    // A tab holding a path that no longer exists 404s when clicked, so every
+    // rename, move and delete has to carry its tabs along with it.
+    assert.match(methodBody(app, 'renameNote'), /this\._updateTabPath\(oldPath, newPath\)/);
+    assert.match(methodBody(app, 'deleteNote'), /this\._removeTabByPath\(notePath\)/);
+
+    const folderDrop = methodBody(app, 'onFolderDrop');
+    assert.match(folderDrop, /this\._retargetTabsUnder\(draggedPath, newPath\)/, 'folder move');
+    assert.match(folderDrop, /this\._updateTabPath\(draggedPath, newPath\)/, 'note move');
+
+    assert.match(methodBody(app, '_finalizeRenameFolder'), /this\._retargetTabsUnder\(folderPath, newPath\)/);
+    assert.match(methodBody(app, 'deleteFolder'), /this\._removeTabsUnder\(folderPath\)/);
+
+    // A move can land a note on a path that is already open in another tab.
+    assert.match(methodBody(app, '_updateTabPath'), /this\._dedupeTabs\(\)/);
+});
+
+test('cached tab content never outlives the path it was cached under', async () => {
+    const app = await readFile(new URL('frontend/app.js', root), 'utf8');
+    // tabContent: entries are read before the network on the next open, so a
+    // stale key would serve a deleted note's text under a reused path.
+    assert.match(methodBody(app, '_removeTabByPath'), /this\._clearTabCache\(notePath\)/);
+    assert.match(methodBody(app, '_updateTabPath'), /this\._renameTabCache\(oldPath, newPath\)/);
+
+    const retarget = methodBody(app, '_retargetTabsUnder');
+    assert.match(retarget, /this\._renameTabCache\(tab\.path, nextPath\)/);
+    assert.match(retarget, /this\._clearTabCacheUnder\(oldFolderPath\)/);
+    assert.match(methodBody(app, '_removeTabsUnder'), /this\._clearTabCacheUnder\(folderPath\)/);
+
+    const revalidate = methodBody(app, '_revalidateTabBackground');
+    // A 404 here means the note went away while it was being served from cache.
+    assert.match(revalidate, /if \(response\.status === 404\) this\._forgetMissingNote\(notePath\)/);
+    // Re-caching after a rename would resurrect the old path's key.
+    assert.match(revalidate, /const stillOpen = this\.currentNote === notePath[\s\S]*?if \(!stillOpen\) return/);
+});
+
+test('tabs for notes that vanished elsewhere are pruned on the next load', async () => {
+    const app = await readFile(new URL('frontend/app.js', root), 'utf8');
+    assert.match(methodBody(app, 'loadNotes'), /this\.buildNoteLookupMaps\(\);\s*this\._pruneMissingTabs\(\)/);
+
+    const prune = methodBody(app, '_pruneMissingTabs');
+    // The open note keeps its tab even when the file is gone — it may hold
+    // unsaved edits, and _forgetMissingNote() retires it once confirmed.
+    assert.match(prune, /if \(tab\.path === this\.currentNote\) return true/);
+    assert.match(prune, /this\._noteLookup\.byPath\.has\(tab\.path\)/);
+    assert.match(methodBody(app, '_forgetMissingNote'), /this\._removeTabByPath\(notePath\)/);
+});
+
+test('tab labels only strip a trailing .md', async () => {
+    const app = await readFile(new URL('frontend/app.js', root), 'utf8');
+    // .replace('.md', '') hits the first match anywhere: "a.mdnotes.md" would
+    // lose the wrong three characters.
+    assert.match(methodBody(app, '_tabName'), /replace\(\/\\\.md\$\/i, ''\)/);
+    assert.match(methodBody(app, 'addTab'), /this\._tabName\(notePath\)/);
+    assert.match(methodBody(app, '_updateTabPath'), /this\._tabName\(newPath\)/);
+});
+
 test('every locale contains the backlink navigation string', async () => {
     const localeDirectory = new URL('locales/', root);
     const localeFiles = (await readdir(localeDirectory)).filter((name) => name.endsWith('.json'));
