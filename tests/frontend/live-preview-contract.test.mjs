@@ -324,5 +324,7 @@ test('Live Preview Markdown features use non-document decorations', async () => 
     assert.match(decorations, /node\.name === 'Strikethrough'/);
     assert.match(decorations, /\(\?:ATX\|Setext\)Heading/);
     assert.match(decorations, /--cm-live-list-hang:/);
-    assert.match(editor, /paddingLeft: 'var\(--cm-live-list-hang, 1em\)'/);
+    // The hanging indent adds to CodeMirror's own 6px line padding rather than
+    // replacing it, so list markers share a left edge with body text.
+    assert.match(editor, /paddingLeft: 'calc\(6px \+ var\(--cm-live-list-hang, 1em\)\)'/);
 });

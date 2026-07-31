@@ -758,7 +758,10 @@
         }
 
         .live-preview-editor {
-            flex: 1;
+            /* 100% basis, not 0: .editor-wrapper is a flex row, so a sibling that
+               is unexpectedly visible (the classic textarea) would otherwise take
+               half the pane and push the editor's text to the right. */
+            flex: 1 1 100%;
             width: 100%;
             min-width: 0;
             min-height: 0;

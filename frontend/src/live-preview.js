@@ -78,6 +78,160 @@ const codeHighlightStyle = HighlightStyle.define([
     { tag: [tags.operator, tags.punctuation], color: 'var(--text-secondary)' },
 ]);
 
+// Built once per module load. Both allocate: the language support builds a
+// parser, and EditorView.theme() injects a fresh stylesheet with its own
+// generated class. Rebuilding them per document — createState() runs on every
+// note switch — leaked a stylesheet each time.
+const markdownLanguage = markdown({
+    codeLanguages,
+    extensions: [Table, TaskList, Strikethrough, Autolink],
+});
+
+const livePreviewTheme = EditorView.theme({
+    '&': {
+        height: '100%',
+        backgroundColor: 'var(--bg-primary)',
+        color: 'var(--text-primary)',
+    },
+    '.cm-scroller': {
+        fontFamily: 'inherit',
+        fontSize: 'calc(1rem * var(--font-scale, 1))',
+        lineHeight: '1.6',
+        overflow: 'auto',
+    },
+    '.cm-content': {
+        caretColor: 'var(--text-primary)',
+        padding: '1rem',
+    },
+    '.cm-cursor, .cm-dropCursor': {
+        borderLeftColor: 'var(--text-primary)',
+    },
+    '.cm-activeLine': {
+        backgroundColor: 'color-mix(in srgb, var(--bg-tertiary) 55%, transparent)',
+    },
+    '.cm-live-heading': {
+        fontWeight: '700',
+        lineHeight: '1.3',
+    },
+    '.cm-live-heading-1': {
+        fontSize: '1.75em',
+    },
+    '.cm-live-heading-2': {
+        fontSize: '1.5em',
+    },
+    '.cm-live-heading-3': {
+        fontSize: '1.3em',
+    },
+    '.cm-live-heading-4': {
+        fontSize: '1.15em',
+    },
+    '.cm-live-heading-5, .cm-live-heading-6': {
+        fontSize: '1em',
+    },
+    '.cm-live-strong': {
+        fontWeight: '700',
+    },
+    '.cm-live-emphasis': {
+        fontStyle: 'italic',
+    },
+    '.cm-live-strikethrough': {
+        textDecoration: 'line-through',
+    },
+    '.cm-live-inline-code': {
+        padding: '0.08em 0.25em',
+        border: '1px solid var(--border-primary)',
+        borderRadius: '0.25rem',
+        backgroundColor: 'var(--bg-tertiary)',
+        color: 'var(--text-primary)',
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontSize: '0.9em',
+    },
+    '.cm-live-link': {
+        color: 'color-mix(in srgb, var(--accent-primary) 45%, var(--text-primary))',
+        textDecoration: 'underline',
+        textUnderlineOffset: '0.15em',
+    },
+    '.cm-live-list-mark': {
+        color: 'var(--accent-primary)',
+        fontWeight: '700',
+    },
+    '.cm-live-list-line': {
+        // The hanging indent is added to CodeMirror's own 6px line padding, not
+        // substituted for it, so the marker starts on the same column as body text.
+        paddingLeft: 'calc(6px + var(--cm-live-list-hang, 1em))',
+        textIndent: 'var(--cm-live-list-hang-negative, -1em)',
+    },
+    '.cm-live-checkbox': {
+        width: '1em',
+        height: '1em',
+        margin: '0 0.35em 0 0',
+        verticalAlign: '-0.1em',
+        accentColor: 'var(--accent-primary)',
+        cursor: 'pointer',
+    },
+    '.cm-live-task-complete': {
+        color: 'var(--text-tertiary)',
+        textDecoration: 'line-through',
+    },
+    '.cm-live-blockquote-line': {
+        color: 'var(--text-secondary)',
+        borderLeft: '3px solid var(--accent-primary)',
+        paddingLeft: '0.75em',
+    },
+    '.cm-live-code-line': {
+        backgroundColor: 'var(--bg-tertiary)',
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    },
+    '.cm-live-code-first-line': {
+        borderTopLeftRadius: '0.3rem',
+        borderTopRightRadius: '0.3rem',
+    },
+    '.cm-live-code-last-line': {
+        borderBottomLeftRadius: '0.3rem',
+        borderBottomRightRadius: '0.3rem',
+    },
+    '.cm-live-hidden-line': {
+        display: 'none',
+    },
+    '.cm-live-horizontal-rule': {
+        display: 'inline-block',
+        width: '100%',
+        height: '1px',
+        margin: '0.8em 0',
+        backgroundColor: 'var(--border-primary)',
+        verticalAlign: 'middle',
+    },
+    '.cm-live-preview-only-line': {
+        backgroundColor: 'var(--bg-tertiary)',
+        boxShadow: 'inset 2px 0 0 var(--accent-primary)',
+    },
+    '.cm-live-table-line': {
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    },
+    '.cm-live-preview-only-inline': {
+        textDecoration: 'underline dotted var(--accent-primary)',
+        textUnderlineOffset: '0.2em',
+    },
+    '.cm-live-search-match': {
+        backgroundColor: 'var(--accent-light)',
+        borderRadius: '0.15rem',
+    },
+    '.cm-live-search-match-active': {
+        backgroundColor: 'var(--accent-primary)',
+        color: 'var(--bg-primary)',
+    },
+    '&.cm-focused': {
+        outline: 'none',
+    },
+    '&.cm-focused .cm-selectionBackground': {
+        backgroundColor: 'color-mix(in srgb, var(--accent-primary) 70%, var(--text-primary)) !important',
+    },
+    '.cm-content .cm-line.cm-line::selection, .cm-content .cm-line.cm-line *::selection': {
+        backgroundColor: 'color-mix(in srgb, var(--accent-primary) 70%, var(--text-primary)) !important',
+        color: 'var(--bg-primary) !important',
+    },
+});
+
 const buildSearchState = (doc, query, requestedIndex = 0) => {
     const searchQuery = String(query ?? '').trim();
     const matches = [];
@@ -180,10 +334,7 @@ export function createLivePreviewEditor({
             doc,
             extensions: [
                 history(),
-                markdown({
-                    codeLanguages,
-                    extensions: [Table, TaskList, Strikethrough, Autolink],
-                }),
+                markdownLanguage,
                 syntaxHighlighting(codeHighlightStyle),
                 decorationsCompartment.of(livePreviewDecorations(editorLabels)),
                 searchField,
@@ -231,148 +382,7 @@ export function createLivePreviewEditor({
                         onChange(update.state.doc.toString());
                     }
                 }),
-                EditorView.theme({
-                    '&': {
-                        height: '100%',
-                        backgroundColor: 'var(--bg-primary)',
-                        color: 'var(--text-primary)',
-                    },
-                    '.cm-scroller': {
-                        fontFamily: 'inherit',
-                        fontSize: 'calc(1rem * var(--font-scale, 1))',
-                        lineHeight: '1.6',
-                        overflow: 'auto',
-                    },
-                    '.cm-content': {
-                        caretColor: 'var(--text-primary)',
-                        padding: '1rem',
-                    },
-                    '.cm-cursor, .cm-dropCursor': {
-                        borderLeftColor: 'var(--text-primary)',
-                    },
-                    '.cm-activeLine': {
-                        backgroundColor: 'color-mix(in srgb, var(--bg-tertiary) 55%, transparent)',
-                    },
-                    '.cm-live-heading': {
-                        fontWeight: '700',
-                        lineHeight: '1.3',
-                    },
-                    '.cm-live-heading-1': {
-                        fontSize: '1.75em',
-                    },
-                    '.cm-live-heading-2': {
-                        fontSize: '1.5em',
-                    },
-                    '.cm-live-heading-3': {
-                        fontSize: '1.3em',
-                    },
-                    '.cm-live-heading-4': {
-                        fontSize: '1.15em',
-                    },
-                    '.cm-live-heading-5, .cm-live-heading-6': {
-                        fontSize: '1em',
-                    },
-                    '.cm-live-strong': {
-                        fontWeight: '700',
-                    },
-                    '.cm-live-emphasis': {
-                        fontStyle: 'italic',
-                    },
-                    '.cm-live-strikethrough': {
-                        textDecoration: 'line-through',
-                    },
-                    '.cm-live-inline-code': {
-                        padding: '0.08em 0.25em',
-                        border: '1px solid var(--border-primary)',
-                        borderRadius: '0.25rem',
-                        backgroundColor: 'var(--bg-tertiary)',
-                        color: 'var(--text-primary)',
-                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                        fontSize: '0.9em',
-                    },
-                    '.cm-live-link': {
-                        color: 'color-mix(in srgb, var(--accent-primary) 45%, var(--text-primary))',
-                        textDecoration: 'underline',
-                        textUnderlineOffset: '0.15em',
-                    },
-                    '.cm-live-list-mark': {
-                        color: 'var(--accent-primary)',
-                        fontWeight: '700',
-                    },
-                    '.cm-live-list-line': {
-                        paddingLeft: 'var(--cm-live-list-hang, 1em)',
-                        textIndent: 'var(--cm-live-list-hang-negative, -1em)',
-                    },
-                    '.cm-live-checkbox': {
-                        width: '1em',
-                        height: '1em',
-                        margin: '0 0.35em 0 0',
-                        verticalAlign: '-0.1em',
-                        accentColor: 'var(--accent-primary)',
-                        cursor: 'pointer',
-                    },
-                    '.cm-live-task-complete': {
-                        color: 'var(--text-tertiary)',
-                        textDecoration: 'line-through',
-                    },
-                    '.cm-live-blockquote-line': {
-                        color: 'var(--text-secondary)',
-                        borderLeft: '3px solid var(--accent-primary)',
-                        paddingLeft: '0.75em',
-                    },
-                    '.cm-live-code-line': {
-                        backgroundColor: 'var(--bg-tertiary)',
-                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                    },
-                    '.cm-live-code-first-line': {
-                        borderTopLeftRadius: '0.3rem',
-                        borderTopRightRadius: '0.3rem',
-                    },
-                    '.cm-live-code-last-line': {
-                        borderBottomLeftRadius: '0.3rem',
-                        borderBottomRightRadius: '0.3rem',
-                    },
-                    '.cm-live-hidden-line': {
-                        display: 'none',
-                    },
-                    '.cm-live-horizontal-rule': {
-                        display: 'inline-block',
-                        width: '100%',
-                        height: '1px',
-                        margin: '0.8em 0',
-                        backgroundColor: 'var(--border-primary)',
-                        verticalAlign: 'middle',
-                    },
-                    '.cm-live-preview-only-line': {
-                        backgroundColor: 'var(--bg-tertiary)',
-                        boxShadow: 'inset 2px 0 0 var(--accent-primary)',
-                    },
-                    '.cm-live-table-line': {
-                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                    },
-                    '.cm-live-preview-only-inline': {
-                        textDecoration: 'underline dotted var(--accent-primary)',
-                        textUnderlineOffset: '0.2em',
-                    },
-                    '.cm-live-search-match': {
-                        backgroundColor: 'var(--accent-light)',
-                        borderRadius: '0.15rem',
-                    },
-                    '.cm-live-search-match-active': {
-                        backgroundColor: 'var(--accent-primary)',
-                        color: 'var(--bg-primary)',
-                    },
-                    '&.cm-focused': {
-                        outline: 'none',
-                    },
-                    '&.cm-focused .cm-selectionBackground': {
-                        backgroundColor: 'color-mix(in srgb, var(--accent-primary) 70%, var(--text-primary)) !important',
-                    },
-                    '.cm-content .cm-line.cm-line::selection, .cm-content .cm-line.cm-line *::selection': {
-                        backgroundColor: 'color-mix(in srgb, var(--accent-primary) 70%, var(--text-primary)) !important',
-                        color: 'var(--bg-primary) !important',
-                    },
-                }),
+                livePreviewTheme,
             ],
         })
     );
