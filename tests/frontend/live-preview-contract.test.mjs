@@ -400,3 +400,21 @@ test('Live Preview Markdown features use non-document decorations', async () => 
     // list markers share a left edge with body text.
     assert.match(editor, /paddingLeft: 'calc\(2px \+ var\(--cm-live-list-hang, 1em\)\)'/);
 });
+
+test('Live Preview block spacing uses padding so line heights stay measurable', async () => {
+    const editor = await readFile(new URL('frontend/src/live-preview.js', root), 'utf8');
+    const decorations = await readFile(
+        new URL('frontend/src/live-preview-decorations.js', root),
+        'utf8'
+    );
+    // CodeMirror measures lines with getBoundingClientRect(), which ignores
+    // margins — vertical rhythm has to be padding or the height map drifts.
+    assert.match(editor, /paddingBottom: 'var\(--cm-live-heading-space, 0\.35em\)'/);
+    assert.match(editor, /'\.cm-live-paragraph-line': \{\s*paddingBottom: 'var\(--cm-live-paragraph-space, 0\.5em\)',/);
+    assert.doesNotMatch(editor, /margin(Top|Bottom): '[^']*em'/);
+    // Only top-level paragraphs own their spacing; list items and blockquotes
+    // keep the rhythm their own line decorations give them.
+    assert.match(decorations, /node\.name === 'Paragraph'/);
+    assert.match(decorations, /node\.node\.parent\?\.name !== 'Document'/);
+    assert.match(decorations, /'cm-live-paragraph-line'/);
+});

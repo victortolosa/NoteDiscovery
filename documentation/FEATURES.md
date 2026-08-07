@@ -34,6 +34,11 @@ Choose the editor under Settings → Editor mode.
 - List controls operate on complete lines: Tab and Shift+Tab change nesting,
   empty nested items outdent before exiting, and the bullet, numbered, and task
   toolbar actions convert or remove existing list markers.
+- Headings leave space above the text that follows them, and each top-level
+  paragraph line is separated from the next, so a single Enter reads as a
+  paragraph break without needing a blank line. List items, blockquotes, and
+  fenced code keep their own spacing. Themes can retune both gaps with the
+  `--cm-live-heading-space` and `--cm-live-paragraph-space` CSS variables.
 - Markdown that receives additional rendering in Preview remains editable
   source with a subtle background, left rail, or dotted inline cue.
 - Switch back to Classic at any time. The editor preference is stored locally.

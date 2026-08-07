@@ -117,9 +117,15 @@ const livePreviewTheme = EditorView.theme({
     '.cm-activeLine': {
         backgroundColor: 'color-mix(in srgb, var(--bg-tertiary) 55%, transparent)',
     },
+    // Vertical rhythm uses padding, never margin: CodeMirror measures line
+    // heights with getBoundingClientRect(), which excludes margins, so margins
+    // here would desync the height map from the rendered document. Both gaps
+    // are em-based (they scale with the heading level and --font-scale) and
+    // overridable per theme without a rebuild.
     '.cm-live-heading': {
         fontWeight: '700',
         lineHeight: '1.3',
+        paddingBottom: 'var(--cm-live-heading-space, 0.35em)',
     },
     '.cm-live-heading-1': {
         fontSize: '1.75em',
@@ -135,6 +141,9 @@ const livePreviewTheme = EditorView.theme({
     },
     '.cm-live-heading-5, .cm-live-heading-6': {
         fontSize: '1em',
+    },
+    '.cm-live-paragraph-line': {
+        paddingBottom: 'var(--cm-live-paragraph-space, 0.5em)',
     },
     '.cm-live-strong': {
         fontWeight: '700',

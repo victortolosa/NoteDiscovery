@@ -274,6 +274,22 @@ function buildDecorations(view, labels, sourceRanges = []) {
                     return;
                 }
 
+                // Paragraph spacing is per document line, not per paragraph:
+                // marked runs with breaks: true, so every newline the author
+                // types is a visible break, and each one should read as one.
+                // Nested paragraphs (list items, blockquotes) keep their own
+                // rhythm — a paragraph directly under Document is the only one
+                // that owns its vertical space.
+                if (node.name === 'Paragraph') {
+                    if (node.node.parent?.name !== 'Document') return;
+                    const firstLine = view.state.doc.lineAt(node.from).number;
+                    const lastLine = view.state.doc.lineAt(Math.max(node.from, node.to - 1)).number;
+                    for (let lineNumber = firstLine; lineNumber <= lastLine; lineNumber++) {
+                        addLineClass(view.state.doc.line(lineNumber).from, 'cm-live-paragraph-line');
+                    }
+                    return;
+                }
+
                 if (node.name === 'Blockquote') {
                     const firstLine = view.state.doc.lineAt(node.from).number;
                     const lastLine = view.state.doc.lineAt(Math.max(node.from, node.to - 1)).number;
