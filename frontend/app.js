@@ -3,6 +3,7 @@
 // Configuration constants
 const CONFIG = {
     AUTOSAVE_DELAY: 1000,              // ms - Fallback only; runtime value lives on this.autosaveDelayMs (hydrated from /api/config). Used by autoSave() and _drawingScheduleAutosave().
+    DEFAULT_THEME: 'light',            // Fallback only; runtime value lives on this.defaultTheme (hydrated from /api/config). Used by initTheme() when localStorage has no saved preference.
     /** Must match drawingRedraw() fill and eraser stroke color (opaque “whiteboard”). */
     DRAWING_BACKGROUND: '#ffffff',
     /**
@@ -279,6 +280,7 @@ function noteApp() {
         demoMode: false,
         alreadyDonated: false,
         autosaveDelayMs: CONFIG.AUTOSAVE_DELAY,  // hydrated from /api/config in loadConfig()
+        defaultTheme: CONFIG.DEFAULT_THEME,      // hydrated from /api/config in loadConfig()
         notes: [],
 
         // True while /api/notes is in flight. Drives the "Loading your vault…"
@@ -1190,6 +1192,9 @@ function noteApp() {
                 if (Number.isFinite(config.autosaveDelayMs) && config.autosaveDelayMs > 0) {
                     this.autosaveDelayMs = config.autosaveDelayMs;
                 }
+                if (typeof config.defaultTheme === 'string' && config.defaultTheme) {
+                    this.defaultTheme = config.defaultTheme;
+                }
             } catch (error) {
                 console.error('Failed to load config:', error);
             }
@@ -1215,8 +1220,8 @@ function noteApp() {
 
         // Initialize theme system
         async initTheme() {
-            // Load saved theme preference from localStorage
-            const savedTheme = localStorage.getItem('noteDiscoveryTheme') || 'light';
+            // A user's saved preference takes priority over the configured default.
+            const savedTheme = localStorage.getItem('noteDiscoveryTheme') || this.defaultTheme;
             this.currentTheme = savedTheme;
             await this.applyTheme(savedTheme);
         },
@@ -5422,14 +5427,35 @@ function noteApp() {
                 n.path === notePath ||
                 n.path === notePath + '.md'
             );
-
+            
+            if (!targetNote && this.currentNote) {
+                // Resolve href relative to the current note's folder (standard
+                // markdown behavior). Fixes `[X](sibling.md)` inside a subfolder
+                // note — the vault-root exact match above misses it. Issue #262.
+                const resolved = this.resolveMarkdownMediaPathForNote(this.currentNote, notePath);
+                if (resolved && resolved !== notePath) {
+                    const resolvedLower = resolved.toLowerCase();
+                    targetNote = this.notes.find(n =>
+                        n.path === resolved ||
+                        n.path === resolved + '.md' ||
+                        n.path.toLowerCase() === resolvedLower ||
+                        n.path.toLowerCase() === resolvedLower + '.md'
+                    );
+                }
+            }
+            
             if (!targetNote) {
-                // Try to find by name (in case link uses just the note name without path)
-                targetNote = this.notes.find(n =>
-                    n.name === notePath ||
-                    n.name === notePath + '.md' ||
+                // Try to find by name (in case link uses just the note name without path).
+                // n.name stores the stem (no .md), so also compare against notePath
+                // with any .md suffix stripped — otherwise `[X](FILE.md)` never
+                // matches the "FILE" name. Issue #262.
+                const notePathStem = notePath.replace(/\.md$/i, '');
+                const notePathStemLower = notePathStem.toLowerCase();
+                targetNote = this.notes.find(n => 
+                    n.name === notePath || 
+                    n.name === notePathStem ||
                     n.name.toLowerCase() === notePath.toLowerCase() ||
-                    n.name.toLowerCase() === (notePath + '.md').toLowerCase()
+                    n.name.toLowerCase() === notePathStemLower
                 );
             }
 
