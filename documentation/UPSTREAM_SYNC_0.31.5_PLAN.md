@@ -43,8 +43,12 @@ Conflicting files: `frontend/app.js`, `frontend/index.html`, `frontend/login.htm
 - [x] Branch `sync/upstream-0.31.5` from `origin/custom` (no upstream tracking, so a
       bare `git push` cannot hit `custom`).
 - [x] `git config rerere.enabled true`
-- [ ] Record baseline: `npm run check:frontend`; Docker build; manual check of Live
-      Preview, tabs, favorites, uploads, sharing.
+- [x] Record baseline: `npm run check:frontend` passes (42/42 tests, minified build).
+      Backend smoke test (throwaway vault, key routes + every `/static` asset in
+      `index.html`) passes.
+- [ ] Docker build: Docker is not installed on the dev machine; covered by the GHCR
+      workflow in phase 7 unless run elsewhere first.
+- [ ] Manual browser check of Live Preview, tabs, favorites, uploads, sharing.
 
 ## Phase 1: up to v0.28.4 (1 hunk)
 
@@ -172,8 +176,8 @@ logout then Back.
 
 | Phase | Status | Notes |
 |---|---|---|
-| 0 | in progress | |
-| 1 | pending | |
+| 0 | done | Baseline green. Smoke venv uses unpinned deps (Python 3.14 cannot build pinned pyyaml 6.0.1). |
+| 1 | done | 1 hunk, took upstream. Sibling/stem link resolution verified against a mini vault; tests, build, smoke green. |
 | 2 | pending | |
 | 3 | pending | |
 | 4 | pending | |
