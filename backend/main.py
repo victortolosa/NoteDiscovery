@@ -15,6 +15,7 @@ import json
 import logging
 from pathlib import Path
 from typing import List, Optional
+from html import escape as html_escape
 import aiofiles
 from datetime import datetime
 import bcrypt
@@ -85,6 +86,15 @@ if not version_path.exists():
 with open(version_path, 'r', encoding='utf-8') as f:
     version = f.read().strip()
     config['app']['version'] = version
+
+# App name: APP_NAME env var > app.name in config.yaml. An empty value is
+# treated as unset (matches Docker convention and DEFAULT_THEME below), since a
+# blank name would leave the UI and the login page unlabeled.
+_app_name_source = "config.yaml"
+if os.environ.get('APP_NAME', '').strip():
+    config['app']['name'] = os.environ['APP_NAME'].strip()
+    _app_name_source = "APP_NAME env var"
+logger.info("App name: %s (from %s)", config['app']['name'], _app_name_source)
 
 # Environment variable overrides for authentication settings
 # Allows different configs for local vs production deployments
@@ -257,6 +267,7 @@ UPLOAD_MAX_IMAGE_MB = int(os.getenv('UPLOAD_MAX_IMAGE_MB', '10'))
 UPLOAD_MAX_AUDIO_MB = int(os.getenv('UPLOAD_MAX_AUDIO_MB', '50'))
 UPLOAD_MAX_VIDEO_MB = int(os.getenv('UPLOAD_MAX_VIDEO_MB', '100'))
 UPLOAD_MAX_PDF_MB = int(os.getenv('UPLOAD_MAX_PDF_MB', '20'))
+UPLOAD_MAX_NOTE_MB = int(os.getenv('UPLOAD_MAX_NOTE_MB', '10'))
 
 # Autosave debounce in milliseconds (applies to note typing AND drawing PNG autosave).
 try:
@@ -325,9 +336,40 @@ plugin_manager.run_hook('on_app_startup')
 static_path = Path(__file__).parent.parent / "frontend"
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
-# Legacy service-worker cleanup - must remain at root to reach old registrations
+
+# The app name is admin-controlled configuration rather than user input, but it
+# still has to be escaped for the context it lands in: an unescaped quote or
+# angle bracket in the name would corrupt the HTML attribute or JSON string
+# literal it is substituted into.
+def _render_app_name_html(content: str) -> str:
+    """Substitute __APP_NAME__ placeholders in an HTML document."""
+    return content.replace('__APP_NAME__', html_escape(config['app']['name'], quote=True))
+
+
+def _render_app_name_json(content: str) -> str:
+    """Substitute __APP_NAME__ placeholders inside JSON string literals."""
+    return content.replace('__APP_NAME__', json.dumps(config['app']['name'])[1:-1])
+
+
+# PWA manifest - served from root rather than /static because the service worker
+# serves /static/ cache-first, which would pin a stale app name.
+@app.get("/manifest.json", include_in_schema=False)
+# Fetched on every page load alongside /sw.js, so this tracks the catch-all page limit.
+@limiter.limit("120/minute")
+async def pwa_manifest(request: Request):
+    """Serve the PWA manifest with the configured app name injected."""
+    manifest_path = static_path / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="Manifest not found")
+    async with aiofiles.open(manifest_path, 'r', encoding='utf-8') as f:
+        content = await f.read()
+    return Response(content=_render_app_name_json(content), media_type="application/manifest+json")
+
+
+# PWA Service Worker - must be served from root for proper scope
 @app.get("/sw.js", include_in_schema=False)
-@limiter.limit("30/minute")
+# Fetched on every page load alongside /manifest.json.
+@limiter.limit("120/minute")
 async def service_worker(request: Request):
     """Serve the self-unregistering worker that removes legacy PWA caches."""
     sw_path = static_path / "sw.js"
@@ -490,8 +532,7 @@ async def login_page(request: Request, error: str = None):
         content = await f.read()
     
     # Inject app name throughout the login page
-    app_name = config['app']['name']
-    content = content.replace('NoteDiscovery', app_name)
+    content = _render_app_name_html(content)
     content = content.replace('__DEFAULT_THEME__', DEFAULT_THEME)
     
     return content
@@ -554,6 +595,7 @@ async def get_config():
         "alreadyDonated": ALREADY_DONATED,  # Hide support buttons if true
         "autosaveDelayMs": AUTOSAVE_DELAY_MS,  # Debounce for note/drawing autosave
         "defaultTheme": DEFAULT_THEME,  # Used when the browser has no saved preference
+        "uploadMaxNoteMb": UPLOAD_MAX_NOTE_MB,  # Client-side size cap for .md drops
         "authentication": {
             "enabled": config.get('authentication', {}).get('enabled', False)
         }
@@ -1264,7 +1306,10 @@ async def get_note(note_path: str, include_backlinks: bool = True):
 
 
 @api_router.post("/notes/{note_path:path}", tags=["Notes"])
-@limiter.limit("60/minute")
+# This is the autosave endpoint. With autosave_delay_ms at its 1000ms default a single
+# editing session can approach one request per second on its own, so the limit has to
+# sit well clear of that or active typing starts failing to save.
+@limiter.limit("300/minute")
 async def create_or_update_note(request: Request, note_path: str, content: dict):
     """Create or update a note"""
     try:
@@ -1906,8 +1951,7 @@ async def catch_all(full_path: str, request: Request):
     index_path = static_path / "index.html"
     async with aiofiles.open(index_path, 'r', encoding='utf-8') as f:
         content = await f.read()
-    app_name = config['app']['name']
-    return content.replace('<title>NoteDiscovery</title>', f'<title>{app_name}</title>')
+    return _render_app_name_html(content)
 
 
 # ============================================================================

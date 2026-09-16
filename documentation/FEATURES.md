@@ -50,7 +50,7 @@ extended Markdown.
 
 ### Media Support
 - **Drawing editor** — In-app **`drawing-*.png`** sketches next to your notes ([overview](#drawing-editor)); full guide: **[DRAWING.md](DRAWING.md)**
-- **Drag & drop upload** - Drop files from your file system directly into the editor
+- **Drag & drop upload** - Drop files from your file system into the editor: images/audio/video/PDF go to `_attachments`; `.md` files land next to the current note and get an inline link at the drop point
 - **Clipboard paste** - Paste images from clipboard with Ctrl+V
 - **Images** - JPG, PNG, GIF, WebP (default max 10MB, configurable)
 - **Audio** - MP3, WAV, OGG, M4A (default max 50MB, configurable)
@@ -155,6 +155,7 @@ To link to a heading, convert the heading text to a slug: **lowercase, spaces �
 - **Resizable sidebar** - Drag to adjust width
 - **Collapsible sidebar panel** - Show/hide the sidebar contents while keeping the icon rail in place
 - **View mode memory** - Remembers Edit/Split/Preview preference
+- **Smart scroll sync** - Optional (**Settings → Smart scroll sync**, off by default): aligns headings, images, tables and code blocks between the editor and preview panes instead of scrolling both by percentage
 - **Responsive design** - Works on all screen sizes
 
 ## 📊 Note Statistics
