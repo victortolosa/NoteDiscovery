@@ -25,16 +25,48 @@ across 6 files. Merging at intermediate upstream checkpoints spreads them out:
 Conflicting files: `frontend/app.js`, `frontend/index.html`, `frontend/login.html`,
 `frontend/sw.js`, `backend/main.py`, `run.py`.
 
-## Standing decision: keep both frontend asset pipelines
+## Resolution policy: upstream wins on overlap
 
-- The fork's npm/esbuild bundle (`/static/dist/`) remains the app UI's source.
-- Upstream's `scripts/vendor_assets.py` (`/static/vendor/`) is **also kept**, because
-  `backend/export.py` print preview/export now loads highlight.js, marked, DOMPurify,
-  MathJax and Mermaid from `/static/vendor/` as classic scripts, which the ESM
-  bundles cannot replace.
-- The auto-merged `Dockerfile` already runs both stages; accept it.
-- Cost: larger image. Benefit: working offline exports and far fewer recurring
-  conflicts in `export.py`, `run.py` and `main.py` on future syncs.
+Decided 2026-09-16 after phase 1. Where upstream and the fork implement the same
+concern, **take upstream's implementation** and record the caveats. Fork-only
+features that upstream has no equivalent for (CodeMirror Live Preview, tabs and tab
+cache, favorites/starred folders, homepage redesign, markdown upload modal) are kept,
+with only the minimal glue needed to run on top of upstream. Each phase lists its
+caveats.
+
+## Standing decision: upstream asset pipeline for the app UI
+
+- Libraries (Alpine, marked, DOMPurify, highlight.js, MathJax, Mermaid, vis-network,
+  qrcode, Tailwind) load from upstream's `/static/vendor/` via
+  `scripts/vendor_assets.py`, exactly as upstream's `index.html` does.
+- The fork's npm/esbuild build is reduced to what upstream lacks: the Live Preview
+  bundle (`/static/dist/live-preview.js`) plus editor tests. `vendor.js`,
+  `mermaid-vendor.js`, `vis-network-vendor.js` and the Tailwind CSS build stop being
+  referenced (removed in phase 3).
+- `backend/export.py` print preview/export uses `/static/vendor/` too, so there is a
+  single source of library versions.
+
+Caveats:
+- Tailwind runs as upstream's in-browser runtime script instead of a prebuilt CSS
+  file: slightly slower first paint. `tailwind.config.cjs` has no theme extensions,
+  so no styles are lost.
+- Translations load with upstream's synchronous XHR before Alpine starts, replacing
+  the fork's async loader in `vendor.js`.
+
+## Standing caveat: service worker and Cloudflare Access
+
+Taking upstream means taking its caching service worker and root `/manifest.json`.
+
+- **High: stale app after deploy.** The fork removed this worker in `d8ae6f7` because
+  its cache name is keyed off `VERSION`, which does not change between fork builds,
+  so browsers served a stale `app.js` against a new `index.html` (blank sidebar).
+  Upstream's `?v=__APP_VERSION__` has the same key. Mitigation without touching
+  upstream code: have the fork's CI write a unique `VERSION` per build
+  (e.g. `0.31.5-custom.<run number>`).
+- **Medium: PWA install behind Cloudflare Access.** Upstream's
+  `<link rel="manifest">` has no `crossorigin="use-credentials"`, so the manifest
+  request is redirected to the Access login and install metadata fails to load. The
+  app itself still works. Mitigation: one attribute, re-add only if install matters.
 
 ---
 
@@ -71,28 +103,28 @@ filter). Upstream imports `.md` dropped on the editor as sibling notes; the fork
 window-level overlay with a conflict modal.
 
 - Take upstream's hunks, so editor drops use upstream handling.
-- In the fork's `onUploadDragEnter`, return early when the drag target is inside the
-  editor, so the overlay only handles drops elsewhere. `onUploadDrop` already ignores
-  `e.defaultPrevented`, so no double import.
+- Glue: in the fork's `onUploadDragEnter`, return early when the drag is over the
+  editor, so the fork's overlay only handles drops elsewhere (upstream has no
+  equivalent there). `onUploadDrop` already ignores `e.defaultPrevented`.
+- Caveat: `.md` dropped on the editor is imported next to the current note with no
+  overwrite/rename/skip modal.
 
 **Scroll sync** (editor handler, preview handler, restore, frame cancellation,
 Mermaid anchor, anchor helpers). Upstream anchors measure a mirrored `<textarea>`,
 which is wrong for CodeMirror.
 
-- Take upstream's structure: frame cancellation, `smartScrollSync` branch,
-  `{editorPct}` storage shape.
-- Replace direct `editor.scrollTop` reads/writes with `getActiveEditorScrollMetrics()`
-  / `setActiveEditorScrollPercentage()`.
-- Gate anchor sync with `this.smartScrollSync && this.editorMode !== 'live-preview'`;
-  Live Preview uses percentage sync.
-- Anchor helper methods and Mermaid `data-source-line` preservation: take verbatim.
+- Take upstream's handlers verbatim for the textarea editor.
+- Glue for Live Preview only: when `editorMode === 'live-preview'`, route through
+  `getActiveEditorScrollMetrics()` / `setActiveEditorScrollPercentage()` with
+  percentage sync, since upstream's anchors measure a mirrored `<textarea>`.
+- Caveat: Smart scroll sync has no effect in Live Preview mode.
 
 **Manifest/branding** (`main.py`, `index.html` head, `login.html`)
 
-- `main.py`: take upstream's `APP_NAME` helpers; keep the fork's legacy-SW comment.
-- `<link rel="manifest">`: use upstream's `/manifest.json` (app name injected) but
-  **keep `crossorigin="use-credentials"`** for Cloudflare Access. Keep the fork's
-  `pwa-icon-180.png` apple-touch-icon.
+- Take upstream: `APP_NAME` helpers, `/manifest.json` link, `logo.svg`
+  apple-touch-icon.
+- Caveats: see "Service worker and Cloudflare Access" above; the fork's
+  `pwa-icon-*.png` icons stop being referenced from the HTML.
 
 Verify: `npm test`; scroll sync in textarea and Live Preview, toggle on/off; drop
 `.md` on editor vs. sidebar; `APP_NAME` override.
@@ -103,13 +135,14 @@ Brings: vendored assets, caching service worker, clickable preview checkboxes.
 
 | Hunk | Resolution |
 |---|---|
-| `index.html` head library tags (2) | **Keep fork** (`/static/dist/tailwind.css`, dist highlight theme). Do not add `/static/vendor` tags or the synchronous translation preload. |
-| `index.html` bottom scripts | **Keep fork** (editor-commands, `dist/vendor.js`, upload overlay/modal). Adopt `?v=__APP_VERSION__` on the classic script tags. **Drop** SW registration. |
-| `app.js` highlight theme paths | **Keep fork** (`/static/dist/highlight-github*.css`). |
-| `app.js` preview click / task toggling | **Take upstream** (additive). Point the preview's `@click` at `handlePreviewClick`. |
-| `sw.js`, `main.py` `/sw.js` route | **Keep fork** self-unregistering worker; taking upstream's token-replace line is harmless. |
-| `main.py` `_check_vendored_assets` | **Take upstream** (fork `index.html` references no vendor paths, so it logs "0 present"). |
-| `run.py` | **Take upstream** `ensure_frontend_assets()`; exports need `/static/vendor`. |
+| `index.html` head library tags (2) | **Take upstream** (`/static/vendor/*`, Tailwind runtime, sync translation preload). |
+| `index.html` bottom scripts | **Take upstream** (`?v=` script tags, SW registration) and keep fork-only tags: `editor-commands.js`, upload overlay/modal. Drop `dist/vendor.js`. |
+| `app.js` highlight theme paths | **Take upstream** (`/static/vendor/highlight.js/styles/*`). Also repoint fork-only `dist/mathjax.js` and `dist/vis-network-vendor.js` loaders to upstream's vendor copies. |
+| `app.js` preview click / task toggling | **Take upstream** (additive). |
+| `sw.js`, `main.py` `/sw.js` route | **Take upstream** caching worker. |
+| `main.py` `_check_vendored_assets` | **Take upstream**. |
+| `run.py` | **Take upstream** `ensure_frontend_assets()`. |
+| Build cleanup | Remove `frontend/src/vendor.js`, `mermaid-vendor.js`, `vis-network-vendor.js`, Tailwind build and their npm deps/scripts; keep `build:live-preview` and tests. Simplify the `Dockerfile` minifier stage accordingly. |
 
 Verify: tick and Ctrl+click checkboxes in both editor modes. The fork's
 `$watch('noteContent')` calls `replaceDocument()`, so **confirm Live Preview undo
@@ -123,7 +156,7 @@ Mermaid, immutable caching of versioned static assets.
 
 | Hunk | Resolution |
 |---|---|
-| `app.js` Mermaid (2) | **Take upstream `loadMermaid()` / `window.mermaidReady`**, import `/static/dist/mermaid-vendor.js` instead. Drop fork's inline `_mermaidModulePromise`. |
+| `app.js` Mermaid (2) | **Take upstream** `loadMermaid()` verbatim (`/static/vendor/mermaid/`). |
 | `app.js` `loadNote` | **Keep fork** (prefetch → tab cache → fetch). In its 404 branch use `this.closeMediaViewer()`. |
 | `app.js` `closeMediaViewer()` | **Take upstream** (additive). |
 
@@ -155,7 +188,7 @@ fixes, nested list styling, search path tooltip.
 | Top-level constants | **Keep both** (`FOLDER_COLOR_PALETTE` + `SLUG_TRANSLITERATIONS`). |
 | Share modal (4) | **Take upstream** (additive). |
 | Stats task counting | **Take upstream** (`_scanTaskLines`). |
-| `index.html` backlinks | **Keep fork layout**, add `:title="bl.path"` to the note-name button. |
+| `index.html` backlinks | **Take upstream** layout. Caveat: upstream nests per-reference `<button>`s inside the card `<button>` (invalid HTML the fork had fixed); clicking a reference line may also trigger the card's click. |
 
 Then confirm the security fix survived: compare `git show 9d3ff3c -- frontend/index.html`
 against the merged file. Add fork-only locale keys to `locales/pl-PL.json` or accept
