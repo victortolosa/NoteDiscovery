@@ -221,7 +221,7 @@ logout then Back.
 |---|---|---|
 | 0 | done | Baseline green. Smoke venv uses unpinned deps (Python 3.14 cannot build pinned pyyaml 6.0.1). |
 | 1 | done | 1 hunk, took upstream. Sibling/stem link resolution verified against a mini vault; tests, build, smoke green. |
-| 2 | pending | |
+| 2 | done (awaiting browser check) | 15 hunks. D1 and D2 applied; Live Preview keeps percentage scroll sync. D2 was mostly already in place: the fork's `onEditorDrop` already split `.md` vs media, so glue was only the target folder and keeping the overlay off the textarea. Verified: tests 42/42, minified build, HTML balance, no new undefined identifiers (eslint no-undef matches pre-merge), backend smoke, `APP_NAME` escaping in HTML and manifest. Chrome automation unavailable, so scroll sync and drag-and-drop still need a manual browser pass. Upstream `ghcr-stats.yml` workflow arrives but scheduled workflows are disabled in forks by default. |
 | 3 | pending | |
 | 4 | pending | |
 | 5 | pending | |
