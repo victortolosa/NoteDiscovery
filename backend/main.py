@@ -282,6 +282,12 @@ UPLOAD_MAX_VIDEO_MB = int(os.getenv('UPLOAD_MAX_VIDEO_MB', '100'))
 UPLOAD_MAX_PDF_MB = int(os.getenv('UPLOAD_MAX_PDF_MB', '20'))
 UPLOAD_MAX_NOTE_MB = int(os.getenv('UPLOAD_MAX_NOTE_MB', '10'))
 
+# Shortest query the search endpoint will act on. A single character matches
+# most of a vault and cannot use the search index, so answering it means reading
+# every note for a result nobody wants. Mirrored by SEARCH_MIN_QUERY_LENGTH in
+# frontend/app.js, which stops sending those queries in the first place.
+SEARCH_MIN_QUERY_LENGTH = 2
+
 # Autosave debounce in milliseconds (applies to note typing AND drawing PNG autosave).
 try:
     _autosave_raw = int(os.getenv(
@@ -339,10 +345,14 @@ else:
 ensure_directories(config)
 
 # Initialize plugin manager
-plugin_manager = PluginManager(config['storage']['plugins_dir'])
+plugin_manager = PluginManager(
+    config['storage']['plugins_dir'],
+    notes_dir=config['storage']['notes_dir'],
+    config=config,
+)
 
 # Run app startup hooks
-plugin_manager.run_hook('on_app_startup')
+plugin_manager.dispatch('on_app_startup')
 
 
 mimetypes.add_type("text/javascript", ".js")
@@ -1077,7 +1087,7 @@ async def move_note_endpoint(request: Request, data: dict):
         update_token_path(config['storage']['notes_dir'], old_path, new_path)
         
         # Run plugin hooks
-        plugin_manager.run_hook('on_note_save', note_path=new_path, content='')
+        plugin_manager.dispatch('on_note_save', note_path=new_path, content='')
         
         return {
             "success": True,
@@ -1310,16 +1320,14 @@ async def create_note_from_template(request: Request, data: dict):
         final_content = apply_template_placeholders(template_content, note_path)
         
         # Run on_note_create hook BEFORE saving (allows plugins to modify initial content)
-        final_content = plugin_manager.run_hook_with_return(
+        final_content = plugin_manager.dispatch(
             'on_note_create',
             note_path=note_path,
             initial_content=final_content
         )
         
         # Run on_note_save hook (can transform content, e.g., encrypt)
-        transformed_content = plugin_manager.run_hook('on_note_save', note_path=note_path, content=final_content)
-        if transformed_content is None:
-            transformed_content = final_content
+        transformed_content = plugin_manager.dispatch('on_note_save', note_path=note_path, content=final_content)
         
         # Save the note with the (potentially modified/transformed) content
         success = save_note(config['storage']['notes_dir'], note_path, transformed_content)
@@ -1396,9 +1404,7 @@ async def get_note(note_path: str, include_backlinks: bool = True):
             raise HTTPException(status_code=404, detail="Note not found")
 
         # Run on_note_load hook (can transform content, e.g., decrypt)
-        transformed_content = plugin_manager.run_hook('on_note_load', note_path=note_path, content=content)
-        if transformed_content is not None:
-            content = transformed_content
+        content = plugin_manager.dispatch('on_note_load', note_path=note_path, content=content)
 
         response = {
             "path": note_path,
@@ -1432,16 +1438,14 @@ async def create_or_update_note(request: Request, note_path: str, content: dict)
         
         # If creating a new note, run on_note_create hook to allow plugins to modify initial content
         if is_new_note:
-            note_content = plugin_manager.run_hook_with_return(
+            note_content = plugin_manager.dispatch(
                 'on_note_create',
                 note_path=note_path,
                 initial_content=note_content
             )
         
         # Run on_note_save hook (can transform content, e.g., encrypt)
-        transformed_content = plugin_manager.run_hook('on_note_save', note_path=note_path, content=note_content)
-        if transformed_content is None:
-            transformed_content = note_content
+        transformed_content = plugin_manager.dispatch('on_note_save', note_path=note_path, content=note_content)
         
         success = save_note(config['storage']['notes_dir'], note_path, transformed_content)
         
@@ -1496,9 +1500,7 @@ async def append_to_note(request: Request, note_path: str, data: dict):
         new_content = existing_content + content_to_append
         
         # Run on_note_save hook
-        transformed_content = plugin_manager.run_hook('on_note_save', note_path=note_path, content=new_content)
-        if transformed_content is None:
-            transformed_content = new_content
+        transformed_content = plugin_manager.dispatch('on_note_save', note_path=note_path, content=new_content)
         
         success = save_note(config['storage']['notes_dir'], note_path, transformed_content)
         
@@ -1530,7 +1532,7 @@ async def remove_note(request: Request, note_path: str):
         delete_token_for_note(config['storage']['notes_dir'], note_path)
         
         # Run plugin hooks
-        plugin_manager.run_hook('on_note_delete', note_path=note_path)
+        plugin_manager.dispatch('on_note_delete', note_path=note_path)
         
         return {
             "success": True,
@@ -1567,9 +1569,7 @@ async def export_note_to_html(request: Request, note_path: str, theme: Optional[
             raise HTTPException(status_code=404, detail="Note not found")
         
         # Run on_note_load hook (can transform content, e.g., decrypt)
-        transformed_content = plugin_manager.run_hook('on_note_load', note_path=note_path, content=content)
-        if transformed_content is not None:
-            content = transformed_content
+        content = plugin_manager.dispatch('on_note_load', note_path=note_path, content=content)
         
         # Strip YAML frontmatter (like the preview does)
         content = strip_frontmatter(content)
@@ -1663,17 +1663,28 @@ async def search(
                 "message": "No search term provided"
             }
 
-        results = search_notes(config['storage']['notes_dir'], q)
+        # Below the floor, skip the vault read but still run the hooks, so a
+        # plugin answering a short trigger of its own keeps working.
+        if len(q.strip()) < SEARCH_MIN_QUERY_LENGTH:
+            results = []
+        else:
+            results = search_notes(config['storage']['notes_dir'], q)
 
-        # Run plugin hooks
-        plugin_manager.run_hook('on_search', query=q, results=results)
+        # Run plugin hooks — a plugin may return a replacement result set
+        hooked = plugin_manager.dispatch('on_search', query=q, results=results)
+        plugin_replaced = hooked is not results
+        results = hooked
 
-        # Apply pagination with consistent sorting by path
+        # Core results are sorted by path so pagination is reproducible between
+        # requests (search_notes emits them in mtime order, which shifts as notes
+        # are edited). A plugin that returns its own list has chosen an order —
+        # relevance, due date — so keep it, and with it the responsibility for
+        # making that order stable across calls.
         paginated = paginate(
             items=results,
             limit=limit,
             offset=offset,
-            sort_key=lambda x: x.get('path', '').lower()
+            sort_key=None if plugin_replaced else (lambda x: x.get('path', '').lower())
         )
         
         response = {
@@ -1711,20 +1722,6 @@ async def get_graph():
 async def list_plugins():
     """List all available plugins"""
     return {"plugins": plugin_manager.list_plugins()}
-
-
-@api_router.get("/plugins/note_stats/calculate", tags=["Plugins"])
-async def calculate_note_stats(content: str):
-    """Calculate statistics for note content (if plugin enabled)"""
-    try:
-        plugin = plugin_manager.plugins.get('note_stats')
-        if not plugin or not plugin.enabled:
-            return {"enabled": False, "stats": None}
-        
-        stats = plugin.calculate_stats(content)
-        return {"enabled": True, "stats": stats}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=safe_error_message(e, "Failed to calculate note statistics"))
 
 
 @api_router.post("/plugins/{plugin_name}/toggle", tags=["Plugins"])
@@ -2074,6 +2071,9 @@ async def catch_all(full_path: str, request: Request):
 
 # Register routers with the main app
 # Authentication is applied via router dependencies
+# Plugin routes go on api_router so they inherit the same auth dependency;
+# mounted last so a plugin cannot shadow a core endpoint.
+api_router.include_router(plugin_manager.build_router())
 app.include_router(api_router)
 app.include_router(pages_router)
 

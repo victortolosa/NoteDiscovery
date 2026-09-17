@@ -17,6 +17,7 @@ const CONFIG = {
     DRAWING_MIN_DOC_DIM: 64,
     DRAWING_MAX_DOC_DIM: 4096,
     SEARCH_DEBOUNCE_DELAY: 500,        // ms - Delay before running note search while typing
+    SEARCH_MIN_QUERY_LENGTH: 2,        // Shorter queries show the folder tree instead of searching
     SAVE_INDICATOR_DURATION: 2000,     // ms - How long to show "saved" indicator
     SCROLL_SYNC_DELAY: 50,             // ms - Delay to prevent scroll sync interference
     SCROLL_SYNC_MAX_RETRIES: 10,       // Maximum attempts to find editor/preview elements
@@ -1981,7 +1982,11 @@ function noteApp() {
             this._noteLookup.byNameLower.clear();
             this._noteLookup.byEndPath.clear();
             this._mediaLookup.clear();
-
+            
+            const setFirst = (map, key, value) => {
+                if (!map.has(key)) map.set(key, value);
+            };
+            
             for (const note of this.notes) {
                 const path = note.path;
                 const pathLower = path.toLowerCase();
@@ -2003,40 +2008,52 @@ function noteApp() {
                 // Notes only from here
                 const nameWithoutMd = name.replace(/\.md$/i, '');
                 const nameWithoutMdLower = nameWithoutMd.toLowerCase();
-
-                // Store all variations for fast lookup
-                this._noteLookup.byPath.set(path, true);
-                this._noteLookup.byPath.set(path.replace(/\.md$/i, ''), true);
-                this._noteLookup.byPathLower.set(pathLower, true);
-                this._noteLookup.byPathLower.set(pathLower.replace(/\.md$/i, ''), true);
-                this._noteLookup.byName.set(name, true);
-                this._noteLookup.byName.set(nameWithoutMd, true);
-                this._noteLookup.byNameLower.set(nameLower, true);
-                this._noteLookup.byNameLower.set(nameWithoutMdLower, true);
-
+                const urlPath = path.replace(/\.md$/i, '');
+                
+                // Store all variations for fast lookup. The value is the note's URL
+                // path, so a wikilink can be resolved to a href and not just tested
+                // for existence. Name keys collide when two folders hold the same
+                // note name, so first match wins, the same rule the media map above
+                // and the name lookup in handleInternalLink already use.
+                setFirst(this._noteLookup.byPath, path, urlPath);
+                setFirst(this._noteLookup.byPath, urlPath, urlPath);
+                setFirst(this._noteLookup.byPathLower, pathLower, urlPath);
+                setFirst(this._noteLookup.byPathLower, pathLower.replace(/\.md$/i, ''), urlPath);
+                setFirst(this._noteLookup.byName, name, urlPath);
+                setFirst(this._noteLookup.byName, nameWithoutMd, urlPath);
+                setFirst(this._noteLookup.byNameLower, nameLower, urlPath);
+                setFirst(this._noteLookup.byNameLower, nameWithoutMdLower, urlPath);
+                
                 // End path matching (for /folder/note style links)
-                this._noteLookup.byEndPath.set('/' + nameWithoutMdLower, true);
-                this._noteLookup.byEndPath.set('/' + nameLower, true);
+                setFirst(this._noteLookup.byEndPath, '/' + nameWithoutMdLower, urlPath);
+                setFirst(this._noteLookup.byEndPath, '/' + nameLower, urlPath);
             }
         },
-
-        // Fast O(1) check if a wikilink target exists
-        wikiLinkExists(linkTarget) {
+        
+        // Resolve a wikilink target to the target note's URL path (O(1) lookup)
+        // Returns the path without its .md extension, or null when nothing matches
+        resolveWikiLink(linkTarget) {
             const targetLower = linkTarget.toLowerCase();
 
             // Check all lookup maps
             return (
-                this._noteLookup.byPath.has(linkTarget) ||
-                this._noteLookup.byPath.has(linkTarget + '.md') ||
-                this._noteLookup.byPathLower.has(targetLower) ||
-                this._noteLookup.byPathLower.has(targetLower + '.md') ||
-                this._noteLookup.byName.has(linkTarget) ||
-                this._noteLookup.byNameLower.has(targetLower) ||
-                this._noteLookup.byEndPath.has('/' + targetLower) ||
-                this._noteLookup.byEndPath.has('/' + targetLower + '.md')
+                this._noteLookup.byPath.get(linkTarget) ??
+                this._noteLookup.byPath.get(linkTarget + '.md') ??
+                this._noteLookup.byPathLower.get(targetLower) ??
+                this._noteLookup.byPathLower.get(targetLower + '.md') ??
+                this._noteLookup.byName.get(linkTarget) ??
+                this._noteLookup.byNameLower.get(targetLower) ??
+                this._noteLookup.byEndPath.get('/' + targetLower) ??
+                this._noteLookup.byEndPath.get('/' + targetLower + '.md') ??
+                null
             );
         },
-
+        
+        // Fast O(1) check if a wikilink target exists
+        wikiLinkExists(linkTarget) {
+            return this.resolveWikiLink(linkTarget) !== null;
+        },
+        
         // Resolve media wikilink to full path (O(1) lookup)
         // Returns the full path if found, null otherwise
         resolveMediaWikilink(mediaName) {
@@ -2666,7 +2683,7 @@ function noteApp() {
 
         // Unified filtering logic combining tags and text search
         async applyFilters() {
-            const hasTextSearch = this.searchQuery.trim().length > 0;
+            const hasTextSearch = this.isSearchable();
             const hasTagFilter = this.selectedTags.length > 0;
 
             // Case 1: No filters at all → show full folder tree
@@ -5560,9 +5577,14 @@ function noteApp() {
             // Parse href into note path and anchor (e.g., "note.md#section" -> notePath="note.md", anchor="section")
             const decodedHref = decodeURIComponent(href);
             const hashIndex = decodedHref.indexOf('#');
-            const notePath = hashIndex !== -1 ? decodedHref.substring(0, hashIndex) : decodedHref;
+            const rawPath = hashIndex !== -1 ? decodedHref.substring(0, hashIndex) : decodedHref;
             const anchor = hashIndex !== -1 ? decodedHref.substring(hashIndex + 1) : null;
 
+            // Root-relative hrefs like /folder/note are vault paths with a slash bolted
+            // on, and vault paths carry none. Protocol-relative //host already returned
+            // above as external, so nothing here can be a host.
+            const notePath = rawPath.replace(/^\/+/, '');
+            
             // If it's just an anchor link (#heading), scroll within current note
             if (!notePath && anchor) {
                 this.scrollToAnchor(anchor);
@@ -7674,12 +7696,19 @@ function noteApp() {
         },
 
         // Search notes
+        // Whether the query is worth sending. A single character matches most of
+        // a vault and can't use the search index, so it reads every note to
+        // answer something nobody wants — the sidebar shows its hint instead.
+        isSearchable() {
+            return this.searchQuery.trim().length >= CONFIG.SEARCH_MIN_QUERY_LENGTH;
+        },
+
         debouncedSearchNotes() {
             if (this.searchDebounceTimeout) {
                 clearTimeout(this.searchDebounceTimeout);
             }
 
-            const hasTextSearch = this.searchQuery.trim().length > 0;
+            const hasTextSearch = this.isSearchable();
             if (!hasTextSearch) {
                 this.isSearching = false;
                 this.searchNotes();
@@ -8111,18 +8140,25 @@ function noteApp() {
                 /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,
                 (match, target, displayText) => {
                     const linkTarget = target.trim();
-
-                    // Fast O(1) check using pre-built lookup maps
+                    // Fast O(1) lookup using pre-built lookup maps
                     // Handle section anchors: extract base note path
                     const hashIndex = linkTarget.indexOf('#');
                     const basePath = hashIndex !== -1 ? linkTarget.substring(0, hashIndex) : linkTarget;
                     const anchor = hashIndex !== -1 ? linkTarget.substring(hashIndex) : '';
+                    // Fork: default display text is the last path segment ([[folder/note]] reads "note")
                     const defaultLinkText = `${basePath.split('/').pop()?.replace(/\.md$/i, '') || ''}${anchor}` || linkTarget;
                     const linkText = displayText ? displayText.trim() : defaultLinkText;
-                    const noteExists = basePath === '' || self.wikiLinkExists(basePath);
-
+                    const resolvedPath = basePath === '' ? null : self.resolveWikiLink(basePath);
+                    const noteExists = basePath === '' || resolvedPath !== null;
+                    
+                    // A wikilink names a note, not a location relative to the note it is
+                    // written in, so the href has to be absolute. Left as written when it
+                    // resolves to nothing: that raw target is what the create-from-link
+                    // prompt offers as the path of the new note.
+                    const hrefTarget = resolvedPath !== null ? '/' + resolvedPath + anchor : linkTarget;
+                    
                     // Escape special chars: href needs quote escaping, text needs HTML escaping
-                    const safeHref = linkTarget.replace(/"/g, '%22');
+                    const safeHref = hrefTarget.replace(/"/g, '%22');
                     const safeText = linkText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
                     // Return link with data attribute for styling broken links
@@ -9373,8 +9409,9 @@ function noteApp() {
             // Link count (standard markdown links)
             const markdownLinkMatches = content.match(/\[([^\]]+)\]\(([^\)]+)\)/g) || [];
             const markdownLinks = markdownLinkMatches.length;
-            const markdownInternalLinks = markdownLinkMatches.filter(l => l.includes('.md')).length;
-
+            // Test the target, not the whole link: a label mentioning ".md" is not an internal link.
+            const markdownInternalLinks = markdownLinkMatches.filter(l => /\]\([^)]+\.md(?:#[^)]*)?\)$/.test(l)).length;
+            
             // Wikilink count ([[note]] or [[note|display text]] format)
             const wikilinks = (content.match(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g) || []).length;
 
@@ -9384,8 +9421,10 @@ function noteApp() {
 
             // Code blocks
             const codeBlocks = (content.match(/```[\s\S]*?```/g) || []).length;
-            const inlineCode = (content.match(/`[^`]+`/g) || []).length;
-
+            // Fences come out first: the ``` pairs around a block otherwise match
+            // the inline pattern and each block counts as an inline span as well.
+            const inlineCode = (content.replace(/```[\s\S]*?```/g, '').match(/`[^`]+`/g) || []).length;
+            
             // Headings
             const h1 = (content.match(/^# /gm) || []).length;
             const h2 = (content.match(/^## /gm) || []).length;
