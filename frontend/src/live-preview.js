@@ -302,6 +302,23 @@ const searchField = StateField.define({
     provide: (field) => EditorView.decorations.from(field, value => value.decorations),
 });
 
+/**
+ * The smallest single change turning `current` into `next`: common prefix and
+ * suffix are left alone. Returns a CodeMirror change spec.
+ */
+export function minimalReplacement(current, next) {
+    let from = 0;
+    const maxFrom = Math.min(current.length, next.length);
+    while (from < maxFrom && current[from] === next[from]) from++;
+    let to = current.length;
+    let nextEnd = next.length;
+    while (to > from && nextEnd > from && current[to - 1] === next[nextEnd - 1]) {
+        to--;
+        nextEnd--;
+    }
+    return { from, to, insert: next.slice(from, nextEnd) };
+}
+
 export function linkTargetAtPosition(state, position) {
     const line = state.doc.lineAt(position);
     const wikilinkPattern = /\[\[([^\]\n|]+)(?:\|[^\]\n]+)?\]\]/g;
@@ -463,8 +480,11 @@ export function createLivePreviewEditor({
                     // with the document that was previously mounted.
                     view.setState(createState(nextContent));
                 } else {
+                    // Replace only the span that differs, so a small outside edit (a
+                    // task ticked in the preview pane) keeps the cursor, scroll
+                    // position and undo steps of the untouched text.
                     view.dispatch({
-                        changes: { from: 0, to: view.state.doc.length, insert: nextContent },
+                        changes: minimalReplacement(view.state.doc.toString(), nextContent),
                         annotations: Transaction.userEvent.of('input'),
                     });
                 }

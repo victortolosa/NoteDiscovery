@@ -4,7 +4,7 @@ import test from 'node:test';
 import { markdown } from '@codemirror/lang-markdown';
 import { EditorState, Text } from '@codemirror/state';
 import { lineBoundedRanges } from '../../frontend/src/live-preview-decorations.js';
-import { linkTargetAtPosition } from '../../frontend/src/live-preview.js';
+import { linkTargetAtPosition, minimalReplacement } from '../../frontend/src/live-preview.js';
 
 const root = new URL('../../', import.meta.url);
 const requiredEditorKeys = [
@@ -48,16 +48,30 @@ test('frontend build dependencies are exact versions', async () => {
     assert.equal(packageJson.devDependencies['html-minifier-terser'], '7.2.0');
 });
 
-test('production frontend dependencies are self-hosted build artifacts', async () => {
+test('production frontend dependencies are self-hosted', async () => {
     const packageJson = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
     const html = await readFile(new URL('frontend/index.html', root), 'utf8');
     const dockerfile = await readFile(new URL('Dockerfile', root), 'utf8');
+    // Libraries come from upstream's vendored copies; only Live Preview is bundled here.
     assert.doesNotMatch(html, /<(?:script|link)[^>]+https:\/\//);
-    assert.doesNotMatch(html, /XMLHttpRequest/);
-    assert.match(html, /\/static\/dist\/tailwind\.css/);
-    assert.match(html, /\/static\/dist\/vendor\.js/);
-    assert.match(packageJson.scripts['build:frontend:minify'], /build:vendor/);
+    assert.match(html, /\/static\/vendor\/alpinejs\//);
+    assert.doesNotMatch(html, /\/static\/dist\//);
+    assert.match(packageJson.scripts['build:frontend:minify'], /build:live-preview/);
     assert.match(dockerfile, /npm run build:frontend:minify/);
+    assert.match(dockerfile, /vendor_assets\.py/);
+});
+
+test('outside edits replace only the changed span', () => {
+    const apply = (current, next) => {
+        const { from, to, insert } = minimalReplacement(current, next);
+        return current.slice(0, from) + insert + current.slice(to);
+    };
+    const note = '# Tasks\n- [ ] one\n- [ ] two\n';
+    const ticked = '# Tasks\n- [ ] one\n- [x] two\n';
+    assert.deepEqual(minimalReplacement(note, ticked), { from: 21, to: 22, insert: 'x' });
+    for (const [a, b] of [[note, ticked], ['', 'abc'], ['abc', ''], ['aaa', 'aa'], ['abab', 'ab'], [note, note]]) {
+        assert.equal(apply(a, b), b);
+    }
 });
 
 test('the generated bundle remains a lazy-loaded artifact', async () => {
@@ -65,8 +79,6 @@ test('the generated bundle remains a lazy-loaded artifact', async () => {
     const html = await readFile(new URL('frontend/index.html', root), 'utf8');
     assert.match(app, /import\('\/static\/dist\/live-preview\.js'\)/);
     assert.doesNotMatch(html, /<script[^>]+live-preview\.js/);
-    assert.match(app, /import\('\/static\/dist\/mermaid-vendor\.js'\)/);
-    assert.match(app, /import\('\/static\/dist\/vis-network-vendor\.js'\)/);
 });
 
 test('Live Preview failures distinguish missing bundles from runtime errors', async () => {

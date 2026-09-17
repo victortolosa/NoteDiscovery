@@ -26,10 +26,44 @@
     <meta name="msapplication-TileColor" content="#667eea">
     <meta name="msapplication-tap-highlight" content="no">
     
-    <!-- Self-hosted production styles -->
-    <link rel="stylesheet" href="/static/dist/tailwind.css">
+    <!-- Libraries in /static/vendor/ are downloaded by scripts/vendor_assets.py -->
+    <script src="/static/vendor/tailwindcss/tailwind.min.js"></script>
     
-    <!-- MathJax for LaTeX math rendering -->
+    <!-- Preload translations before Alpine initializes -->
+    <script>
+        (function() {
+            // Load translations synchronously to ensure they're available before Alpine renders
+            const locale = localStorage.getItem('locale') || 'en-US';
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', '/api/locales/' + locale, false); // Synchronous request
+            try {
+                xhr.send();
+                if (xhr.status === 200) {
+                    window.__preloadedTranslations = JSON.parse(xhr.responseText);
+                } else {
+                    // Fallback to en-US if preferred locale fails
+                    if (locale !== 'en-US') {
+                        xhr.open('GET', '/api/locales/en-US', false);
+                        xhr.send();
+                        if (xhr.status === 200) {
+                            window.__preloadedTranslations = JSON.parse(xhr.responseText);
+                            localStorage.setItem('locale', 'en-US');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to preload translations:', e);
+                window.__preloadedTranslations = {};
+            }
+        })();
+    </script>
+    
+    <script defer src="/static/vendor/alpinejs/cdn.min.js"></script>
+    <script src="/static/vendor/marked/marked.min.js"></script>
+    
+    <!-- Sanitizes rendered Markdown (XSS prevention) -->
+    <script src="/static/vendor/dompurify/purify.min.js"></script>
+    
     <script>
         MathJax = {
             tex: {
@@ -48,7 +82,39 @@
             }
         };
     </script>
-    <link rel="stylesheet" id="highlight-theme" href="/static/dist/highlight-github.css">
+    <!-- Fonts and TeX extensions load relative to this script's path -->
+    <script src="/static/vendor/mathjax/tex-mml-chtml.js"></script>
+    
+    <!-- Theme set by app.js to match the active app theme -->
+    <link rel="stylesheet" id="highlight-theme" href="">
+    <script src="/static/vendor/highlight.js/highlight.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/csharp.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/python.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/bash.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/shell.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/powershell.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/javascript.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/typescript.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/json.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/sql.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/yaml.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/css.min.js"></script>
+    <script src="/static/vendor/highlight.js/languages/http.min.js"></script>
+    
+    <script type="module">
+        // Diagram types load on demand from ./chunks/ next to this module.
+        // Exposed as a promise because module scripts are deferred: a preview can
+        // render before this finishes, and renderMermaid() waits on it.
+        window.mermaidReady = import('/static/vendor/mermaid/mermaid.esm.min.mjs')
+            .then((module) => (window.mermaid = module.default))
+            .catch((error) => {
+                console.error('Mermaid failed to load:', error);
+                return null;
+            });
+    </script>
+    
+    <script src="/static/vendor/vis-network/vis-network.min.js"></script>
+    <script src="/static/vendor/qrcode-generator/qrcode.min.js"></script>
     
     <!-- Theme styles will be loaded dynamically -->
     <link rel="stylesheet" id="theme-stylesheet" href="">
@@ -702,7 +768,14 @@
         .markdown-preview input[type="checkbox"] {
             margin-right: 0.5rem;
         }
-        .markdown-preview li:has(> input[type="checkbox"]) {
+        /* Exports keep them disabled, so only the live preview gets the affordance */
+        .markdown-preview input[type="checkbox"]:not([disabled]) {
+            cursor: pointer;
+        }
+        /* Loose lists (a blank line anywhere in them) wrap item content in a <p>,
+           so both shapes need covering or the bullet reappears next to the box. */
+        .markdown-preview li:has(> input[type="checkbox"]),
+        .markdown-preview li:has(> p > input[type="checkbox"]) {
             list-style: none;
             margin-left: -1.25rem;
         }
@@ -2792,7 +2865,8 @@
                                 rel="noopener noreferrer"
                                 class="inline-flex items-center transition-all hover:scale-105"
                             >
-                                <img src="https://www.pikapods.com/static/run-button.svg" alt="Run on PikaPods" style="height: 28px;">
+                                <!-- Served locally so opening Settings makes no third-party request -->
+                                <img src="/static/pikapods-run-button.svg" alt="Run on PikaPods" style="height: 28px;">
                             </a>
                             <!-- Link to hide these buttons -->
                             <a 
@@ -3920,7 +3994,7 @@
                                 class="p-6 markdown-preview"
                                 :class="{ 'pt-2': getHasMetadata() && currentNote, 'readable-width': readableLineLength }"
                                 x-html="renderedMarkdown"
-                                @click="handleInternalLink($event)"
+                                @click="handlePreviewClick($event)"
                             ></div>
                         </div>
                         
@@ -4812,10 +4886,25 @@
         </button>
     </nav>
     
-    <script src="/static/editor-markdown-continue.js"></script>
-    <script src="/static/editor-commands.js"></script>
-    <script src="/static/app.js"></script>
-    <script type="module" src="/static/dist/vendor.js"></script>
+    <!-- ?v= is the app version, so a release cannot be served from a stale cache -->
+    <script src="/static/editor-markdown-continue.js?v=__APP_VERSION__"></script>
+    <script src="/static/editor-commands.js?v=__APP_VERSION__"></script>
+    <script src="/static/app.js?v=__APP_VERSION__"></script>
+    
+    <!-- PWA Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('SW registered:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('SW registration failed:', error);
+                    });
+            });
+        }
+    </script>
 
     <!-- MD file drag-and-drop overlay — primary drop target, no pointer-events-none -->
     <div
