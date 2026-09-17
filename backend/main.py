@@ -19,7 +19,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 from html import escape as html_escape
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, parse_qs
 import hashlib
 import aiofiles
 from datetime import datetime
@@ -212,10 +212,13 @@ app = FastAPI(
 # CORS middleware configuration
 # Use config.yaml to control allowed origins (default: ["*"] for self-hosted simplicity)
 allowed_origins = config.get('server', {}).get('allowed_origins', ["*"])
+# Starlette swaps the wildcard for the requesting Origin once a cookie is present,
+# so "*" plus credentials would allow credentialed reads from any origin.
+_allow_credentials = "*" not in allowed_origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_credentials=True,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -350,7 +353,33 @@ mimetypes.add_type("font/woff2", ".woff2")
 
 # Mount static files
 static_path = Path(__file__).parent.parent / "frontend"
-app.mount("/static", StaticFiles(directory=static_path), name="static")
+
+
+class VersionedStaticFiles(StaticFiles):
+    """StaticFiles that lets browsers keep version-addressed assets indefinitely.
+
+    Two kinds of URL can never change content for a given address: anything asked
+    for with a ?v=<release> query (our own scripts, see _render_app_name_html) and
+    the vendored bundler chunks, whose filenames embed a content hash. Caching
+    those forever removes a revalidation round trip per file on every page load,
+    which for a Mermaid diagram alone is two dozen of them. The HTML that names
+    them always revalidates, so an upgraded client still picks up new URLs at once.
+
+    Everything else keeps the default last-modified revalidation.
+    """
+
+    IMMUTABLE = "public, max-age=31536000, immutable"
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        query = parse_qs(scope.get("query_string", b"").decode("latin-1"))
+        content_hashed = scope.get("path", "").startswith("/vendor/mermaid/chunks/")
+        if "v" in query or content_hashed:
+            response.headers["Cache-Control"] = self.IMMUTABLE
+        return response
+
+
+app.mount("/static", VersionedStaticFiles(directory=static_path), name="static")
 
 
 def _check_vendored_assets() -> None:
