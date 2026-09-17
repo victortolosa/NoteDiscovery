@@ -6,9 +6,9 @@
     }
   },
   "dompurify": {
-    "version": "3.0.8",
+    "version": "3.4.15",
     "hashes": {
-      "purify.min.js": "d2469862adea8ad924559a4fffab8a4c9c1f4e9a8534ce8e1c36ec698cf0f54c"
+      "purify.min.js": "f263b05369e050fa175d4ecb9c9358eb4253602d510297adfb31df48b2f1c4d5"
     }
   },
   "highlight.js": {

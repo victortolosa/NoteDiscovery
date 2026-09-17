@@ -448,7 +448,7 @@ def generate_export_html(
         hljs_css = f'{hljs_base}/styles/{highlight_theme}.min.css'
         hljs_js = f'{hljs_base}/highlight.min.js'
         marked_js = 'https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js'
-        purify_js = 'https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js'
+        purify_js = 'https://cdn.jsdelivr.net/npm/dompurify@3.4.15/dist/purify.min.js'
         mathjax_js = 'https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js'
         mermaid_mjs = 'https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.esm.min.mjs'
     

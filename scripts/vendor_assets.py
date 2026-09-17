@@ -67,11 +67,13 @@ PACKAGES = [
     },
     {
         "name": "dompurify",
-        "version": "3.0.8",
+        # Fork divergence D6: upstream pins 3.0.8, which predates sanitizer
+        # bypass fixes. Keep backend/export.py's CDN URL on the same version.
+        "version": "3.4.15",
         # Dual Apache-2.0 OR MPL-2.0; Apache-2.0 avoids MPL source obligations
         "license": "Apache-2.0",
-        "license_url": "https://raw.githubusercontent.com/cure53/DOMPurify/3.0.8/LICENSE",
-        "files": {"purify.min.js": "https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"},
+        "license_url": "https://raw.githubusercontent.com/cure53/DOMPurify/3.4.15/LICENSE",
+        "files": {"purify.min.js": "https://cdn.jsdelivr.net/npm/dompurify@3.4.15/dist/purify.min.js"},
     },
     {
         "name": "vis-network",

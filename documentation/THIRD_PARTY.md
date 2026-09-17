@@ -22,7 +22,7 @@ path instead of a public CDN. This means:
 | [Tailwind CSS](https://tailwindcss.com) | 3.4.17 | MIT | UI styling |
 | [Alpine.js](https://alpinejs.dev) | 3.14.1 | MIT | UI reactivity |
 | [marked](https://marked.js.org) | 12.0.2 | MIT | Markdown parsing |
-| [DOMPurify](https://github.com/cure53/DOMPurify) | 3.0.8 | Apache-2.0 | HTML sanitisation (XSS prevention) |
+| [DOMPurify](https://github.com/cure53/DOMPurify) | 3.4.15 | Apache-2.0 | HTML sanitisation (XSS prevention); fork pins a newer version than upstream (D6) |
 | [MathJax](https://www.mathjax.org) | 3.2.2 | Apache-2.0 | LaTeX math rendering |
 | [highlight.js](https://highlightjs.org) | 11.9.0 | BSD-3-Clause | Code syntax highlighting |
 | [Mermaid](https://mermaid.js.org) | 11.12.2 | MIT | Diagram rendering |

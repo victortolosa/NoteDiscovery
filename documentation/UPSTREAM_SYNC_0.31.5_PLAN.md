@@ -163,8 +163,8 @@ Print preview/export work; no SW errors in console.
   through v0.31.5: DOMPurify 3.4.12 → 3.0.8, Alpine 3.15.12 → 3.14.1, highlight.js
   11.11.1 → 11.9.0, Mermaid 11.16.0 → 11.12.2, vis-network 9.1.13 → 9.1.9. DOMPurify is
   the markdown XSS sanitizer and 3.0.8 predates several published bypass fixes.
-  Options: bump the pin in `vendor_lock.json` (small divergence, re-hash), or propose
-  the bump upstream.
+  Resolved in phase 7 by divergence D6: DOMPurify pinned to 3.4.15 (hash cross-checked
+  between the npm tarball and jsdelivr). The other libraries stay on upstream's pins.
 - MathJax and vis-network now load on every page (the fork lazy-loaded them).
 - Translations load with a synchronous XHR (browser console deprecation warning).
 - Until the per-build `VERSION` lands (phase 7), the caching SW can serve a stale
@@ -242,4 +242,4 @@ logout then Back.
 | 4 | done | 5 hunks. Upstream `loadMermaid()`, `closeMediaViewer()`, CORS credentials fix, mobile nav. D3 applied. New upstream behaviour: `?v=` assets and Mermaid chunks served `immutable` for a year, which makes the per-build `VERSION` mandatory before deploying. |
 | 5 | done | 9 hunks. Upstream URL-path wikilink lookups, absolute wikilink hrefs, root-relative href handling, stats fixes, plugin hook contract (fork adds no hook calls, so nothing to adapt), contrib open-task plugin. D4 applied. |
 | 6 | done | 6 hunks. Upstream share slugs, archive API, security fixes (logout form confirmed present), task counting, pl-PL. D5 applied. Added the fork's 13 Live Preview/backlink strings to pl-PL (required by the locale test). API-tested: slug create, public page, revoke → 404; archive zip. `upstream/main` is fully merged. |
-| 7 | in progress | CI version stamp and docs done; docs reviewed against the merged code (FEATURES shortcuts and fork features, export offline claims, CLAUDE/AGENTS build and caching notes, THIRD_PARTY Live Preview bundle). Remaining: DOMPurify decision, merge into `custom`, push, GHCR build, fast-forward `main`. |
+| 7 | in progress | CI version stamp and docs done; docs reviewed against the merged code (FEATURES shortcuts and fork features, export offline claims, CLAUDE/AGENTS build and caching notes, THIRD_PARTY Live Preview bundle). DOMPurify 3.4.15 pinned (D6). Remaining: user check, merge into `custom`, push, GHCR build, fast-forward `main`. |

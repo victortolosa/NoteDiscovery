@@ -94,6 +94,7 @@ Expect conflicts around these on future syncs.
 | D3 | `loadNote` in `frontend/app.js` | Prefetch and tab caches |
 | D4 | Wikilink rendering in `frontend/app.js` | Default link text is the last path segment |
 | D5 | Backlinks panel in `frontend/index.html` | One control per reference, no nested buttons |
+| D6 | `scripts/vendor_assets.py`, `scripts/vendor_lock.json`, `backend/export.py`, `documentation/THIRD_PARTY.md` | DOMPurify 3.4.15 instead of upstream's 3.0.8 (sanitizer bypass fixes). On future syncs keep whichever version is newer |
 
 Fork-only glue with no upstream equivalent: Smart scroll sync is limited to the
 classic editor (Live Preview uses percentage sync), and Live Preview applies
