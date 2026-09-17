@@ -63,3 +63,37 @@ cd /opt/stacks/notediscovery
 docker compose pull notediscovery
 docker compose up -d --force-recreate notediscovery
 ```
+
+## Staying in sync with upstream
+
+Rule for merging `gamosoft/NoteDiscovery`: take upstream by default; keep the
+fork's version only where upstream would remove a capability, and keep that
+divergence small. The last sync (v0.31.5) is documented in
+`documentation/UPSTREAM_SYNC_0.31.5_PLAN.md`.
+
+### Frontend assets
+
+- Browser libraries come from upstream's `/static/vendor/`, downloaded and
+  hash-checked by `scripts/vendor_assets.py` (the Dockerfile's vendor stage; run
+  it once locally, or let `python run.py` do it).
+- The npm build only produces the fork's Live Preview bundle
+  (`frontend/dist/live-preview.js`): `npm run check:frontend`.
+- `build-custom` stamps `VERSION` as `<upstream>-custom.<run number>`. Upstream's
+  service worker cache and the immutable `?v=` asset URLs are keyed on it, so
+  without a unique version browsers keep serving an old `app.js`.
+
+### Intentional divergences from upstream
+
+Expect conflicts around these on future syncs.
+
+| # | Where | What the fork keeps |
+|---|---|---|
+| D1 | `frontend/index.html`, `frontend/login.html` head | `crossorigin="use-credentials"` on the manifest link (Cloudflare Access) and PNG app icons |
+| D2 | `onEditorDrop`, `onUploadDragEnter`, `handleFileUploadDrop` in `frontend/app.js` | `.md` files dropped on the editor open the upload dialog (overwrite/rename/skip) targeting the open note's folder |
+| D3 | `loadNote` in `frontend/app.js` | Prefetch and tab caches |
+| D4 | Wikilink rendering in `frontend/app.js` | Default link text is the last path segment |
+| D5 | Backlinks panel in `frontend/index.html` | One control per reference, no nested buttons |
+
+Fork-only glue with no upstream equivalent: Smart scroll sync is limited to the
+classic editor (Live Preview uses percentage sync), and Live Preview applies
+outside edits as a minimal change (`minimalReplacement`).

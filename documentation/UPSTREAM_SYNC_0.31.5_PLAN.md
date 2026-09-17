@@ -224,8 +224,9 @@ logout then Back.
 
 - [ ] `npm run check:frontend`, Docker build and run; startup log has no vendored-asset
       warning.
-- [ ] CI: write a unique `VERSION` per build in `.github/workflows/build-custom.yml`.
-- [ ] Document divergences D1-D5 and the asset pipeline in
+- [x] CI: write a unique `VERSION` per build in `.github/workflows/build-custom.yml`
+      (`<upstream>-custom.<run number>`; simulated locally, reaches `?v=` and the SW cache name).
+- [x] Document divergences D1-D5 and the asset pipeline in
       `documentation/CUSTOM_DEPLOYMENT.md`.
 - [ ] Merge `sync/upstream-0.31.5` into `custom`, push, let GHCR build.
 - [ ] Fast-forward `main` to `upstream/main`.
@@ -238,7 +239,7 @@ logout then Back.
 | 1 | done | 1 hunk, took upstream. Sibling/stem link resolution verified against a mini vault; tests, build, smoke green. |
 | 2 | done (awaiting browser check) | 15 hunks. D1 and D2 applied; Live Preview keeps percentage scroll sync. D2 was mostly already in place: the fork's `onEditorDrop` already split `.md` vs media, so glue was only the target folder and keeping the overlay off the textarea. Verified: tests 42/42, minified build, HTML balance, no new undefined identifiers (eslint no-undef matches pre-merge), backend smoke, `APP_NAME` escaping in HTML and manifest. Chrome automation unavailable, so scroll sync and drag-and-drop still need a manual browser pass. Upstream `ghcr-stats.yml` workflow arrives but scheduled workflows are disabled in forks by default. |
 | 3 | done (awaiting browser check) | 9 hunks. Upstream asset pipeline, SW, checkbox toggling. Removed fork vendor/Tailwind bundles; MathJax and graph loaders repointed to `/static/vendor`. Live Preview applies outside edits as a minimal span (new `minimalReplacement` + test). Verified: 43/43 tests, build, eslint no-undef clean, HTML balance, smoke incl. every `/static` asset, SW/`?v=` token injection, startup log `Vendored browser libraries: 21 present`, in-browser print preview loads all libraries locally. |
-| 4 | pending | |
-| 5 | pending | |
-| 6 | pending | |
-| 7 | pending | |
+| 4 | done | 5 hunks. Upstream `loadMermaid()`, `closeMediaViewer()`, CORS credentials fix, mobile nav. D3 applied. New upstream behaviour: `?v=` assets and Mermaid chunks served `immutable` for a year, which makes the per-build `VERSION` mandatory before deploying. |
+| 5 | done | 9 hunks. Upstream URL-path wikilink lookups, absolute wikilink hrefs, root-relative href handling, stats fixes, plugin hook contract (fork adds no hook calls, so nothing to adapt), contrib open-task plugin. D4 applied. |
+| 6 | done | 6 hunks. Upstream share slugs, archive API, security fixes (logout form confirmed present), task counting, pl-PL. D5 applied. Added the fork's 13 Live Preview/backlink strings to pl-PL (required by the locale test). API-tested: slug create, public page, revoke → 404; archive zip. `upstream/main` is fully merged. |
+| 7 | in progress | CI version stamp and docs done. Remaining: user browser check, DOMPurify decision, merge into `custom`, push, GHCR build, fast-forward `main`. |
