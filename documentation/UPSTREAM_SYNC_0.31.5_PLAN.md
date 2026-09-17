@@ -157,6 +157,21 @@ Verify: tick and Ctrl+click checkboxes in both editor modes. The fork's
 survives a tick**; if not, pass `resetHistory: false` for preview-originated edits.
 Print preview/export work; no SW errors in console.
 
+### Phase 3 caveats (found during the merge)
+
+- **Library versions go backwards** to upstream's `scripts/vendor_lock.json`, unchanged
+  through v0.31.5: DOMPurify 3.4.12 → 3.0.8, Alpine 3.15.12 → 3.14.1, highlight.js
+  11.11.1 → 11.9.0, Mermaid 11.16.0 → 11.12.2, vis-network 9.1.13 → 9.1.9. DOMPurify is
+  the markdown XSS sanitizer and 3.0.8 predates several published bypass fixes.
+  Options: bump the pin in `vendor_lock.json` (small divergence, re-hash), or propose
+  the bump upstream.
+- MathJax and vis-network now load on every page (the fork lazy-loaded them).
+- Translations load with a synchronous XHR (browser console deprecation warning).
+- Until the per-build `VERSION` lands (phase 7), the caching SW can serve a stale
+  `app.js` between builds that share a version; hard-refresh when testing locally.
+- Phase 6 note: the Live Preview locale test requires every locale to carry the
+  `editor.live_preview_*` keys, so upstream's new `pl-PL.json` needs them.
+
 ## Phase 4: CORS fix + mobile navigation (3 hunks)
 
 Brings: CORS credentials/wildcard fix (clean), mobile options navigation, lazy
@@ -222,7 +237,7 @@ logout then Back.
 | 0 | done | Baseline green. Smoke venv uses unpinned deps (Python 3.14 cannot build pinned pyyaml 6.0.1). |
 | 1 | done | 1 hunk, took upstream. Sibling/stem link resolution verified against a mini vault; tests, build, smoke green. |
 | 2 | done (awaiting browser check) | 15 hunks. D1 and D2 applied; Live Preview keeps percentage scroll sync. D2 was mostly already in place: the fork's `onEditorDrop` already split `.md` vs media, so glue was only the target folder and keeping the overlay off the textarea. Verified: tests 42/42, minified build, HTML balance, no new undefined identifiers (eslint no-undef matches pre-merge), backend smoke, `APP_NAME` escaping in HTML and manifest. Chrome automation unavailable, so scroll sync and drag-and-drop still need a manual browser pass. Upstream `ghcr-stats.yml` workflow arrives but scheduled workflows are disabled in forks by default. |
-| 3 | pending | |
+| 3 | done (awaiting browser check) | 9 hunks. Upstream asset pipeline, SW, checkbox toggling. Removed fork vendor/Tailwind bundles; MathJax and graph loaders repointed to `/static/vendor`. Live Preview applies outside edits as a minimal span (new `minimalReplacement` + test). Verified: 43/43 tests, build, eslint no-undef clean, HTML balance, smoke incl. every `/static` asset, SW/`?v=` token injection, startup log `Vendored browser libraries: 21 present`, in-browser print preview loads all libraries locally. |
 | 4 | pending | |
 | 5 | pending | |
 | 6 | pending | |
