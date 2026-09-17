@@ -42,7 +42,8 @@ ghcr.io/victortolosa/notediscovery:latest
 ```
 
 After the container is healthy, hard-refresh the browser with `Cmd+Shift+R` or
-`Ctrl+Shift+R`.
+`Ctrl+Shift+R`. The app registers a caching service worker; each build has its
+own `VERSION`, so a normal reload picks up new files after that.
 
 ## One-command update
 

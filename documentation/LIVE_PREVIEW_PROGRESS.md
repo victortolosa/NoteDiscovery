@@ -679,6 +679,42 @@ auto-refresh, without widening the frozen presentation scope.
 Run the signpost, backlink, and history checks in a browser, then close the
 Session 4 Safari and iPhone gate.
 
+### 2026-09-16: upstream v0.31.5 sync
+
+#### Objective
+
+Keep Live Preview working after merging upstream v0.28.3 → v0.31.5 into
+`custom`.
+
+#### Completed
+
+- The npm build now produces only `frontend/dist/live-preview.js`. Tailwind,
+  Alpine, marked, DOMPurify, highlight.js, MathJax, Mermaid and vis-network come
+  from upstream's `frontend/vendor/`.
+- Upstream's Smart scroll sync measures the classic textarea, so it is limited
+  to Classic; Live Preview keeps percentage sync and scroll restore through
+  `getActiveEditorScrollMetrics()` / `setActiveEditorScrollPercentage()`.
+- Upstream's clickable preview checkboxes rewrite `noteContent`. Live Preview
+  now applies such outside edits as the smallest changed span
+  (`minimalReplacement`), so cursor, scroll and undo history survive a tick.
+- `pl-PL.json` (new upstream locale) carries the Live Preview strings.
+
+#### Verification
+
+- `npm run check:frontend`: 43 tests passed, minified build succeeded.
+- Backend smoke test and every `/static` asset referenced by `index.html`
+  returned 200.
+
+#### Issues
+
+- Browser automation was unavailable; scroll sync, checkbox toggling and undo
+  in Live Preview were checked manually by the user.
+
+#### Next step
+
+Consider making Smart scroll sync work in Live Preview using CodeMirror's line
+geometry instead of the textarea mirror.
+
 Add one entry per working session using this structure:
 
 ```markdown

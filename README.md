@@ -225,6 +225,11 @@ python run.py
 - Python 3.8 or higher
 - pip (Python package manager)
 
+On first start, `run.py` downloads the browser libraries into `frontend/vendor/`.
+The fork's optional Live Preview editor also needs Node.js: run
+`npm ci && npm run build:frontend` once, and again after changing
+`frontend/src/`.
+
 #### Using Virtual Environments (Recommended for Arch/Fedora/Ubuntu 23.04+)
 
 Modern Linux distributions enforce [PEP 668](https://peps.python.org/pep-0668/), which prevents system-wide pip installs. Use a virtual environment instead:

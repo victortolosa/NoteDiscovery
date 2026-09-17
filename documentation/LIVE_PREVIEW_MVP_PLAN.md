@@ -132,9 +132,13 @@ npm run build:frontend
 .venv/bin/python run.py
 ```
 
-Run the build again after changing files under `frontend/src/`, the Tailwind
-configuration, or production dependency versions. The generated
-`frontend/dist/` directory is intentionally ignored by Git.
+Run the build again after changing files under `frontend/src/` or production
+dependency versions. The generated `frontend/dist/` directory is intentionally
+ignored by Git.
+
+> Since the upstream v0.31.5 sync (2026-09-16) the npm build produces only
+> `frontend/dist/live-preview.js`; the Tailwind build and the fork's library
+> bundles were replaced by upstream's `scripts/vendor_assets.py`.
 
 ### Session 2: editing and persistence
 

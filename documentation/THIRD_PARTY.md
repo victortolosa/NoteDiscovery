@@ -49,6 +49,29 @@ One non-library asset is served locally for the same reason:
 that opening Settings does not fetch an image from them. It is their brand asset
 and is used only to link to them.
 
+### Fork: Live Preview editor bundle
+
+The fork's optional Live Preview editor is built with npm and esbuild into
+`frontend/dist/live-preview.js` (`npm run build:frontend`, run by the
+Dockerfile). It is loaded on demand only when Live Preview is enabled, and is
+separate from the vendored libraries above.
+
+| Package | Version | Licence |
+|---------|---------|---------|
+| `@codemirror/commands` | 6.10.4 | MIT |
+| `@codemirror/lang-javascript` | 6.2.5 | MIT |
+| `@codemirror/lang-json` | 6.0.2 | MIT |
+| `@codemirror/lang-markdown` | 6.5.1 | MIT |
+| `@codemirror/lang-python` | 6.2.1 | MIT |
+| `@codemirror/language` | 6.12.4 | MIT |
+| `@codemirror/legacy-modes` | 6.5.3 | MIT |
+| `@codemirror/state` | 6.7.1 | MIT |
+| `@codemirror/view` | 6.43.6 | MIT |
+| `@lezer/highlight` | 1.2.3 | MIT |
+| `@lezer/markdown` | 1.7.2 | MIT |
+
+Versions are pinned exactly in `package.json` and `package-lock.json`.
+
 ## How the files get there
 
 The libraries are **not committed to this repository**. `scripts/vendor_assets.py`

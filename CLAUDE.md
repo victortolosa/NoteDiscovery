@@ -25,33 +25,47 @@ dependencies, no over-engineering.
   pull and recreate the service on `docker-i5`.
 - `main`: tracks upstream. Upstream releases are tagged from `main`
   (`release.ps1` → tag → `docker-publish.yml`); that flow is upstream's, not ours.
+- **Syncing upstream into `custom`**: take upstream by default; keep the fork's
+  version only where upstream would remove a fork capability, keep that
+  divergence small, and list the caveats. Current divergences (D1-D5) and the
+  asset pipeline are recorded in
+  [documentation/CUSTOM_DEPLOYMENT.md](documentation/CUSTOM_DEPLOYMENT.md); the
+  v0.31.5 sync is logged in `documentation/UPSTREAM_SYNC_0.31.5_PLAN.md`.
 
 ## Repo map
 
 | Path | What it is |
 |------|------------|
-| `backend/` | FastAPI app. `main.py` (~2k lines) has ALL routes; `utils.py` file ops + path validation; `export.py` standalone-HTML export; `share.py` public share tokens; `themes.py`, `favorites.py`, `plugins.py` |
-| `frontend/` | Single-page app: `app.js` (~8.7k lines, one file, no framework, no build step) + `index.html` + `login.html`. Served directly by FastAPI |
+| `backend/` | FastAPI app. `main.py` (~2.4k lines) has ALL routes; `utils.py` file ops + path validation; `export.py` standalone-HTML export; `share.py` public share tokens; `themes.py`, `favorites.py`, `plugins.py` |
+| `frontend/` | Single-page app served directly by FastAPI: `app.js` (~11k lines, one Alpine.js component, no build step) + `editor-commands.js` + `editor-markdown-continue.js` + `index.html` + `login.html` + `sw.js` (caching service worker) |
+| `frontend/src/` → `frontend/dist/` | Fork-only Live Preview editor (CodeMirror), bundled by esbuild via `npm run build:frontend`. `dist/` is gitignored |
+| `frontend/vendor/` | Browser libraries (Alpine, marked, DOMPurify, highlight.js, MathJax, Mermaid, vis-network, qrcode, Tailwind), downloaded and hash-checked by `scripts/vendor_assets.py` from `scripts/vendor_lock.json`. Gitignored |
+| `tests/frontend/` | Node test runner suite for the editor commands and Live Preview (`npm test`) |
 | `mcp_server/` | Separate stdio MCP process; talks to the backend over HTTP (`client.py`). Tool defs in `tools.py`, protocol in `server.py` |
 | `plugins/` | Python plugins (`Plugin` class + hooks). `note_stats.py` is the built-in example |
 | `themes/` | 13 CSS themes. Filename = theme ID; required CSS variables listed in `documentation/THEMES.md` |
-| `locales/` | 11 UI translations (`en-US.json` is the reference; keys must exist in every file you touch) |
+| `locales/` | 12 UI translations (`en-US.json` is the reference; keys must exist in every file you touch; `npm test` requires the Live Preview keys in every locale) |
 | `documentation/` | The real docs (also mountable into the app as a notes folder) |
 | `docs/` | ⚠️ NOT docs — the marketing website (GitHub Pages, notediscovery.com) |
 | `data/` | The running vault (gitignored — real user notes, never commit) |
-| `design/` | Untracked scratch design assets (`.pen` file — use Pencil MCP tools, never Read/Grep it) |
+| `design/` | Design assets: screenshots and `notediscovery.pen` (use Pencil MCP tools, never Read/Grep the `.pen` file) |
 | `config.yaml` | App config; env vars override (see `documentation/ENVIRONMENT_VARIABLES.md`) |
-| `VERSION` | Single source of version (read by pyproject + `/api/stats`) |
+| `VERSION` | Single source of version (pyproject, `/api/config`, the service worker cache name and `?v=` asset URLs). `build-custom` stamps it as `<upstream>-custom.<run>` in CI — don't commit that suffix |
 
 ## Run & verify
 
 ```bash
-python run.py            # uvicorn backend.main:app --reload on :8000
-docker-compose up        # build from source (docker-compose.ghcr.yml = prebuilt image)
+python run.py              # downloads frontend/vendor/ on first start, then uvicorn --reload on :8000
+npm ci && npm run build:frontend   # Live Preview bundle; rerun after changing frontend/src/
+npm test                   # Node tests (editor commands, Live Preview contract, locales)
+npm run check:frontend     # tests + minified Live Preview build
+docker-compose up          # build from source (docker-compose.ghcr.yml = prebuilt image)
 ```
 
-- **There is no test suite.** Verify by running the app and exercising the
-  feature, or via curl against the REST API. Swagger UI at `/api`.
+- `npm test` covers the editor and Live Preview only; there are no backend
+  tests. Verify behaviour by running the app and exercising the feature, or
+  via curl against the REST API. Swagger UI at `/api`.
+- Point `NOTES_DIR` at a disposable folder when testing destructive changes.
 - Auth is disabled by default locally, so all endpoints are open on :8000.
 - MCP smoke test: `python -m mcp_server` (needs the app running; env
   `NOTEDISCOVERY_URL`, `NOTEDISCOVERY_API_KEY`).
@@ -61,10 +75,13 @@ docker-compose up        # build from source (docker-compose.ghcr.yml = prebuilt
 - Python: PEP 8, type hints, docstrings on public functions. Errors returned
   to clients go through `safe_error_message()` — never leak paths/tracebacks
   unless `server.debug: true`.
-- JS: modern ES6+, everything lives in `frontend/app.js`. Match the existing
-  style (top-level `CONFIG`, plain functions, no framework). Edit it
-  unminified — the Dockerfile minifies at image build time; never commit or
-  diff minified output.
+- JS: modern ES6+, app logic lives in `frontend/app.js` (one Alpine.js
+  `noteApp()` component). Match the existing style (top-level `CONFIG`, plain
+  methods, no additional framework). Edit it unminified — the Dockerfile
+  minifies at image build time; never commit or diff minified output.
+- Browser libraries come only from `scripts/vendor_lock.json` (pinned version +
+  SHA-256). Don't add CDN `<script>` tags or reintroduce npm bundles for them;
+  npm is only for the Live Preview bundle.
 - Routes: add API endpoints to `api_router` in `backend/main.py` (it applies
   `require_auth`). Only deliberately-public routes (login, `/share/{token}`,
   `/api/themes/{id}`, `/health`) bypass it — think before adding another.
@@ -84,19 +101,26 @@ docker-compose up        # build from source (docker-compose.ghcr.yml = prebuilt
 - Underscore-prefixed folders are system folders: `_attachments` (media),
   `_templates` (note templates). `.share-tokens.json` in the data dir stores
   share tokens.
-- PWA installation metadata is supported, but offline caching is deliberately
-  disabled: `frontend/sw.js` only unregisters old workers and clears their
-  caches. Keep the manifest links credentialed for Cloudflare Access, and don't
-  reintroduce service-worker caching.
+- Caching: `frontend/sw.js` (upstream) precaches the app script and serves
+  `/static/` cache-first, and `?v=`-addressed assets are sent as immutable for a
+  year. Both are keyed on `VERSION`, so every deployed build needs a distinct
+  version (CI handles this). When testing locally, hard-refresh or use DevTools
+  → Application → "Update on reload".
+- Keep the manifest links (`/manifest.json`) in `index.html` and `login.html`
+  credentialed (`crossorigin="use-credentials"`) — the deployment sits behind
+  Cloudflare Access.
+- `.favorites.json` in the notes folder stores favorites, starred folders and
+  small synced UI preferences (`backend/favorites.py`).
 - Links between notes: wikilinks `[[note]]` / `[[note|text]]` /
   `[[note#heading]]` AND markdown `[text](note.md)`. Graph + backlinks parse
   both — new link features must handle both syntaxes.
 - A live NoteDiscovery MCP server (`mcp__notediscovery__*` tools) may be
   connected in Claude sessions. Those tools operate on the **real running
   vault**, not fixtures — don't use them for testing destructive changes.
-- Keyboard shortcuts have drifted from upstream docs on this branch (e.g.
-  Quick Switcher is Cmd/Ctrl+K here). Check `frontend/app.js` and recent
-  commits on `custom` before trusting `documentation/FEATURES.md` tables.
+- Keyboard shortcuts differ from upstream on this branch (Quick Switcher is
+  Cmd/Ctrl+K, insert link is Cmd/Ctrl+Shift+K). `documentation/FEATURES.md`
+  reflects the fork; the source of truth is the keydown handler in
+  `frontend/app.js` `init()`.
 
 ## When making changes
 

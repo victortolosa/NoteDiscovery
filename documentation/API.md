@@ -483,7 +483,7 @@ Returns the relationship graph between notes with link detection.
 GET /api/export/{note_path}?theme={theme_name}&download={true|false}
 ```
 
-Exports a note as a standalone HTML file with all dependencies embedded for offline viewing.
+Exports a note as a single HTML file with CSS and images embedded. The downloaded file loads its rendering libraries (marked, DOMPurify, highlight.js, MathJax, Mermaid) from public CDNs, so it needs internet access to render; print preview (`download=false`) uses this server's `/static/vendor/` copies instead. See [THIRD_PARTY.md](THIRD_PARTY.md#known-gap-downloadable-html-exports).
 
 **Parameters:**
 | Parameter | Type | Description |

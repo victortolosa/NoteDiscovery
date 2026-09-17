@@ -42,6 +42,10 @@ Choose the editor under Settings → Editor mode.
   `--cm-live-heading-space` and `--cm-live-paragraph-space` CSS variables.
 - Markdown that receives additional rendering in Preview remains editable
   source with a subtle background, left rail, or dotted inline cue.
+- In Live Preview, `Ctrl+Enter` (`Cmd+Enter`) toggles the task on the current
+  line and `Ctrl+Shift+Enter` (`Cmd+Shift+Enter`) opens the link under the cursor.
+- Split view scroll sync in Live Preview is percentage-based; Smart scroll sync
+  applies to the Classic editor only.
 - Switch back to Classic at any time. The editor preference is stored locally.
 
 Live Preview remains experimental while mobile, attachment, navigation, and
@@ -51,7 +55,8 @@ extended Markdown.
 
 ### Media Support
 - **Drawing editor** — In-app **`drawing-*.png`** sketches next to your notes ([overview](#drawing-editor)); full guide: **[DRAWING.md](DRAWING.md)**
-- **Drag & drop upload** - Drop files from your file system into the editor: images/audio/video/PDF go to `_attachments`; `.md` files land next to the current note and get an inline link at the drop point
+- **Drag & drop upload** - Drop files from your file system into the editor: images/audio/video/PDF go to `_attachments` and are linked at the drop point; `.md` files open the **Upload notes** dialog targeting the current note's folder
+- **Upload notes** - Import `.md` files from **New → Upload notes** or by dropping them anywhere outside the editor (they go to the folder open on the homepage). The dialog flags name conflicts and lets you overwrite, rename, or skip each file (max 5 MB per file)
 - **Clipboard paste** - Paste images from clipboard with Ctrl+V
 - **Images** - JPG, PNG, GIF, WebP (default max 10MB, configurable)
 - **Audio** - MP3, WAV, OGG, M4A (default max 50MB, configurable)
@@ -69,13 +74,16 @@ extended Markdown.
 - **Rename anything** - Files and folders, instantly
 - **Visual tree view** - Expandable/collapsible navigation
 - **Hide system folders** - Toggle to hide `_attachments`, `_templates` and other underscore-prefixed folders from sidebar
+- **Tabs** - Opened notes stay in a tab bar; `Ctrl+W` closes the active tab and `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle through tabs
+- **Starred folders** - Star folders to pin them in their own sidebar section, next to Favorites
+- **Folder view** - Open a folder from the sidebar to browse it on the homepage as folder cards and a files list
 - **Tab inserts tab** - Toggle so Tab indents list items from anywhere on the line or inserts a literal tab in ordinary text. Shift+Tab outdents list items and selected lines without moving focus out of a top-level list item.
 - **List & quote continuation (Enter)** - At the end of a line, Enter continues blockquotes (`>`), bullets (`-` / `*` / `+`), ordered lists (`1.` / `1)`), and task lists. New tasks start unchecked. Enter on an empty nested item outdents one level; Enter on an empty top-level item exits the list or quote. Disabled inside fenced code blocks and when using Shift+Enter (plain newline).
 
 ### Export & Print
 - **HTML Export** - Download notes as standalone HTML files with all styling, images, diagrams, and math embedded
 - **Print Preview** - Open note in new tab with Print/Close buttons for easy printing
-- **Self-contained** - Exported files work offline with no dependencies
+- **Single file** - Styling and images are embedded; downloaded files load their rendering libraries from public CDNs, so viewing them needs internet access (print preview uses the server's local copies)
 - **Theme-aware** - Export uses your current theme for consistent appearance
 - **Full rendering** - MathJax equations, Mermaid diagrams, and syntax highlighting included
 
@@ -98,7 +106,8 @@ For file naming, API notes, and more: **[DRAWING.md](DRAWING.md)**
 - **Theme-aware** - Graph colors adapt to your current theme
 
 ### Internal Links
-- **Wikilinks** - `[[Note Name]]` Obsidian-style syntax for quick linking
+- **Wikilinks** - `[[Note Name]]` Obsidian-style syntax for quick linking; `[[folder/Note Name]]` displays as `Note Name`
+- **Insert from Quick Switcher** - Press `Shift+Enter` on a result to insert a wikilink to it instead of opening it
 - **Wikilinks with display text** - `[[Note Name|Click here]]` to customize link text
 - **Section anchors** - `[[Note Name#heading]]` to link directly to a heading
 - **Same-page anchors** - `[[#heading]]` to link within the current note
@@ -120,7 +129,8 @@ For file naming, API notes, and more: **[DRAWING.md](DRAWING.md)**
 ### Backlinks
 - **Reverse link discovery** - See which notes link TO the current note
 - **Context snippets** - Preview the surrounding text where links appear
-- **Line numbers** - Know exactly where each reference is located
+- **Line numbers** - Know exactly where each reference is located; click a reference to open the note at that line
+- **Full path on hover** - Hover a note name to see its path
 - **Link type detection** - Distinguishes wikilinks from markdown links
 - **API access** - Query backlinks programmatically via REST API
 - **MCP integration** - AI assistants can discover note relationships
@@ -142,7 +152,8 @@ To link to a heading, convert the heading text to a slug: **lowercase, spaces �
 - **Refresh safe** - Page reload keeps you on the same note with search context
 - **Copy link button** - One-click copy of note URL to clipboard
 - **Last edited indicator** - Shows relative time since last edit (e.g., "Edited 2h ago")
-- **Favorites** - Star notes for quick access; displayed at top of sidebar
+- **Favorites** - Star notes for quick access; displayed at top of sidebar. Favorites and starred folders are stored in `.favorites.json` in the notes folder, so they sync across devices
+- **Changed on another device** - If an open note changes on the server, it refreshes automatically when you have no unsaved edits; otherwise a banner offers **Reload** or **Keep mine**
 
 ## 🎨 Customization
 
@@ -151,12 +162,13 @@ To link to a heading, convert the heading text to a slug: **lowercase, spaces �
 - **Theme persistence** - Remembers your choice
 - **Custom themes** - Create your own CSS themes
 - **Instant switching** - No reload required
+- **Font size** - Scale note text up or down from a note's **More options** menu
 
 ### Layout
 - **Resizable sidebar** - Drag to adjust width
 - **Collapsible sidebar panel** - Show/hide the sidebar contents while keeping the icon rail in place
 - **View mode memory** - Remembers Edit/Split/Preview preference
-- **Smart scroll sync** - Optional (**Settings → Smart scroll sync**, off by default): aligns headings, images, tables and code blocks between the editor and preview panes instead of scrolling both by percentage
+- **Smart scroll sync** - Optional (**Settings → Smart scroll sync**, off by default): aligns headings, images, tables and code blocks between the editor and preview panes instead of scrolling both by percentage. Classic editor only; Live Preview keeps percentage sync
 - **Responsive design** - Works on all screen sizes
 
 ## 📊 Note Statistics
@@ -389,7 +401,9 @@ date: {{date}}
 
 | Windows/Linux | Mac | Action |
 |---------------|-----|--------|
-| `Ctrl+Alt+P` | `Cmd+Option+P` | Quick Switcher (jump to any note) |
+| `Ctrl+K` | `Cmd+K` | Quick Switcher (jump to any note; `Shift+Enter` inserts a wikilink) |
+| `Ctrl+W` | `Cmd+W` | Close active tab |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
 | `Ctrl+S` | `Cmd+S` | Save note (or **save drawing PNG** when a `drawing-*.png` is open) |
 | `Ctrl+Alt+N` | `Cmd+Option+N` | New note |
 | `Ctrl+Alt+F` | `Cmd+Option+F` | New folder |
@@ -414,10 +428,11 @@ date: {{date}}
 |---------------|-----|--------|--------|
 | `Ctrl+B` | `Cmd+B` | Bold | `**text**` |
 | `Ctrl+I` | `Cmd+I` | Italic | `*text*` |
-| `Ctrl+K` | `Cmd+K` | Insert link (in editor) | `[text](url)` |
+| `Ctrl+Shift+K` | `Cmd+Shift+K` | Insert link (in editor) | `[text](url)` |
 | `Ctrl+Alt+T` | `Cmd+Option+T` | Insert table | 3x3 table placeholder |
+| `Ctrl+Alt+A` | `Cmd+Option+A` | Align table under the cursor | Padded, aligned columns |
 
-> **Tip:** Use `Ctrl+Alt+P` to quickly jump to any note from anywhere in the app.
+> **Tip:** Use `Ctrl+K` to quickly jump to any note from anywhere in the app.
 
 ## 🧘 Zen Mode
 
@@ -437,7 +452,7 @@ NoteDiscovery can be installed as a standalone app on your device:
 
 - **Install as app** - Add to home screen on mobile, or install via browser on desktop
 - **Standalone mode** - Runs without browser chrome for a native app feel
-- **Network required** - Installation does not cache notes or application files for offline use
+- **Cached app shell** - A service worker precaches the app script and icons and serves `/static/` files cache-first; notes and all `/api/` requests always come from the server, so the app needs a connection to work
 
 ### How to Install
 - **Desktop (Chrome/Edge)**: Click the install icon in the address bar, or Menu → "Install NoteDiscovery"
