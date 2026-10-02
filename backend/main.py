@@ -1522,6 +1522,22 @@ async def create_or_update_note(request: Request, note_path: str, content: dict)
         raise HTTPException(status_code=500, detail=safe_error_message(e, "Failed to save note"))
 
 
+def prepend_after_frontmatter(existing: str, entry: str) -> str:
+    """Insert entry at the top of a note, below its YAML frontmatter if it has one."""
+    head, body = '', existing
+    lines = existing.split('\n')
+    if lines and lines[0].strip() == '---':
+        for i in range(1, len(lines)):
+            if lines[i].strip() == '---':
+                head = '\n'.join(lines[:i + 1]) + '\n'
+                body = '\n'.join(lines[i + 1:])
+                break
+    body = body.lstrip('\n')
+    if not body:
+        return f"{head}{entry}\n"
+    return f"{head}{entry}\n\n{body}"
+
+
 @api_router.patch("/notes/{note_path:path}", tags=["Notes"])
 @limiter.limit("60/minute")
 async def append_to_note(request: Request, note_path: str, data: dict):
@@ -1532,14 +1548,18 @@ async def append_to_note(request: Request, note_path: str, data: dict):
     
     Args:
         note_path: Path to the note
-        data: Dictionary with 'content' to append and optional 'add_timestamp' boolean
+        data: Dictionary with 'content' to add, optional 'add_timestamp' boolean, and optional
+            'position' ('end', the default, or 'start' to insert below any frontmatter)
     """
     try:
         content_to_append = data.get('content', '')
         add_timestamp = data.get('add_timestamp', False)
+        position = data.get('position', 'end')
         
         if not content_to_append:
             raise HTTPException(status_code=400, detail="Content to append is required")
+        if position not in ('start', 'end'):
+            raise HTTPException(status_code=400, detail="position must be 'start' or 'end'")
         
         # Get existing content
         existing_content = get_note_content(config['storage']['notes_dir'], note_path)
@@ -1547,15 +1567,21 @@ async def append_to_note(request: Request, note_path: str, data: dict):
         if existing_content is None:
             raise HTTPException(status_code=404, detail="Note not found")
         
-        # Build the appended content
         if add_timestamp:
             from datetime import datetime
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-            content_to_append = f"\n\n---\n\n**{timestamp}**\n\n{content_to_append}"
-        else:
-            content_to_append = f"\n\n{content_to_append}"
         
-        new_content = existing_content + content_to_append
+        if position == 'start':
+            # The rule goes after the entry: a leading --- would be read as frontmatter.
+            if add_timestamp:
+                content_to_append = f"**{timestamp}**\n\n{content_to_append}\n\n---"
+            new_content = prepend_after_frontmatter(existing_content, content_to_append)
+        else:
+            if add_timestamp:
+                content_to_append = f"\n\n---\n\n**{timestamp}**\n\n{content_to_append}"
+            else:
+                content_to_append = f"\n\n{content_to_append}"
+            new_content = existing_content + content_to_append
         
         # Run on_note_save hook
         transformed_content = plugin_manager.dispatch('on_note_save', note_path=note_path, content=new_content)

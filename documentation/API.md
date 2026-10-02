@@ -153,6 +153,7 @@ Append content to an existing note without overwriting. Perfect for journals, lo
 |-----------|------|----------|-------------|
 | `content` | string | Yes | Content to append to the note |
 | `add_timestamp` | boolean | No | If `true`, prepends a timestamp header (default: `false`) |
+| `position` | string | No | `"end"` (default) appends; `"start"` inserts at the top of the note, below any YAML frontmatter |
 
 **Response:**
 ```json
@@ -178,6 +179,15 @@ This will append:
 **2024-03-13 14:30**
 
 Had a productive meeting about the roadmap.
+```
+
+With `"position": "start"`, the entry goes at the top instead, with the rule after it so it can't be mistaken for frontmatter:
+```markdown
+**2024-03-13 14:30**
+
+Had a productive meeting about the roadmap.
+
+---
 ```
 
 **Windows PowerShell:**
