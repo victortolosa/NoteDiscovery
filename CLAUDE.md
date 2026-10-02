@@ -48,7 +48,11 @@ dependencies, no over-engineering.
 | `documentation/` | The real docs (also mountable into the app as a notes folder) |
 | `docs/` | ⚠️ NOT docs — the marketing website (GitHub Pages, notediscovery.com) |
 | `data/` | The running vault (gitignored — real user notes, never commit) |
+<<<<<<< Updated upstream
 | `design/` | Design assets: screenshots and `notediscovery.pen` (use Pencil MCP tools, never Read/Grep the `.pen` file) |
+=======
+| `design/` | Untracked scratch design assets (`.pen` file — use pen.dev MCP tools, never Read/Grep it) |
+>>>>>>> Stashed changes
 | `config.yaml` | App config; env vars override (see `documentation/ENVIRONMENT_VARIABLES.md`) |
 | `VERSION` | Single source of version (pyproject, `/api/config`, the service worker cache name and `?v=` asset URLs). `build-custom` stamps it as `<upstream>-custom.<run>` in CI — don't commit that suffix |
 
