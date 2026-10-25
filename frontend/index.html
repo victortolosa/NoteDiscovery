@@ -1180,6 +1180,43 @@
             opacity: 1;
             pointer-events: auto;
         }
+        /* Star toggle beside the homepage delete buttons (fork). Hover-revealed
+           like delete, but stays visible once starred so it doubles as a marker. */
+        .homepage-star {
+            position: absolute;
+            opacity: 0;
+            transition: opacity 0.2s;
+            color: var(--text-secondary);
+            padding: 4px;
+            border-radius: 4px;
+            background-color: var(--bg-secondary);
+        }
+        .homepage-star:hover {
+            background-color: var(--bg-hover);
+        }
+        .homepage-star.is-starred {
+            opacity: 1;
+            color: var(--warning, #eab308);
+        }
+        .homepage-card:hover .homepage-star,
+        .homepage-list-row:hover .homepage-star,
+        .homepage-list-row:focus-within .homepage-star {
+            opacity: 1;
+        }
+        .homepage-card .homepage-star {
+            top: 8px;
+            right: 36px;
+        }
+        .homepage-list-row .homepage-star {
+            top: 50%;
+            right: 2.25rem;
+            transform: translateY(-50%);
+        }
+        @media (min-width: 640px) {
+            .homepage-list-row {
+                padding-right: 4rem;
+            }
+        }
     </style>
     <!-- Obsidian theme defaults (patch) -->
     <script>
@@ -2723,6 +2760,20 @@
                                             onmouseover="this.style.borderColor='var(--accent-hover)'; this.style.transform='translateY(-2px)'; this.querySelector('.card-delete-btn').style.opacity='1';"
                                             onmouseout="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(0)'; this.querySelector('.card-delete-btn').style.opacity='0';"
                                         >
+                                            <!-- Star Button -->
+                                            <button
+                                                @click.stop="toggleStarFolder(folder.path)"
+                                                class="homepage-star hidden sm:block"
+                                                :class="{ 'is-starred': folder.starred }"
+                                                :title="folder.starred ? t('toolbar.unstar_folder') : t('toolbar.star_folder')"
+                                            >
+                                                <svg x-show="folder.starred" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                                                </svg>
+                                                <svg x-show="!folder.starred" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+                                                </svg>
+                                            </button>
                                             <!-- Delete Button -->
                                             <button 
                                                 @click.stop="deleteFolder(folder.path, folder.name)"
@@ -2764,6 +2815,21 @@
                                             onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(-2px)'; this.querySelector('.card-delete-btn').style.opacity='1';"
                                             onmouseout="this.style.borderColor='var(--border-primary)'; this.style.transform='translateY(0)'; this.querySelector('.card-delete-btn').style.opacity='0';"
                                         >
+                                            <!-- Star Button -->
+                                            <button
+                                                x-show="note.type === 'note'"
+                                                @click.stop="toggleFavorite(note.path)"
+                                                class="homepage-star hidden sm:block"
+                                                :class="{ 'is-starred': isFavorite(note.path) }"
+                                                :title="isFavorite(note.path) ? t('toolbar.remove_favorite') : t('toolbar.add_favorite')"
+                                            >
+                                                <svg x-show="isFavorite(note.path)" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                                                </svg>
+                                                <svg x-show="!isFavorite(note.path)" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+                                                </svg>
+                                            </button>
                                             <!-- Delete Button -->
                                             <button 
                                                 @click.stop="note.type !== 'note' ? deleteMedia(note.path) : deleteNote(note.path, note.name)"
@@ -2807,6 +2873,19 @@
                                             <span class="font-medium text-sm truncate flex-1 min-w-0" x-text="folder.name"></span>
                                             <span class="text-xs flex-shrink-0" style="color: var(--text-tertiary);" x-text="folder.noteCount + ' ' + (folder.noteCount === 1 ? t('homepage.note_singular') : t('homepage.note_plural'))"></span>
                                             <button
+                                                @click.stop="toggleStarFolder(folder.path)"
+                                                class="homepage-star hidden sm:block"
+                                                :class="{ 'is-starred': folder.starred }"
+                                                :title="folder.starred ? t('toolbar.unstar_folder') : t('toolbar.star_folder')"
+                                            >
+                                                <svg x-show="folder.starred" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                                                </svg>
+                                                <svg x-show="!folder.starred" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+                                                </svg>
+                                            </button>
+                                            <button
                                                 @click.stop="deleteFolder(folder.path, folder.name)"
                                                 class="homepage-list-delete hidden sm:block"
                                                 :title="t('common.delete')"
@@ -2831,6 +2910,20 @@
                                             <span class="font-medium text-sm truncate flex-1 min-w-0" x-text="note.name"></span>
                                             <span class="text-xs flex-shrink-0" style="color: var(--text-tertiary);" x-text="formatDate(note.modified)"></span>
                                             <span class="text-xs flex-shrink-0 hidden sm:inline" style="color: var(--text-tertiary);" x-text="formatSize(note.size)"></span>
+                                            <button
+                                                x-show="note.type === 'note'"
+                                                @click.stop="toggleFavorite(note.path)"
+                                                class="homepage-star hidden sm:block"
+                                                :class="{ 'is-starred': isFavorite(note.path) }"
+                                                :title="isFavorite(note.path) ? t('toolbar.remove_favorite') : t('toolbar.add_favorite')"
+                                            >
+                                                <svg x-show="isFavorite(note.path)" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                                                </svg>
+                                                <svg x-show="!isFavorite(note.path)" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+                                                </svg>
+                                            </button>
                                             <button
                                                 @click.stop="note.type !== 'note' ? deleteMedia(note.path) : deleteNote(note.path, note.name)"
                                                 class="homepage-list-delete hidden sm:block"

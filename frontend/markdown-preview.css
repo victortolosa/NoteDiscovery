@@ -10,7 +10,7 @@
 .markdown-preview {
     line-height: 1.8;
     color: var(--text-primary);
-    font-size: 16px;
+    font-size: calc(16px * var(--font-scale, 1));
 }
 
 /* Readable line length - constrain text width for better readability */
@@ -27,7 +27,7 @@
 
 /* Headings */
 .markdown-preview h1 {
-    font-size: 2.25rem;
+    font-size: calc(2.25rem * var(--font-scale, 1));
     font-weight: 700;
     margin-top: 2rem;
     margin-bottom: 1rem;
@@ -36,7 +36,7 @@
     padding-bottom: 0.5rem;
 }
 .markdown-preview h2 {
-    font-size: 1.875rem;
+    font-size: calc(1.875rem * var(--font-scale, 1));
     font-weight: 700;
     margin-top: 1.75rem;
     margin-bottom: 0.875rem;
@@ -45,28 +45,28 @@
     padding-bottom: 0.3rem;
 }
 .markdown-preview h3 {
-    font-size: 1.5rem;
+    font-size: calc(1.5rem * var(--font-scale, 1));
     font-weight: 600;
     margin-top: 1.5rem;
     margin-bottom: 0.75rem;
     color: var(--text-primary);
 }
 .markdown-preview h4 {
-    font-size: 1.25rem;
+    font-size: calc(1.25rem * var(--font-scale, 1));
     font-weight: 600;
     margin-top: 1.25rem;
     margin-bottom: 0.625rem;
     color: var(--text-primary);
 }
 .markdown-preview h5 {
-    font-size: 1.125rem;
+    font-size: calc(1.125rem * var(--font-scale, 1));
     font-weight: 600;
     margin-top: 1rem;
     margin-bottom: 0.5rem;
     color: var(--text-primary);
 }
 .markdown-preview h6 {
-    font-size: 1rem;
+    font-size: calc(1rem * var(--font-scale, 1));
     font-weight: 600;
     margin-top: 1rem;
     margin-bottom: 0.5rem;
@@ -117,7 +117,7 @@
     color: var(--accent-primary);
     padding: 0.2rem 0.4rem;
     border-radius: 0.25rem;
-    font-size: 0.875rem;
+    font-size: calc(0.875rem * var(--font-scale, 1));
     font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
     font-weight: 500;
 }
@@ -135,7 +135,7 @@
     background: transparent;
     padding: 1rem;
     display: block;
-    font-size: 0.875rem;
+    font-size: calc(0.875rem * var(--font-scale, 1));
     line-height: 1.6;
     font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
 }
@@ -266,7 +266,7 @@
 }
 .markdown-preview .media-audio .media-caption {
     margin-top: 0.75rem;
-    font-size: 0.875rem;
+    font-size: calc(0.875rem * var(--font-scale, 1));
     color: var(--text-secondary);
 }
 
@@ -325,7 +325,7 @@
     color: var(--text-primary);
 }
 .markdown-preview .pdf-link-note {
-    font-size: 0.75rem;
+    font-size: calc(0.75rem * var(--font-scale, 1));
     color: var(--text-secondary);
 }
 
