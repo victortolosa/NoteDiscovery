@@ -16,16 +16,21 @@ dependencies, no over-engineering.
 ## This repo is a fork — branch model matters
 
 - `origin` = victortolosa/NoteDiscovery (this fork), `upstream` = gamosoft/NoteDiscovery.
-- **`custom`** (default working branch): personal patches on top of upstream.
+- This is a personal project: never open PRs or push to upstream.
+- **`custom`** is the only branch (and the GitHub default): personal patches on
+  top of upstream. Feature branches are temporary; delete them, locally and on
+  GitHub, once merged into `custom`.
   Every **push** to `custom` triggers `.github/workflows/build-custom.yml`,
   which builds and publishes the Docker image to ghcr.io that the deployment
   server pulls. **Pushing publishes a deployable image but does not restart the
   server.** Commit freely; push only when explicitly asked. Follow
   [documentation/CUSTOM_DEPLOYMENT.md](documentation/CUSTOM_DEPLOYMENT.md) to
   pull and recreate the service on `docker-i5`.
-- `main`: tracks upstream. Upstream releases are tagged from `main`
-  (`release.ps1` → tag → `docker-publish.yml`); that flow is upstream's, not ours.
-- **Syncing upstream into `custom`**: take upstream by default; keep the fork's
+- There is no `main` branch here. Upstream is read through the
+  `upstream/main` remote-tracking ref. Upstream's release flow (`release.ps1` →
+  tag → `docker-publish.yml`) and its GHCR stats workflow aren't ours; the stats
+  workflow is disabled on the fork.
+- **Syncing upstream into `custom`** (`git fetch upstream`, then merge `upstream/main`): take upstream by default; keep the fork's
   version only where upstream would remove a fork capability, keep that
   divergence small, and list the caveats. Current divergences (D1-D7) and the
   asset pipeline are recorded in
