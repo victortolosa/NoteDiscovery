@@ -14,6 +14,8 @@ Plugins may also expose:
 
 import json
 import logging
+import os
+import tempfile
 import importlib.util
 from dataclasses import dataclass
 from pathlib import Path
@@ -167,11 +169,16 @@ class PluginManager:
         self.notes_dir = Path(notes_dir) if notes_dir else None
         self.app_config = config or {}
         self.plugins: Dict[str, Plugin] = {}
-        self.config_file = self.plugins_dir / "plugin_config.json"
+        self.legacy_config_file = self.plugins_dir / "plugin_config.json"
+        self.config_file = (
+            self.notes_dir / ".plugin-config.json"
+            if self.notes_dir is not None else self.legacy_config_file
+        )
+        self._config_load_failed = False
         self.load_plugins()
         self._apply_saved_state()
         # Save config to create/update the file with current states
-        if self.plugins:  # Only save if there are plugins loaded
+        if self.plugins and not self._config_load_failed:  # Preserve unreadable/invalid settings.
             self._save_config()
 
     def load_plugins(self):
@@ -324,26 +331,44 @@ class Plugin:
         ]
 
     def _load_config(self) -> Dict[str, bool]:
-        """Load plugin configuration from JSON file"""
-        if self.config_file.exists():
+        """Load persistent settings, falling back to the old location on migration."""
+        source = self.config_file if self.config_file.exists() else self.legacy_config_file
+        if source.exists():
             try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                with open(source, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                if not isinstance(config, dict) or not all(
+                    isinstance(key, str) and isinstance(value, bool)
+                    for key, value in config.items()
+                ):
+                    raise ValueError("Plugin config must map plugin IDs to booleans")
+                return config
             except Exception as e:
+                self._config_load_failed = True
                 logger.error("Failed to load plugin config: %s", e)
         return {}
 
     def _save_config(self):
-        """Save current plugin states to JSON file"""
+        """Atomically persist states without requiring write access to plugin code."""
+        temporary_path = None
         try:
             config = {
                 plugin_id: plugin.enabled
                 for plugin_id, plugin in self.plugins.items()
             }
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            self.config_file.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                mode='w', encoding='utf-8', dir=self.config_file.parent,
+                prefix='.plugin-config-', suffix='.tmp', delete=False,
+            ) as f:
+                temporary_path = Path(f.name)
                 json.dump(config, f, indent=2)
+            os.replace(temporary_path, self.config_file)
         except Exception as e:
             logger.error("Failed to save plugin config: %s", e)
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
 
     def _apply_saved_state(self):
         """Apply saved plugin states after loading plugins"""

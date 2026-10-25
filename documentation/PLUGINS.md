@@ -202,7 +202,19 @@ curl http://localhost:8000/api/plugins
 
 ## Plugin State Persistence
 
-Plugin states (enabled/disabled) are saved in `plugins/plugin_config.json` and persist between restarts.
+Plugin states (enabled/disabled) are saved atomically in `.plugin-config.json`
+inside the notes directory. The existing notes mount preserves these settings
+when a container is recreated; plugin code does not need to be writable.
+
+On first startup without this file, the app imports an existing
+`plugins/plugin_config.json` if present. The persistent file takes precedence
+on later starts. The old file is left untouched. Malformed settings are logged
+and preserved rather than overwritten during startup.
+
+Before replacing an older container whose plugin settings are not mounted,
+copy its `plugins/plugin_config.json` into the notes directory as
+`.plugin-config.json`. Otherwise recreating the container removes the only
+copy before the new app can import it.
 
 ---
 

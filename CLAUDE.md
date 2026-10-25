@@ -115,6 +115,8 @@ docker-compose up          # build from source (docker-compose.ghcr.yml = prebui
 - Keep the manifest links (`/manifest.json`) in `index.html` and `login.html`
   credentialed (`crossorigin="use-credentials"`) — the deployment sits behind
   Cloudflare Access.
+- `.plugin-config.json` in the notes folder persists plugin enable/disable settings.
+  Legacy `plugins/plugin_config.json` is imported only when the new file is absent.
 - `.favorites.json` in the notes folder stores favorites, starred folders and
   small synced UI preferences (`backend/favorites.py`).
 - Links between notes: wikilinks `[[note]]` / `[[note|text]]` /

@@ -111,3 +111,19 @@ serialized and acknowledge the submitted content. Navigation waits for pending
 saves and stays in the editor on failure. Rename and move wait for the server
 before changing local paths; typing during the operation is saved afterward.
 Preserve this integration when syncing upstream save or navigation changes.
+
+### Plugin settings migration
+
+Plugin state now lives in `/app/data/.plugin-config.json`, on the existing notes
+mount. No write permission on `/app/plugins` is required. Before recreating an
+older container, preserve its settings if a legacy file exists:
+
+```bash
+docker exec notediscovery sh -c '
+  if test -f /app/plugins/plugin_config.json && ! test -e /app/data/.plugin-config.json; then
+    cp /app/plugins/plugin_config.json /app/data/.plugin-config.json
+  fi'
+```
+
+Then pull and recreate the service normally. The app also imports the legacy
+file automatically when it is still available, such as a mounted plugins folder.
