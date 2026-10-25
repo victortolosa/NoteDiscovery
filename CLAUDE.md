@@ -27,10 +27,10 @@ dependencies, no over-engineering.
   (`release.ps1` → tag → `docker-publish.yml`); that flow is upstream's, not ours.
 - **Syncing upstream into `custom`**: take upstream by default; keep the fork's
   version only where upstream would remove a fork capability, keep that
-  divergence small, and list the caveats. Current divergences (D1-D5) and the
+  divergence small, and list the caveats. Current divergences (D1-D7) and the
   asset pipeline are recorded in
-  [documentation/CUSTOM_DEPLOYMENT.md](documentation/CUSTOM_DEPLOYMENT.md); the
-  v0.31.5 sync is logged in `documentation/UPSTREAM_SYNC_0.31.5_PLAN.md`.
+  [documentation/CUSTOM_DEPLOYMENT.md](documentation/CUSTOM_DEPLOYMENT.md); syncs
+  are logged in `documentation/UPSTREAM_SYNC_<version>_PLAN.md` (latest: 0.32.1).
 
 ## Repo map
 
@@ -48,11 +48,7 @@ dependencies, no over-engineering.
 | `documentation/` | The real docs (also mountable into the app as a notes folder) |
 | `docs/` | ⚠️ NOT docs — the marketing website (GitHub Pages, notediscovery.com) |
 | `data/` | The running vault (gitignored — real user notes, never commit) |
-<<<<<<< Updated upstream
 | `design/` | Design assets: screenshots and `notediscovery.pen` (use Pencil MCP tools, never Read/Grep the `.pen` file) |
-=======
-| `design/` | Untracked scratch design assets (`.pen` file — use pen.dev MCP tools, never Read/Grep it) |
->>>>>>> Stashed changes
 | `config.yaml` | App config; env vars override (see `documentation/ENVIRONMENT_VARIABLES.md`) |
 | `VERSION` | Single source of version (pyproject, `/api/config`, the service worker cache name and `?v=` asset URLs). `build-custom` stamps it as `<upstream>-custom.<run>` in CI — don't commit that suffix |
 

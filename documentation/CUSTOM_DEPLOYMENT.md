@@ -69,7 +69,8 @@ docker compose up -d --force-recreate notediscovery
 
 Rule for merging `gamosoft/NoteDiscovery`: take upstream by default; keep the
 fork's version only where upstream would remove a capability, and keep that
-divergence small. The last sync (v0.31.5) is documented in
+divergence small. The last sync (v0.32.1) is documented in
+`documentation/UPSTREAM_SYNC_0.32.1_PLAN.md`; the larger v0.31.5 one in
 `documentation/UPSTREAM_SYNC_0.31.5_PLAN.md`.
 
 ### Frontend assets
@@ -91,10 +92,11 @@ Expect conflicts around these on future syncs.
 |---|---|---|
 | D1 | `frontend/index.html`, `frontend/login.html` head | `crossorigin="use-credentials"` on the manifest link (Cloudflare Access) and PNG app icons |
 | D2 | `onEditorDrop`, `onUploadDragEnter`, `handleFileUploadDrop` in `frontend/app.js` | `.md` files dropped on the editor open the upload dialog (overwrite/rename/skip) targeting the open note's folder |
-| D3 | `loadNote` in `frontend/app.js` | Prefetch and tab caches |
+| D3 | `loadNote` in `frontend/app.js` | Prefetch and tab caches (network fetch uses upstream's `encodeVaultPath`) |
 | D4 | Wikilink rendering in `frontend/app.js` | Default link text is the last path segment |
 | D5 | Backlinks panel in `frontend/index.html` | One control per reference, no nested buttons |
 | D6 | `scripts/vendor_assets.py`, `scripts/vendor_lock.json`, `backend/export.py`, `documentation/THIRD_PARTY.md` | DOMPurify 3.4.15 instead of upstream's 3.0.8 (sanitizer bypass fixes). On future syncs keep whichever version is newer |
+| D7 | Homepage cards and list rows in `frontend/index.html` (`.homepage-star`) | A star next to delete: favorites for notes, starred folders for folders. The fork's own homepage redesign was retired for upstream's page in the v0.32.1 sync; this is the remaining glue |
 
 Fork-only glue with no upstream equivalent: Smart scroll sync is limited to the
 classic editor (Live Preview uses percentage sync), and Live Preview applies

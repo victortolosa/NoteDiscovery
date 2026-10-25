@@ -76,7 +76,7 @@ extended Markdown.
 - **Hide system folders** - Toggle to hide `_attachments`, `_templates` and other underscore-prefixed folders from sidebar
 - **Tabs** - Opened notes stay in a tab bar; `Ctrl+W` closes the active tab and `Ctrl+Tab` / `Ctrl+Shift+Tab` cycle through tabs
 - **Starred folders** - Star folders to pin them in their own sidebar section, next to Favorites
-- **Folder view** - Open a folder from the sidebar to browse it on the homepage as folder cards and a files list
+- **Folder view** - Open a folder from the sidebar to browse it on the homepage as cards or a compact list, filter it by name, and star notes or folders from either view
 - **Tab inserts tab** - Toggle so Tab indents list items from anywhere on the line or inserts a literal tab in ordinary text. Shift+Tab outdents list items and selected lines without moving focus out of a top-level list item.
 - **List & quote continuation (Enter)** - At the end of a line, Enter continues blockquotes (`>`), bullets (`-` / `*` / `+`), ordered lists (`1.` / `1)`), and task lists. New tasks start unchecked. Enter on an empty nested item outdents one level; Enter on an empty top-level item exits the list or quote. Disabled inside fenced code blocks and when using Shift+Enter (plain newline).
 
