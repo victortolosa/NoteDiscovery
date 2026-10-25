@@ -108,6 +108,9 @@
     <!-- Theme styles will be loaded dynamically -->
     <link rel="stylesheet" id="theme-stylesheet" href="">
     
+    <!-- Shared with HTML export / public shares so they match the live preview -->
+    <link rel="stylesheet" href="/static/markdown-preview.css?v=__APP_VERSION__">
+    
     <!-- Custom styles -->
     <style>
         [x-cloak] { display: none !important; }
@@ -347,189 +350,6 @@
         .text-accent {
             color: var(--accent-primary);
         }
-        
-        /* Markdown preview styling */
-        .markdown-preview {
-            line-height: 1.8;
-            color: var(--text-primary);
-            font-size: 16px;
-        }
-        
-        /* Readable line length - constrain text width for better readability */
-        .markdown-preview.readable-width {
-            max-width: 750px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        
-        /* Remove top margin from first element */
-        .markdown-preview > *:first-child {
-            margin-top: 0 !important;
-        }
-        
-        /* Headings */
-        .markdown-preview h1 { 
-            font-size: 2.25rem;
-            font-weight: 700;
-            margin-top: 2rem;
-            margin-bottom: 1rem;
-            color: var(--text-primary);
-            border-bottom: 2px solid var(--border-primary);
-            padding-bottom: 0.5rem;
-        }
-        .markdown-preview h2 { 
-            font-size: 1.875rem;
-            font-weight: 700;
-            margin-top: 1.75rem;
-            margin-bottom: 0.875rem;
-            color: var(--text-primary);
-            border-bottom: 1px solid var(--border-primary);
-            padding-bottom: 0.3rem;
-        }
-        .markdown-preview h3 { 
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-top: 1.5rem;
-            margin-bottom: 0.75rem;
-            color: var(--text-primary);
-        }
-        .markdown-preview h4 { 
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-top: 1.25rem;
-            margin-bottom: 0.625rem;
-            color: var(--text-primary);
-        }
-        .markdown-preview h5 { 
-            font-size: 1.125rem;
-            font-weight: 600;
-            margin-top: 1rem;
-            margin-bottom: 0.5rem;
-            color: var(--text-primary);
-        }
-        .markdown-preview h6 { 
-            font-size: 1rem;
-            font-weight: 600;
-            margin-top: 1rem;
-            margin-bottom: 0.5rem;
-            color: var(--text-secondary);
-        }
-        
-        /* Paragraphs and text */
-        .markdown-preview p { 
-            margin-bottom: 1rem;
-            line-height: 1.7;
-        }
-        
-        .markdown-preview strong {
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-        
-        .markdown-preview em {
-            font-style: italic;
-        }
-        
-        /* Lists */
-        .markdown-preview ul, .markdown-preview ol { 
-            margin-bottom: 1rem;
-            margin-left: 1.5rem;
-            padding-left: 0.5rem;
-        }
-        /* Nested unordered lists: disc → circle → square (common editor convention) */
-        .markdown-preview ul { list-style-type: disc; }
-        .markdown-preview ul ul { list-style-type: circle; }
-        .markdown-preview ul ul ul { list-style-type: square; }
-        .markdown-preview ol { list-style-type: decimal; }
-        .markdown-preview li {
-            margin-bottom: 0.5rem;
-            line-height: 1.6;
-        }
-        .markdown-preview li > ul,
-        .markdown-preview li > ol {
-            margin-top: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        /* Inline code */
-        .markdown-preview code:not(pre code) { 
-            background-color: var(--bg-tertiary);
-            color: var(--accent-primary);
-            padding: 0.2rem 0.4rem;
-            border-radius: 0.25rem;
-            font-size: 0.875rem;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-weight: 500;
-        }
-        
-        /* Code blocks */
-        .markdown-preview pre { 
-            background-color: var(--bg-tertiary);
-            margin-bottom: 1.5rem;
-            border-radius: 0.5rem;
-            overflow-x: auto;
-            border: 1px solid var(--border-primary);
-        }
-        .markdown-preview pre code {
-            background: transparent;
-            padding: 1rem;
-            display: block;
-            font-size: 0.875rem;
-            line-height: 1.6;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-        }
-        
-        /* Blockquotes */
-        .markdown-preview blockquote { 
-            border-left: 4px solid var(--accent-primary);
-            padding-left: 1rem;
-            margin: 1.5rem 0;
-            font-style: italic;
-            color: var(--text-secondary);
-            background-color: var(--bg-tertiary);
-            padding: 1rem;
-            padding-left: 1rem;
-            border-radius: 0.25rem;
-        }
-        .markdown-preview blockquote p {
-            margin-bottom: 0;
-        }
-        
-        /* Links */
-        .markdown-preview a { 
-            color: var(--accent-primary);
-            text-decoration: underline;
-            text-decoration-color: transparent;
-            transition: text-decoration-color 0.2s;
-            cursor: pointer;
-        }
-        .markdown-preview a:hover {
-            text-decoration-color: var(--accent-primary);
-        }
-        
-        /* Wikilinks - Obsidian style internal links */
-        .markdown-preview a[data-wikilink] {
-            color: var(--link-internal, var(--accent-primary));
-            text-decoration: none;
-            font-weight: 500;
-            background-color: var(--link-internal-bg, transparent);
-            padding: 0 2px;
-            border-radius: 2px;
-            transition: background-color 0.15s, color 0.15s;
-        }
-        .markdown-preview a[data-wikilink]:hover {
-            background-color: var(--link-internal-hover-bg, var(--bg-tertiary));
-            text-decoration: underline;
-        }
-        
-        /* Broken wikilinks - note doesn't exist (Obsidian shows these dimmed) */
-        .markdown-preview a[data-wikilink].wikilink-broken {
-            color: var(--link-broken, var(--text-tertiary));
-            opacity: 0.7;
-        }
-        .markdown-preview a[data-wikilink].wikilink-broken:hover {
-            opacity: 1;
-        }
 
         /* Search highlight base style (used in note preview and search results) */
         .search-highlight {
@@ -596,204 +416,6 @@
             width: 10px;
             height: 10px;
             border-radius: 50%;
-        }
-        
-        /* Standard internal links (non-wikilink, e.g. [text](path)) */
-        .markdown-preview a:not([href^="http"]):not([href^="https"]):not([href^="//"]):not([href^="mailto:"]):not([data-wikilink]) {
-            color: var(--accent-primary);
-        }
-        
-        /* Tables */
-        .markdown-preview table { 
-            width: 100%;
-            margin-bottom: 1.5rem;
-            border-collapse: collapse;
-            border: 1px solid var(--border-primary);
-        }
-        .markdown-preview th, .markdown-preview td { 
-            border: 1px solid var(--border-primary);
-            padding: 0.75rem 1rem;
-            text-align: left;
-        }
-        .markdown-preview th[align="left"],   .markdown-preview td[align="left"]   { text-align: left; }
-        .markdown-preview th[align="right"],  .markdown-preview td[align="right"]  { text-align: right; }
-        .markdown-preview th[align="center"], .markdown-preview td[align="center"] { text-align: center; }
-        .markdown-preview th { 
-            background-color: var(--bg-tertiary);
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-        .markdown-preview tr:nth-child(even) {
-            background-color: var(--bg-secondary);
-        }
-        
-        /* Horizontal rule */
-        .markdown-preview hr {
-            border: none;
-            border-top: 2px solid var(--border-primary);
-            margin: 2rem 0;
-        }
-        
-        /* Images */
-        .markdown-preview img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 0.5rem;
-            margin: 1rem 0;
-        }
-        
-        /* Embedded Media (audio, video, PDF) */
-        .markdown-preview .media-embed {
-            margin: 1.5rem 0;
-            border-radius: 0.5rem;
-            overflow: hidden;
-        }
-        
-        /* Audio embeds */
-        .markdown-preview .media-audio {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 1.5rem;
-            background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
-            border: 1px solid var(--border-primary);
-        }
-        .markdown-preview .media-audio audio {
-            width: 100%;
-            max-width: 500px;
-            border-radius: 2rem;
-        }
-        .markdown-preview .media-audio .media-caption {
-            margin-top: 0.75rem;
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-        }
-        
-        /* Video embeds */
-        .markdown-preview .media-video {
-            background: #000;
-            display: flex;
-            justify-content: center;
-        }
-        .markdown-preview .media-video video {
-            width: 100%;
-            max-width: 800px;
-            max-height: 450px;
-            border-radius: 0;
-        }
-        
-        /* PDF embeds (iframe) */
-        .markdown-preview .media-pdf {
-            border: 1px solid var(--border-primary);
-            border-radius: 0.5rem;
-            overflow: hidden;
-            background: var(--bg-secondary);
-        }
-        .markdown-preview .media-pdf iframe {
-            width: 100%;
-            height: 600px;
-            border: none;
-            display: block;
-        }
-        
-        /* PDF links (for external PDFs) */
-        .markdown-preview .pdf-link {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-            padding: 1rem 1.25rem;
-            margin: 1rem 0;
-            background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
-            border: 1px solid var(--border-primary);
-            border-radius: 0.5rem;
-            color: var(--text-primary);
-            text-decoration: none;
-            transition: all 0.15s ease;
-        }
-        .markdown-preview .pdf-link:hover {
-            background: var(--bg-secondary);
-            border-color: var(--accent-primary);
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .markdown-preview .pdf-link:hover .pdf-link-content {
-            color: var(--accent-primary);
-        }
-        .markdown-preview .pdf-link-content {
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-        .markdown-preview .pdf-link-note {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-        }
-
-        /* Callouts — GitHub-style admonitions (> [!NOTE], etc.) */
-        .markdown-preview .callout {
-            margin: 1rem 0;
-            padding: 0.75rem 1rem;
-            border-left: 4px solid var(--callout-color, var(--accent-primary));
-            border-radius: 0.375rem;
-            background: var(--callout-bg, var(--bg-secondary));
-        }
-        .markdown-preview .callout-title {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-weight: 600;
-            color: var(--callout-color, var(--accent-primary));
-            margin-bottom: 0.25rem;
-        }
-        .markdown-preview .callout-icon {
-            font-size: 1.1em;
-            line-height: 1;
-        }
-        .markdown-preview .callout-body > :first-child { margin-top: 0; }
-        .markdown-preview .callout-body > :last-child  { margin-bottom: 0; }
-        .markdown-preview .callout-note      { --callout-color: #0969da; --callout-bg: rgba(9, 105, 218, 0.08); }
-        .markdown-preview .callout-tip       { --callout-color: #1a7f37; --callout-bg: rgba(26, 127, 55, 0.08); }
-        .markdown-preview .callout-important { --callout-color: #8250df; --callout-bg: rgba(130, 80, 223, 0.08); }
-        .markdown-preview .callout-warning   { --callout-color: #9a6700; --callout-bg: rgba(154, 103, 0, 0.08); }
-        .markdown-preview .callout-caution   { --callout-color: #d1242f; --callout-bg: rgba(209, 36, 47, 0.08); }
-
-        /* Task lists */
-        .markdown-preview input[type="checkbox"] {
-            margin-right: 0.5rem;
-        }
-        /* Exports keep them disabled, so only the live preview gets the affordance */
-        .markdown-preview input[type="checkbox"]:not([disabled]) {
-            cursor: pointer;
-        }
-        /* Loose lists (a blank line anywhere in them) wrap item content in a <p>,
-           so both shapes need covering or the bullet reappears next to the box. */
-        .markdown-preview li:has(> input[type="checkbox"]),
-        .markdown-preview li:has(> p > input[type="checkbox"]) {
-            list-style: none;
-            margin-left: -1.25rem;
-        }
-        
-        /* Math/LaTeX styling */
-        .markdown-preview .MathJax {
-            color: var(--text-primary);
-            overflow-x: auto;
-            overflow-y: hidden;
-        }
-        
-        /* Display math (block) */
-        .markdown-preview mjx-container[display="true"] {
-            margin: 1.5rem 0;
-            overflow-x: auto;
-        }
-        
-        /* Inline math */
-        .markdown-preview mjx-container[display="false"] {
-            margin: 0 0.2rem;
-        }
-        
-        /* Mermaid diagram styling - minimal, let Mermaid handle its own rendering */
-        .markdown-preview .mermaid-rendered svg {
-            max-width: 100%;
-            height: auto;
         }
         
         /* Editor styling */
@@ -1372,129 +994,6 @@
             background-color: var(--accent-hover) !important;
         }
         
-        /* Enhanced Shell/Bash Syntax Highlighting */
-        .markdown-preview pre code.language-shell .hljs-meta,
-        .markdown-preview pre code.language-bash .hljs-meta,
-        .markdown-preview pre code.language-sh .hljs-meta {
-            color: #7c3aed !important; /* Purple for prompts like $ # */
-            font-weight: 600;
-        }
-        
-        .markdown-preview pre code.language-shell .hljs-built_in,
-        .markdown-preview pre code.language-bash .hljs-built_in,
-        .markdown-preview pre code.language-sh .hljs-built_in {
-            color: #10b981 !important; /* Green for built-in commands */
-            font-weight: 500;
-        }
-        
-        .markdown-preview pre code.language-shell .hljs-string,
-        .markdown-preview pre code.language-bash .hljs-string,
-        .markdown-preview pre code.language-sh .hljs-string {
-            color: #f59e0b !important; /* Orange for strings */
-        }
-        
-        .markdown-preview pre code.language-shell .hljs-variable,
-        .markdown-preview pre code.language-bash .hljs-variable,
-        .markdown-preview pre code.language-sh .hljs-variable {
-            color: #06b6d4 !important; /* Cyan for variables */
-            font-weight: 500;
-        }
-        
-        .markdown-preview pre code.language-shell .hljs-comment,
-        .markdown-preview pre code.language-bash .hljs-comment,
-        .markdown-preview pre code.language-sh .hljs-comment {
-            color: #6b7280 !important; /* Gray for comments */
-            font-style: italic;
-        }
-        
-        .markdown-preview pre code.language-shell .hljs-keyword,
-        .markdown-preview pre code.language-bash .hljs-keyword,
-        .markdown-preview pre code.language-sh .hljs-keyword {
-            color: #ec4899 !important; /* Pink for keywords like if, then, else */
-            font-weight: 600;
-        }
-        
-        .markdown-preview pre code.language-shell .hljs-number,
-        .markdown-preview pre code.language-bash .hljs-number,
-        .markdown-preview pre code.language-sh .hljs-number {
-            color: #8b5cf6 !important; /* Purple for numbers */
-        }
-        
-        .markdown-preview pre code.language-shell .hljs-literal,
-        .markdown-preview pre code.language-bash .hljs-literal,
-        .markdown-preview pre code.language-sh .hljs-literal {
-            color: #3b82f6 !important; /* Blue for literals like true, false */
-            font-weight: 500;
-        }
-        
-        /* Enhanced PowerShell Syntax Highlighting */
-        .markdown-preview pre code.language-powershell .hljs-built_in,
-        .markdown-preview pre code.language-ps1 .hljs-built_in,
-        .markdown-preview pre code.language-ps .hljs-built_in {
-            color: #10b981 !important; /* Green for cmdlets like Get-Process, Set-Location */
-            font-weight: 600;
-        }
-        
-        .markdown-preview pre code.language-powershell .hljs-literal,
-        .markdown-preview pre code.language-ps1 .hljs-literal,
-        .markdown-preview pre code.language-ps .hljs-literal {
-            color: #3b82f6 !important; /* Blue for $true, $false, $null */
-            font-weight: 600;
-        }
-        
-        .markdown-preview pre code.language-powershell .hljs-variable,
-        .markdown-preview pre code.language-ps1 .hljs-variable,
-        .markdown-preview pre code.language-ps .hljs-variable {
-            color: #06b6d4 !important; /* Cyan for $variables */
-            font-weight: 500;
-        }
-        
-        .markdown-preview pre code.language-powershell .hljs-string,
-        .markdown-preview pre code.language-ps1 .hljs-string,
-        .markdown-preview pre code.language-ps .hljs-string {
-            color: #f59e0b !important; /* Orange for strings */
-        }
-        
-        .markdown-preview pre code.language-powershell .hljs-keyword,
-        .markdown-preview pre code.language-ps1 .hljs-keyword,
-        .markdown-preview pre code.language-ps .hljs-keyword {
-            color: #ec4899 !important; /* Pink for keywords like if, else, foreach */
-            font-weight: 600;
-        }
-        
-        .markdown-preview pre code.language-powershell .hljs-params,
-        .markdown-preview pre code.language-ps1 .hljs-params,
-        .markdown-preview pre code.language-ps .hljs-params {
-            color: #8b5cf6 !important; /* Purple for -Parameters */
-            font-weight: 500;
-        }
-        
-        .markdown-preview pre code.language-powershell .hljs-type,
-        .markdown-preview pre code.language-ps1 .hljs-type,
-        .markdown-preview pre code.language-ps .hljs-type {
-            color: #14b8a6 !important; /* Teal for [Types] */
-            font-weight: 500;
-        }
-        
-        .markdown-preview pre code.language-powershell .hljs-comment,
-        .markdown-preview pre code.language-ps1 .hljs-comment,
-        .markdown-preview pre code.language-ps .hljs-comment {
-            color: #6b7280 !important; /* Gray for comments */
-            font-style: italic;
-        }
-        
-        .markdown-preview pre code.language-powershell .hljs-number,
-        .markdown-preview pre code.language-ps1 .hljs-number,
-        .markdown-preview pre code.language-ps .hljs-number {
-            color: #8b5cf6 !important; /* Purple for numbers */
-        }
-        
-        .markdown-preview pre code.language-powershell .hljs-operator,
-        .markdown-preview pre code.language-ps1 .hljs-operator,
-        .markdown-preview pre code.language-ps .hljs-operator {
-            color: #f472b6 !important; /* Pink for operators */
-        }
-        
         /* Mobile Responsive Styles */
         /* Z-index hierarchy (for reference):
            - Mobile sidebar: 1000
@@ -1629,11 +1128,57 @@
             }
         }
 
-        /* Table wrapper */
-        .markdown-preview .table-wrapper {
-            overflow-x: auto;
-            margin-bottom: 1.5rem;
-            -webkit-overflow-scrolling: touch;
+        .homepage-list {
+            border: 1px solid var(--border-primary);
+            border-radius: 0.5rem;
+            overflow: hidden;
+            background-color: var(--bg-secondary);
+        }
+        .homepage-list-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-primary);
+            color: var(--text-primary);
+            position: relative;
+        }
+        @media (min-width: 640px) {
+            .homepage-list-row {
+                padding-right: 2.25rem;
+            }
+        }
+        .homepage-list-row:last-child {
+            border-bottom: none;
+        }
+        .homepage-list-row:hover {
+            background-color: var(--bg-hover);
+        }
+        .homepage-list-icon {
+            width: 1.25rem;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .homepage-list-delete {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            color: var(--error);
+            padding: 4px;
+            border-radius: 4px;
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: var(--bg-secondary);
+        }
+        .homepage-list-row:hover .homepage-list-delete,
+        .homepage-list-row:focus-within .homepage-list-delete {
+            opacity: 1;
+            pointer-events: auto;
         }
     </style>
     <!-- Obsidian theme defaults (patch) -->
@@ -3025,58 +2570,121 @@
                     <!-- Grid View - Show when app has content -->
                     <template x-if="!isAppEmpty">
                         <div class="max-w-7xl mx-auto p-6 md:p-8">
-                            <!-- Demo Mode Warning Banner -->
-                            <div x-show="demoMode" class="mb-6 flex items-center px-4 py-2.5 text-sm rounded-lg" style="background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%); color: white; font-weight: 500;">
-                                <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                                </svg>
-                                <span><strong x-text="t('demo.title') + ':'"></strong> <span x-text="t('demo.warning')"></span></span>
+                            <!-- Header -->
+                            <div class="mb-6">
+                                <h1 class="text-3xl font-bold mb-2" style="color: var(--text-primary);" x-text="appName"></h1>
+                                <p class="text-lg" style="color: var(--text-secondary);" x-text="t('app.tagline')"></p>
+                                <!-- Demo Mode Warning Banner -->
+                                <div x-show="demoMode" class="mt-4 flex items-center px-4 py-2.5 text-sm rounded-lg" style="background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%); color: white; font-weight: 500;">
+                                    <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                    </svg>
+                                    <span><strong x-text="t('demo.title') + ':'"></strong> <span x-text="t('demo.warning')"></span></span>
+                                </div>
                             </div>
                             
-                            <!-- Top bar: breadcrumbs left, counts + New right -->
-                            <div class="mb-6 flex items-center justify-between gap-4">
-                                <div class="flex items-center gap-2 text-sm min-w-0 flex-wrap" style="color: var(--text-secondary);">
-                                    <template x-if="Array.isArray(homepageBreadcrumb())">
-                                        <template x-for="(crumb, index) in homepageBreadcrumb()" :key="index">
-                                            <div class="flex items-center gap-2">
-                                                <span
-                                                    x-show="index > 0"
-                                                    class="text-xs"
-                                                    style="color: var(--text-tertiary);"
-                                                >/</span>
-                                                <span
-                                                    @click="goToHomepageFolder(crumb.path)"
-                                                    class="cursor-pointer hover:underline"
-                                                    :style="crumb.path === selectedHomepageFolder ? 'color: var(--accent-primary); font-weight: 600;' : 'color: var(--text-secondary);'"
-                                                    x-text="crumb.name"
-                                                ></span>
-                                            </div>
-                                        </template>
-                                    </template>
-                                </div>
-                                <template x-if="homepageNotes().length > 0 || homepageFolders().length > 0">
-                                    <div class="flex items-center gap-4 flex-shrink-0">
-                                        <div class="flex items-center gap-2 text-sm" style="color: var(--text-tertiary);">
-                                            <span class="font-semibold" style="color: var(--text-secondary);">
-                                                <span x-text="homepageNotes().length"></span>
-                                                <span x-text="homepageNotes().length === 1 ? t('homepage.note_singular') : t('homepage.note_plural')"></span>
-                                            </span>
-                                            <span x-show="homepageFolders().length > 0" style="opacity: 0.5;">•</span>
-                                            <span x-show="homepageFolders().length > 0">
-                                                <span x-text="homepageFolders().length"></span>
-                                                <span x-text="homepageFolders().length === 1 ? t('homepage.folder_singular') : t('homepage.folder_plural')"></span>
-                                            </span>
-                                        </div>
-                                        <button
-                                            @click="dropdownTargetFolder = selectedHomepageFolder; toggleNewDropdown($event)"
-                                            class="px-4 py-2 text-sm font-semibold rounded-lg transition-all hover:opacity-90"
-                                            style="background-color: var(--text-primary); color: var(--bg-primary);"
-                                        >
-                                            <span x-text="t('sidebar.new_button')"></span>
-                                        </button>
-                                    </div>
+                            <!-- Breadcrumb Navigation -->
+                            <div class="mb-4 flex items-center gap-2 text-sm" style="color: var(--text-secondary);">
+                                <template x-if="Array.isArray(homepageBreadcrumb())">
+                                    <template x-for="(crumb, index) in homepageBreadcrumb()" :key="index">
+                                        <div class="flex items-center gap-2">
+                                            <span 
+                                                x-show="index > 0"
+                                                class="text-xs"
+                                                style="color: var(--text-tertiary);"
+                                            >/</span>
+                                            <span 
+                                                @click="goToHomepageFolder(crumb.path)"
+                                                class="cursor-pointer hover:underline"
+                                                :style="crumb.path === selectedHomepageFolder ? 'color: var(--accent-primary); font-weight: 600;' : 'color: var(--text-secondary);'"
+                                                x-text="crumb.name"
+                                            ></span>
+                </div>
+            </template>
                                 </template>
                             </div>
+                            
+                            <!-- Stats Bar - Only show when there are notes or folders -->
+                            <template x-if="homepageNotes().length > 0 || homepageFolders().length > 0">
+                                <div class="mb-6 p-4 rounded-lg" style="background-color: var(--bg-secondary); border: 1px solid var(--border-primary);">
+                                    <div class="relative mb-4">
+                                        <input
+                                            type="text"
+                                            x-model="homepageNameQuery"
+                                            :placeholder="t('sidebar.search_placeholder')"
+                                            :aria-label="t('sidebar.search_placeholder')"
+                                            class="w-full px-3 py-2 pl-9 pr-8 text-sm rounded focus:outline-none focus:ring-1"
+                                            style="background-color: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-primary);"
+                                        >
+                                        <svg class="absolute left-3 top-2.5 w-4 h-4" style="color: var(--text-tertiary);" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                        </svg>
+                                        <button
+                                            type="button"
+                                            x-show="homepageNameQuery.length > 0"
+                                            @click="homepageNameQuery = ''"
+                                            class="absolute right-2 top-2 w-5 h-5 flex items-center justify-center rounded-full"
+                                            style="color: var(--text-tertiary);"
+                                            :title="t('sidebar.clear_search')"
+                                        >
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-4 text-sm" style="color: var(--text-secondary);">
+                                        <span class="font-semibold" style="color: var(--text-primary);">
+                                            <span x-text="homepageVisibleNotes().length"></span> 
+                                            <span x-text="homepageVisibleNotes().length === 1 ? t('homepage.note_singular') : t('homepage.note_plural')"></span>
+                                        </span>
+                                        <span x-show="homepageVisibleFolders().length > 0">
+                                            <span x-text="homepageVisibleFolders().length"></span> 
+                                            <span x-text="homepageVisibleFolders().length === 1 ? t('homepage.folder_singular') : t('homepage.folder_plural')"></span>
+                                        </span>
+                                        <div class="ml-auto flex items-center gap-2">
+                                            <div class="flex rounded-lg p-0.5" style="background-color: var(--bg-tertiary);" role="group">
+                                                <button
+                                                    type="button"
+                                                    @click="setHomepageView('cards')"
+                                                    class="p-1.5 rounded transition"
+                                                    :style="homepageView !== 'list' ? 'background-color: var(--accent-primary); color: white;' : 'color: var(--text-secondary);'"
+                                                    @mouseenter="if (homepageView === 'list') $el.style.backgroundColor = 'var(--bg-secondary)'"
+                                                    @mouseleave="if (homepageView === 'list') $el.style.backgroundColor = 'transparent'"
+                                                    :aria-pressed="homepageView !== 'list'"
+                                                    :title="t('homepage.view_cards')"
+                                                >
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    @click="setHomepageView('list')"
+                                                    class="p-1.5 rounded transition"
+                                                    :style="homepageView === 'list' ? 'background-color: var(--accent-primary); color: white;' : 'color: var(--text-secondary);'"
+                                                    @mouseenter="if (homepageView !== 'list') $el.style.backgroundColor = 'var(--bg-secondary)'"
+                                                    @mouseleave="if (homepageView !== 'list') $el.style.backgroundColor = 'transparent'"
+                                                    :aria-pressed="homepageView === 'list'"
+                                                    :title="t('homepage.view_list')"
+                                                >
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            <button 
+                                                @click="dropdownTargetFolder = selectedHomepageFolder; toggleNewDropdown($event)"
+                                                class="px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors"
+                                                style="background-color: var(--accent-primary);"
+                                                onmouseover="this.style.backgroundColor='var(--accent-hover)'"
+                                                onmouseout="this.style.backgroundColor='var(--accent-primary)'"
+                                            >
+                                                <span x-text="t('sidebar.new_button')"></span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
                             
                             <!-- Empty State (for folder view) -->
                             <template x-if="homepageNotes().length === 0 && homepageFolders().length === 0">
@@ -3098,144 +2706,149 @@
                                 </div>
                             </template>
                             
-                            <!-- Folders grid + Files list -->
-                            <template x-if="homepageNotes().length > 0 || homepageFolders().length > 0">
-                                <div
-                                    x-data="{ hpFolders: [], hpNotes: [] }"
-                                    x-init="hpFolders = homepageFolders(); hpNotes = homepageNotes()"
-                                    x-effect="hpFolders = homepageFolders(); hpNotes = homepageNotes()"
-                                >
-                                    <!-- Folders: responsive card grid -->
-                                    <div x-show="hpFolders.length > 0" class="mb-8">
-                                        <h3 class="text-lg font-semibold mb-3" style="color: var(--text-primary)" x-text="t('homepage.folders_heading')"></h3>
-                                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" @keydown.escape.window="openFolderMenu = null">
-                                            <template x-for="folder in hpFolders" :key="folder.path">
-                                                <div class="relative">
-                                                    <div
-                                                        @click="goToHomepageFolder(folder.path)"
-                                                        class="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all"
-                                                        style="background-color: var(--bg-secondary); border: 1px solid var(--border-primary);"
-                                                        onmouseover="this.style.backgroundColor = 'var(--bg-hover)'; this.style.borderColor = 'var(--border-secondary)'"
-                                                        onmouseout="this.style.backgroundColor = 'var(--bg-secondary)'; this.style.borderColor = 'var(--border-primary)'"
-                                                    >
-                                                        <div
-                                                            class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                                                            :style="{ backgroundColor: folder.color.bg }"
-                                                        >
-                                                            <svg class="w-5 h-5" :style="{ color: folder.color.fg }" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
-                                                            </svg>
-                                                        </div>
-                                                        <div class="flex-1 min-w-0">
-                                                            <div class="flex items-center gap-1.5 min-w-0">
-                                                                <span class="font-semibold truncate" style="color: var(--text-primary)" x-text="folder.name"></span>
-                                                                <svg x-show="folder.starred" class="w-3.5 h-3.5 flex-shrink-0" style="color: var(--warning, #eab308)" viewBox="0 0 24 24" fill="currentColor">
-                                                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-                                                                </svg>
-                                                            </div>
-                                                            <div class="text-xs mt-0.5" style="color: var(--text-tertiary)" x-text="folder.noteCount + ' ' + (folder.noteCount === 1 ? t('homepage.note_singular') : t('homepage.note_plural'))"></div>
-                                                        </div>
-                                                        <button
-                                                            @click.stop="openFolderMenu = openFolderMenu === folder.path ? null : folder.path"
-                                                            class="p-1.5 rounded-md flex-shrink-0 transition-colors"
-                                                            style="color: var(--text-tertiary);"
-                                                            onmouseover="this.style.backgroundColor = 'var(--bg-tertiary)'"
-                                                            onmouseout="this.style.backgroundColor = 'transparent'"
-                                                            :title="t('common.more_options')"
-                                                            aria-haspopup="menu"
-                                                            :aria-expanded="openFolderMenu === folder.path ? 'true' : 'false'"
-                                                        >
-                                                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                                                                <circle cx="5" cy="12" r="1.6"></circle>
-                                                                <circle cx="12" cy="12" r="1.6"></circle>
-                                                                <circle cx="19" cy="12" r="1.6"></circle>
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-                                                    <!-- Folder card overflow menu -->
-                                                    <div
-                                                        x-show="openFolderMenu === folder.path"
-                                                        @click.outside="if (openFolderMenu === folder.path) openFolderMenu = null"
-                                                        x-transition:enter="transition ease-out duration-100"
-                                                        x-transition:enter-start="opacity-0 scale-95"
-                                                        x-transition:enter-end="opacity-100 scale-100"
-                                                        class="absolute right-2 top-full -mt-1 z-20 w-44 rounded-lg shadow-lg overflow-hidden"
-                                                        style="background-color: var(--bg-tertiary); border: 1px solid var(--border-primary);"
-                                                        role="menu"
-                                                    >
-                                                        <button
-                                                            @click.stop="toggleStarFolder(folder.path); openFolderMenu = null"
-                                                            class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors"
-                                                            style="color: var(--text-primary);"
-                                                            onmouseover="this.style.backgroundColor = 'var(--bg-hover)'"
-                                                            onmouseout="this.style.backgroundColor = 'transparent'"
-                                                            role="menuitem"
-                                                        >
-                                                            <svg class="w-4 h-4" style="color: var(--warning, #eab308)" viewBox="0 0 24 24" :fill="folder.starred ? 'none' : 'currentColor'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-                                                            </svg>
-                                                            <span x-text="folder.starred ? t('toolbar.unstar_folder') : t('toolbar.star_folder')"></span>
-                                                        </button>
-                                                        <button
-                                                            @click.stop="openFolderMenu = null; deleteFolder(folder.path, folder.name)"
-                                                            class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors"
-                                                            style="color: var(--error, #ef4444);"
-                                                            onmouseover="this.style.backgroundColor = 'var(--bg-hover)'"
-                                                            onmouseout="this.style.backgroundColor = 'transparent'"
-                                                            role="menuitem"
-                                                        >
-                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                                            </svg>
-                                                            <span x-text="t('common.delete')"></span>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </div>
+                            <!-- Name filter matched nothing in a folder that still has items -->
+                            <template x-if="(homepageNotes().length > 0 || homepageFolders().length > 0) && homepageVisibleNotes().length === 0 && homepageVisibleFolders().length === 0">
+                                <p class="text-sm text-center py-8" style="color: var(--text-tertiary);" x-text="t('sidebar.no_results')"></p>
+                            </template>
 
-                                    <!-- Files: full-width divided list -->
-                                    <div x-show="hpNotes.length > 0">
-                                        <h3 class="text-lg font-semibold mb-3" style="color: var(--text-primary)" x-text="t('homepage.files_heading')"></h3>
-                                        <div class="rounded-xl overflow-hidden" style="background-color: var(--bg-secondary); border: 1px solid var(--border-primary);">
-                                            <template x-for="(note, noteIdx) in hpNotes.slice(0, HOMEPAGE_MAX_NOTES)" :key="note.path">
-                                                <div
-                                                    @click="openItem(note.path, note.type)"
-                                                    class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors"
-                                                    :style="noteIdx > 0 ? 'border-top: 1px solid var(--border-primary);' : ''"
-                                                    onmouseover="this.style.backgroundColor = 'var(--bg-hover)'"
-                                                    onmouseout="this.style.backgroundColor = 'transparent'"
-                                                >
-                                                    <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style="background-color: var(--bg-tertiary);">
-                                                        <svg class="w-5 h-5" style="color: var(--text-secondary);" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                                            <path x-show="note.type === 'note'" stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                                            <path x-show="note.type !== 'note'" stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                                        </svg>
-                                                    </div>
-                                                    <span class="font-medium truncate flex-1 min-w-0" style="color: var(--text-primary)" x-text="note.name"></span>
-                                                    <span class="text-sm flex-shrink-0" style="color: var(--text-tertiary)" x-text="note.type === 'note' ? formatDate(note.modified) : formatSize(note.size || 0)"></span>
-                                                    <button
-                                                        @click.stop="note.type !== 'note' ? deleteMedia(note.path) : deleteNote(note.path, note.name)"
-                                                        class="p-2 rounded-lg flex-shrink-0 transition-all hover:brightness-125"
-                                                        style="background-color: rgba(239, 68, 68, 0.08); color: var(--error, #ef4444);"
-                                                        :title="t('common.delete')"
-                                                    >
-                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                                        </svg>
-                                                    </button>
-                                                </div>
-                                            </template>
+                            <!-- Folders and Notes Grid -->
+                            <template x-if="(homepageVisibleNotes().length > 0 || homepageVisibleFolders().length > 0) && homepageView !== 'list'">
+                                <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-4">
+                                    <!-- Folders First -->
+                                    <template x-for="folder in homepageVisibleFolders()" :key="folder.path">
+                                        <div 
+                                            @click="goToHomepageFolder(folder.path)"
+                                            class="homepage-card p-2 sm:p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-lg"
+                                            style="background-color: var(--bg-secondary); border-color: var(--accent-primary); display: flex; flex-direction: column; border-width: 2px; position: relative;"
+                                            onmouseover="this.style.borderColor='var(--accent-hover)'; this.style.transform='translateY(-2px)'; this.querySelector('.card-delete-btn').style.opacity='1';"
+                                            onmouseout="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(0)'; this.querySelector('.card-delete-btn').style.opacity='0';"
+                                        >
+                                            <!-- Delete Button -->
+                                            <button 
+                                                @click.stop="deleteFolder(folder.path, folder.name)"
+                                                class="card-delete-btn hidden sm:block"
+                                                style="position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity 0.2s; color: var(--error); padding: 4px; border-radius: 4px; background-color: var(--bg-secondary);"
+                                                onmouseover="this.style.backgroundColor='var(--bg-hover)'"
+                                                onmouseout="this.style.backgroundColor='var(--bg-secondary)'"
+                                                :title="t('common.delete')"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                            
+                                            <!-- Folder Icon -->
+                                            <div class="mb-1 sm:mb-2 flex items-center gap-1 sm:gap-2">
+                                                <svg class="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" style="color: var(--accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                                </svg>
+                                                <h3 class="font-semibold text-sm sm:text-base" style="color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" x-text="folder.name"></h3>
+                                            </div>
+                                            
+                                            <!-- Folder Metadata -->
+                                            <div class="flex items-center justify-between text-xs mt-auto pt-1 sm:pt-2" style="color: var(--text-tertiary);">
+                                                <span x-text="folder.noteCount + ' ' + (folder.noteCount === 1 ? t('homepage.note_singular') : t('homepage.note_plural'))"></span>
+                                                <svg class="w-4 h-4 hidden sm:block" style="color: var(--accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                                </svg>
+                                            </div>
                                         </div>
-                                    </div>
+                                    </template>
+                                    
+                                    <!-- Notes -->
+                                    <template x-for="note in homepageVisibleNotes().slice(0, HOMEPAGE_MAX_NOTES)" :key="note.path">
+                                        <div 
+                                            @click="openItem(note.path, note.type)"
+                                            class="homepage-card p-2 sm:p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-lg"
+                                            style="background-color: var(--bg-secondary); border-color: var(--border-primary); display: flex; flex-direction: column; position: relative;"
+                                            onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(-2px)'; this.querySelector('.card-delete-btn').style.opacity='1';"
+                                            onmouseout="this.style.borderColor='var(--border-primary)'; this.style.transform='translateY(0)'; this.querySelector('.card-delete-btn').style.opacity='0';"
+                                        >
+                                            <!-- Delete Button -->
+                                            <button 
+                                                @click.stop="note.type !== 'note' ? deleteMedia(note.path) : deleteNote(note.path, note.name)"
+                                                class="card-delete-btn hidden sm:block"
+                                                style="position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity 0.2s; color: var(--error); padding: 4px; border-radius: 4px; background-color: var(--bg-secondary);"
+                                                onmouseover="this.style.backgroundColor='var(--bg-hover)'"
+                                                onmouseout="this.style.backgroundColor='var(--bg-secondary)'"
+                                                :title="note.type === 'note' ? t('toolbar.delete_note') : (note.type === 'drawing' ? t('toolbar.delete_drawing') : t('toolbar.delete_image'))"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                            
+                                            <!-- Note Title -->
+                                            <h3 class="font-semibold text-sm sm:text-base mb-1 sm:mb-2" style="color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" x-text="note.name"></h3>
+                                            
+                                            <!-- Metadata -->
+                                            <div class="flex items-center justify-between text-xs mt-auto pt-1 sm:pt-2" style="color: var(--text-tertiary);">
+                                                <span x-text="formatDate(note.modified)"></span>
+                                                <span class="hidden sm:inline" x-text="formatSize(note.size)"></span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+
+                            <!-- Folders and Notes List -->
+                            <template x-if="(homepageVisibleNotes().length > 0 || homepageVisibleFolders().length > 0) && homepageView === 'list'">
+                                <div class="homepage-list">
+                                    <template x-for="folder in homepageVisibleFolders()" :key="folder.path">
+                                        <div
+                                            @click="goToHomepageFolder(folder.path)"
+                                            class="homepage-list-row"
+                                        >
+                                            <span class="homepage-list-icon" aria-hidden="true">
+                                                <svg class="w-4 h-4" style="color: var(--accent-primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                                                </svg>
+                                            </span>
+                                            <span class="font-medium text-sm truncate flex-1 min-w-0" x-text="folder.name"></span>
+                                            <span class="text-xs flex-shrink-0" style="color: var(--text-tertiary);" x-text="folder.noteCount + ' ' + (folder.noteCount === 1 ? t('homepage.note_singular') : t('homepage.note_plural'))"></span>
+                                            <button
+                                                @click.stop="deleteFolder(folder.path, folder.name)"
+                                                class="homepage-list-delete hidden sm:block"
+                                                :title="t('common.delete')"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </template>
+                                    <template x-for="note in homepageVisibleNotes().slice(0, HOMEPAGE_MAX_NOTES)" :key="note.path">
+                                        <div
+                                            @click="openItem(note.path, note.type)"
+                                            class="homepage-list-row"
+                                        >
+                                            <span class="homepage-list-icon" aria-hidden="true">
+                                                <svg x-show="note.type === 'note'" class="w-4 h-4" style="color: var(--text-tertiary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                </svg>
+                                                <span x-show="note.type !== 'note'" x-text="getMediaIcon(note.type)"></span>
+                                            </span>
+                                            <span class="font-medium text-sm truncate flex-1 min-w-0" x-text="note.name"></span>
+                                            <span class="text-xs flex-shrink-0" style="color: var(--text-tertiary);" x-text="formatDate(note.modified)"></span>
+                                            <span class="text-xs flex-shrink-0 hidden sm:inline" style="color: var(--text-tertiary);" x-text="formatSize(note.size)"></span>
+                                            <button
+                                                @click.stop="note.type !== 'note' ? deleteMedia(note.path) : deleteNote(note.path, note.name)"
+                                                class="homepage-list-delete hidden sm:block"
+                                                :title="note.type === 'note' ? t('toolbar.delete_note') : (note.type === 'drawing' ? t('toolbar.delete_drawing') : t('toolbar.delete_image'))"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </template>
                                 </div>
                             </template>
                             
                             <!-- Show More Indicator -->
-                            <div x-show="homepageNotes().length > HOMEPAGE_MAX_NOTES" class="mt-6 text-center">
+                            <div x-show="homepageVisibleNotes().length > HOMEPAGE_MAX_NOTES" class="mt-6 text-center">
                                 <p class="text-sm" style="color: var(--text-secondary);">
-                                    Showing <span x-text="HOMEPAGE_MAX_NOTES"></span> of <span x-text="homepageNotes().length"></span> notes in this folder.
+                                    Showing <span x-text="HOMEPAGE_MAX_NOTES"></span> of <span x-text="homepageVisibleNotes().length"></span> notes in this folder.
                                 </p>
                             </div>
                         </div>

@@ -92,6 +92,8 @@ const LOCAL_SETTINGS = {
     editorWidth: { key: 'editorWidth', type: 'number', default: 50, min: 20, max: 80 },
     // String settings with validation
     viewMode: { key: 'viewMode', type: 'string', default: 'split', valid: ['edit', 'split', 'preview'] },
+    // Homepage layout. Cards stay the default so existing vaults look unchanged.
+    homepageView: { key: 'homepageView', type: 'string', default: 'cards', valid: ['cards', 'list'] },
     // JSON settings
     favorites: { key: 'noteFavorites', type: 'json', default: [] },
     // Font size scale (1 = 100%)
@@ -118,21 +120,33 @@ const ErrorHandler = {
 };
 
 /**
+ * Encode one vault-relative path for a URL.
+ * Each segment is encoded on its own so a `#` stays in the path. Left raw, the
+ * browser treats it as a fragment and the request hits a different note.
+ */
+function encodeVaultPath(path) {
+    if (!path) return '';
+    return String(path).split('/').map((segment) => encodeURIComponent(segment)).join('/');
+}
+
+/**
  * Centralized filename validation
  * Supports Unicode characters (international text) but blocks dangerous filesystem characters.
  * Does NOT silently modify filenames - validates and returns status.
  */
 const FilenameValidator = {
-    // Characters that are forbidden in filenames across Windows/macOS/Linux
+    // Characters that are forbidden in filenames across Windows/macOS/Linux,
+    // plus `#`. A hash is legal on disk, but in this app it starts a heading
+    // link (`[[Note#heading]]`) and, unencoded, it is a URL fragment.
     // Windows: \ / : * ? " < > |
     // macOS: / :
     // Linux: / \0
     // Common set to block (including control characters)
-    FORBIDDEN_CHARS: /[\\/:*?"<>|\x00-\x1f]/,
-
+    FORBIDDEN_CHARS: /[\\/:*?"<>|#\x00-\x1f]/,
+    
     // For display purposes - human readable list
-    FORBIDDEN_CHARS_DISPLAY: '\\ / : * ? " < > |',
-
+    FORBIDDEN_CHARS_DISPLAY: '\\ / : * ? " < > | #',
+    
     /**
      * Validate a filename (single segment, no path separators)
      * @param {string} name - The filename to validate
@@ -579,7 +593,6 @@ function noteApp() {
 
         // Homepage state
         selectedHomepageFolder: '',
-        openFolderMenu: null,  // path of the folder card whose "..." menu is open (one at a time)
         _homepageCache: {
             folderPath: null,
             notes: null,
@@ -589,7 +602,12 @@ function noteApp() {
 
         // Homepage constants
         HOMEPAGE_MAX_NOTES: 50,
-
+        // Read before init() so the first paint matches the saved layout.
+        homepageView: localStorage.getItem('homepageView') === 'list' ? 'list' : 'cards',
+        // Name filter for the current homepage folder. Separate from searchQuery,
+        // which is the sidebar's full-text search.
+        homepageNameQuery: '',
+        
         // Computed-like helpers for homepage (cached for performance)
         homepageNotes() {
             // Return cached result if folder hasn't changed
@@ -694,6 +712,43 @@ function noteApp() {
             return breadcrumb;
         },
 
+        setHomepageView(mode) {
+            if (mode !== 'cards' && mode !== 'list') return;
+            if (mode === this.homepageView) return;
+            this.homepageView = mode;
+            localStorage.setItem('homepageView', mode);
+        },
+
+        homepageNameNeedle() {
+            return (this.homepageNameQuery || '').trim().toLowerCase();
+        },
+
+        // Filter the current folder's notes or folders by name. An empty query
+        // returns the cached source array so Alpine does not rebuild the grid.
+        // Notes and folders keep separate cache entries: they share a folder, but
+        // a hit for one must not satisfy the other.
+        _filterHomepageByName(items, kind) {
+            const needle = this.homepageNameNeedle();
+            if (!needle) return items;
+            const cacheKey = kind === 'notes' ? 'noteFilter' : 'folderFilter';
+            const cache = this._homepageCache;
+            const entry = cache[cacheKey];
+            if (entry && entry.needle === needle && entry.source === items) {
+                return entry.result;
+            }
+            const filtered = items.filter(item => (item.name || '').toLowerCase().includes(needle));
+            cache[cacheKey] = { needle, source: items, result: filtered };
+            return filtered;
+        },
+
+        homepageVisibleNotes() {
+            return this._filterHomepageByName(this.homepageNotes(), 'notes');
+        },
+
+        homepageVisibleFolders() {
+            return this._filterHomepageByName(this.homepageFolders(), 'folders');
+        },
+        
         // Helper: Format file size nicely
         formatSize(bytes) {
             if (!bytes) return '0 B';
@@ -2289,8 +2344,7 @@ function noteApp() {
                 }
 
                 // CRITICAL: Check if note already exists
-                const existingNote = this.notes.find(note => note.path === notePath);
-                if (existingNote) {
+                if (this.notePathTaken(notePath)) {
                     this.toast(this.t('notes.already_exists', { name: validation.sanitized }), { type: 'warning' });
                     return;
                 }
@@ -3538,6 +3592,20 @@ function noteApp() {
             return path.split('/').pop();
         },
 
+        // Windows and macOS store these as one file. Rename already used this
+        // comparison; create and import must too, or `b` overwrites `B`.
+        notePathTaken(path) {
+            if (!path) return false;
+            const lower = path.toLowerCase();
+            return this.notes.some(n => n.path.toLowerCase() === lower);
+        },
+
+        folderPathTaken(path) {
+            if (!path) return false;
+            const lower = path.toLowerCase();
+            return this.allFolders.some(folder => folder.toLowerCase() === lower);
+        },
+        
         _inferTypeFromPath(path) {
             const m = /\.([^./]+)$/.exec(path);
             const ext = m ? m[1].toLowerCase() : '';
@@ -4317,7 +4385,7 @@ function noteApp() {
             
             const joinPath = (folder, filename) => folder ? `${folder}/${filename}` : filename;
             let targetPath = joinPath(currentFolder, `${stem}.md`);
-            if (this.notes.some(n => n.path === targetPath)) {
+            if (this.notePathTaken(targetPath)) {
                 const ts = this._autoTitleTimestamp();
                 targetPath = joinPath(currentFolder, `${stem}-${ts}.md`);
             }
@@ -4329,7 +4397,7 @@ function noteApp() {
             this._rebuildTreeAfterMutation();
             
             try {
-                const response = await fetch(`/api/notes/${targetPath}`, {
+                const response = await fetch(`/api/notes/${encodeVaultPath(targetPath)}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content })
@@ -5919,7 +5987,7 @@ function noteApp() {
                         this._revalidateTabBackground(notePath);
                     } else {
                         this.loadingNote = true;
-                        const response = await fetch(`/api/notes/${notePath}`);
+                        const response = await fetch(`/api/notes/${encodeVaultPath(notePath)}`);
 
                         // Check if note exists
                         if (!response.ok) {
@@ -6443,8 +6511,7 @@ function noteApp() {
         async createNote(folderPath = null, directPath = null) {
             if (directPath) {
                 const notePath = directPath.endsWith('.md') ? directPath : `${directPath}.md`;
-                const existingNote = this.notes.find(note => note.path === notePath);
-                if (existingNote) {
+                if (this.notePathTaken(notePath)) {
                     this.toast(this.t('notes.already_exists', { name: notePath }), { type: 'warning' });
                     return;
                 }
@@ -6540,8 +6607,7 @@ function noteApp() {
                 const notePath = targetFolder
                     ? `${targetFolder}/${validatedName}.md`
                     : (validatedName.endsWith('.md') ? validatedName : `${validatedName}.md`);
-                const existingNote = this.notes.find(note => note.path === notePath);
-                if (existingNote) {
+                if (this.notePathTaken(notePath)) {
                     this.toast(this.t('notes.already_exists', { name: notePath }), { type: 'warning' });
                     return;
                 }
@@ -6559,7 +6625,7 @@ function noteApp() {
             }
             const validatedName = validation.sanitized;
             const folderPath = targetFolder ? `${targetFolder}/${validatedName}` : validatedName;
-            const existingFolder = this.allFolders.find(folder => folder === folderPath);
+            const existingFolder = this.allFolders.find(folder => folder.toLowerCase() === folderPath.toLowerCase());
             if (existingFolder) {
                 this.toast(this.t('folders.already_exists', { name: validatedName }), { type: 'warning' });
                 return;
@@ -6577,7 +6643,7 @@ function noteApp() {
             this._rebuildTreeAfterMutation();
 
             try {
-                const response = await fetch(`/api/notes/${notePath}`, {
+                const response = await fetch(`/api/notes/${encodeVaultPath(notePath)}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: '' })
@@ -6868,7 +6934,11 @@ function noteApp() {
             const pathParts = folderPath.split('/');
             pathParts[pathParts.length - 1] = validatedName;
             const newPath = pathParts.join('/');
-
+            if (newPath !== folderPath && this.folderPathTaken(newPath)) {
+                this.toast(this.t('folders.already_exists', { name: validatedName }), { type: 'warning' });
+                return;
+            }
+            
             const ok = await this._finalizeRenameFolder(folderPath, newPath);
             if (ok) this.closeRenameFolderModal();
         },
@@ -6906,10 +6976,12 @@ function noteApp() {
                     body: JSON.stringify({ oldPath: folderPath, newPath: newPath })
                 });
                 if (!response.ok) throw new Error('Server returned error');
+                await this.loadSharedNotePaths();
                 return true;
             } catch (error) {
                 ErrorHandler.handle('rename folder', error);
                 await this.loadNotes({ silent: true });
+                await this.loadSharedNotePaths();
                 return false;
             }
         },
@@ -7482,7 +7554,7 @@ function noteApp() {
             this.isSaving = true;
 
             try {
-                const response = await fetch(`/api/notes/${this.currentNote}`, {
+                const response = await fetch(`/api/notes/${encodeVaultPath(this.currentNote)}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: this.noteContent })
@@ -7680,7 +7752,7 @@ function noteApp() {
             if (oldPath === newPath) return;
 
             // Check if a note with the new name already exists
-            const existingNote = this.notes.find(n => n.path.toLowerCase() === newPath.toLowerCase());
+            const existingNote = this.notePathTaken(newPath) ? { path: newPath } : null;
             if (existingNote) {
                 this.toast(this.t('notes.already_exists', { name: validatedName }), { type: 'warning' });
                 // Reset the name in the UI
@@ -7689,7 +7761,9 @@ function noteApp() {
             }
 
             // Optimistic rename: rewrite local path now + favorites + current
-            // note pointer + URL. POST new content, then DELETE old.
+            // note pointer. The file itself moves through /api/notes/move so a
+            // share token follows it. POST-then-DELETE revoked the link, because
+            // delete means the note is gone.
             this._optimisticRenameNote(oldPath, newPath);
             this._rebuildTreeAfterMutation();
 
@@ -7701,17 +7775,38 @@ function noteApp() {
             this.currentNote = newPath;
             this._updateTabPath(oldPath, newPath);
 
+            // A pending autosave targets currentNote, which is already the new
+            // path. Let it fire and it would create the destination before the
+            // move, and the move would refuse to overwrite that file.
+            this.flushHistory();
+            if (this.saveTimeout) {
+                clearTimeout(this.saveTimeout);
+                this.saveTimeout = null;
+            }
+            
             try {
-                const response = await fetch(`/api/notes/${newPath}`, {
+                const response = await fetch('/api/notes/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ oldPath, newPath })
+                });
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || 'Server returned error');
+                }
+                // The moved file has the last saved copy. Write the editor
+                // buffer too, so a rename before autosave does not drop keystrokes.
+                const saveResponse = await fetch(`/api/notes/${encodeVaultPath(newPath)}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: this.noteContent })
                 });
-                if (!response.ok) throw new Error('Server returned error');
-                await fetch(`/api/notes/${oldPath}`, { method: 'DELETE' });
+                if (!saveResponse.ok) throw new Error('Server returned error');
+                await this.loadSharedNotePaths();
             } catch (error) {
                 ErrorHandler.handle('rename note', error);
                 await this.loadNotes({ silent: true });
+                await this.loadSharedNotePaths();
             }
         },
 
@@ -7755,7 +7850,7 @@ function noteApp() {
             this._removeTabByPath(notePath);
 
             try {
-                const response = await fetch(`/api/notes/${notePath}`, { method: 'DELETE' });
+                const response = await fetch(`/api/notes/${encodeVaultPath(notePath)}`, { method: 'DELETE' });
                 if (!response.ok) throw new Error('Server returned error');
                 this.loadTagsDebounced();
             } catch (error) {
@@ -10776,7 +10871,8 @@ function noteApp() {
         goToHomepageFolder(folderPath) {
             this.showGraph = false; // Close graph when navigating
             this.selectedHomepageFolder = folderPath || '';
-
+            this.homepageNameQuery = '';
+            
             // Clear editor state to show landing page
             this.currentNote = '';
             this.currentNoteName = '';
@@ -10801,6 +10897,7 @@ function noteApp() {
         goHome() {
             this.showGraph = false; // Close graph when going home
             this.selectedHomepageFolder = '';
+            this.homepageNameQuery = '';
             this.currentNote = '';
             this.currentNoteName = '';
             this.noteContent = '';

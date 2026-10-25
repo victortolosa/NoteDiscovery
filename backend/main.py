@@ -45,6 +45,11 @@ from .utils import (
     create_note_metadata,
     ensure_directories,
     create_folder,
+    note_name_conflict,
+    note_exists_exact,
+    folder_name_conflict,
+    folder_exists_exact,
+    path_has_hash,
     move_note,
     move_folder,
     rename_folder,
@@ -73,13 +78,21 @@ from .share import (
     get_note_by_token,
     delete_token_for_note,
     update_token_path,
+    update_token_prefix,
     get_all_shared_paths,
     is_slug_available,
     validate_slug,
     ShareSlugError,
 )
 from .favorites import load_favorites, save_favorites, normalize_favorites, has_only_strings, is_within_limits
-from .export import generate_export_html, embed_images_as_base64, convert_wikilinks_to_html, strip_frontmatter
+from .export import (
+    generate_export_html,
+    embed_images_as_base64,
+    convert_wikilinks_to_html,
+    strip_frontmatter,
+    attachment_content_disposition,
+)
+from .mcp_http import build_mcp_router
 
 # Load configuration
 config_path = Path(__file__).parent.parent / "config.yaml"
@@ -178,6 +191,12 @@ if config.get('authentication', {}).get('enabled', False):
     
     if _is_default_secret:
         logger.critical("Using default secret_key - sessions can be forged! Change it in config.yaml")
+
+# MCP over Streamable HTTP at /mcp (opt-in)
+# Priority: MCP_ENABLED env var > mcp.enabled in config.yaml
+config['mcp'] = config.get('mcp') or {}
+if 'MCP_ENABLED' in os.environ:
+    config['mcp']['enabled'] = os.getenv('MCP_ENABLED', 'false').lower() in ('true', '1', 'yes')
 
 # Storage paths: env vars override config.yaml. Logged either way so the
 # resolved location is visible at startup.
@@ -561,8 +580,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     """
     # Only handle 401 errors specially
     if exc.status_code == 401:
-        # Check if this is an API request
-        if request.url.path.startswith('/api/'):
+        # Check if this is an API request (MCP clients need the 401 too)
+        if request.url.path.startswith('/api/') or request.url.path == '/mcp':
             return JSONResponse(
                 status_code=401,
                 content={"detail": exc.detail}
@@ -862,8 +881,15 @@ async def create_new_folder(request: Request, data: dict):
         folder_path = data.get('path', '')
         if not folder_path:
             raise HTTPException(status_code=400, detail="Folder path required")
+
+        notes_dir = config['storage']['notes_dir']
+        conflict = folder_name_conflict(notes_dir, folder_path)
+        if conflict:
+            raise HTTPException(status_code=409, detail=f"A folder already exists at: {conflict}")
+        if path_has_hash(folder_path) and not folder_exists_exact(notes_dir, folder_path):
+            raise HTTPException(status_code=400, detail="Folder name cannot contain '#'")
         
-        success = create_folder(config['storage']['notes_dir'], folder_path)
+        success = create_folder(notes_dir, folder_path)
         
         if not success:
             raise HTTPException(status_code=500, detail="Failed to create folder")
@@ -1174,6 +1200,9 @@ async def move_folder_endpoint(request: Request, data: dict):
         
         if not success:
             raise HTTPException(status_code=400, detail=error_msg or "Failed to move folder")
+
+        # Share tokens store a note path. A folder move changes every note under it.
+        update_token_prefix(config['storage']['notes_dir'], old_path, new_path)
         
         return {
             "success": True,
@@ -1202,6 +1231,9 @@ async def rename_folder_endpoint(request: Request, data: dict):
         
         if not success:
             raise HTTPException(status_code=400, detail=error_msg or "Failed to rename folder")
+
+        # rename_folder is move_folder; tokens still need the new prefix.
+        update_token_prefix(config['storage']['notes_dir'], old_path, new_path)
         
         return {
             "success": True,
@@ -1349,6 +1381,23 @@ async def get_template(request: Request, template_name: str):
         raise HTTPException(status_code=500, detail=safe_error_message(e, "Failed to get template"))
 
 
+def _refuse_note_name_clash(note_path: str, *, creating: bool = False) -> None:
+    """Block a write that would erase another note, or introduce a `#` name.
+
+    Autosave updates an existing note and must keep working, including a note
+    whose name already contains `#`. `creating` is for endpoints that only
+    create: an exact existing path is a clash there too.
+    """
+    notes_dir = config['storage']['notes_dir']
+    conflict = note_name_conflict(notes_dir, note_path)
+    if conflict:
+        raise HTTPException(status_code=409, detail=f"A note already exists at: {conflict}")
+    if creating and note_exists_exact(notes_dir, note_path):
+        raise HTTPException(status_code=409, detail=f"A note already exists at: {note_path}")
+    if path_has_hash(note_path) and not note_exists_exact(notes_dir, note_path):
+        raise HTTPException(status_code=400, detail="Note name cannot contain '#'")
+
+
 @api_router.post("/templates/create-note", tags=["Templates"])
 @limiter.limit("60/minute")
 async def create_note_from_template(request: Request, data: dict):
@@ -1367,6 +1416,8 @@ async def create_note_from_template(request: Request, data: dict):
         
         if not template_name or not note_path:
             raise HTTPException(status_code=400, detail="Template name and note path required")
+
+        _refuse_note_name_clash(note_path, creating=True)
         
         # Get template content
         template_content = get_template_content(config['storage']['notes_dir'], template_name)
@@ -1489,6 +1540,10 @@ async def create_or_update_note(request: Request, note_path: str, content: dict)
     """Create or update a note"""
     try:
         note_content = content.get('content', '')
+
+        # A different case is a different request for the same file on Windows
+        # and macOS. Refuse before save_note opens it and erases the other name.
+        _refuse_note_name_clash(note_path)
         
         # Check if this is a new note (doesn't exist yet)
         existing_content = get_note_content(config['storage']['notes_dir'], note_path)
@@ -1823,7 +1878,7 @@ async def export_note_to_html(request: Request, note_path: str, theme: Optional[
                 content=html_content,
                 media_type="text/html",
                 headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"'
+                    "Content-Disposition": attachment_content_disposition(filename)
                 }
             )
         else:
@@ -2330,6 +2385,16 @@ async def catch_all(full_path: str, request: Request):
 # mounted last so a plugin cannot shadow a core endpoint.
 api_router.include_router(plugin_manager.build_router())
 app.include_router(api_router)
+
+# Mounted before pages_router so its catch-all GET doesn't shadow /mcp.
+# The tool client calls back in with the API key, so auth needs one.
+if config['mcp'].get('enabled', False):
+    if auth_enabled() and not get_api_key():
+        logger.warning("MCP endpoint NOT enabled: authentication is on but no API key is configured")
+    else:
+        app.include_router(build_mcp_router(get_api_key, require_auth, allowed_origins))
+        logger.info("MCP Streamable HTTP endpoint enabled at /mcp")
+
 app.include_router(pages_router)
 
 
