@@ -49,30 +49,24 @@
         })();
     </script>
     
-    <!-- Theme styles will be loaded dynamically -->
+    <!-- A normal stylesheet supplies theme colors before first paint. The
+         parser waits for it; no synchronous theme XHR or CSS cache is needed. -->
+    <link rel="stylesheet" id="initial-theme" href="/api/themes/__DEFAULT_THEME__?raw=true&amp;v=__APP_VERSION__" blocking="render">
     <script>
-        // Load theme immediately (same approach as index.html)
-        (async function() {
-            const savedTheme = localStorage.getItem('noteDiscoveryTheme') || '__DEFAULT_THEME__';
-            
+        (function() {
+            const config = __THEME_BOOTSTRAP__;
+            let themeId = config.defaultTheme;
             try {
-                const response = await fetch(`/api/themes/${savedTheme}`);
-                const data = await response.json();
-                
-                // Create style element with theme CSS
-                const styleEl = document.createElement('style');
-                styleEl.id = 'dynamic-theme';
-                styleEl.textContent = data.css;
-                document.head.appendChild(styleEl);
-                
-                // Set data attribute for theme-specific selectors
-                document.documentElement.setAttribute('data-theme', savedTheme);
-            } catch (error) {
-                console.error('Failed to load theme:', error);
-            }
+                const saved = localStorage.getItem('noteDiscoveryTheme');
+                if (config.themes.includes(saved)) themeId = saved;
+            } catch (e) { /* Storage may be unavailable; use the configured default. */ }
+            document.documentElement.setAttribute('data-theme', themeId);
+            const stylesheet = document.getElementById('initial-theme');
+            stylesheet.dataset.theme = themeId;
+            stylesheet.href = '/api/themes/' + encodeURIComponent(themeId) + '?raw=true&v=__APP_VERSION__';
         })();
     </script>
-    
+
     <style>
         * {
             margin: 0;

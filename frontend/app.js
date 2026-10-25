@@ -321,6 +321,7 @@ function noteApp() {
         demoMode: false,
         alreadyDonated: false,
         autosaveDelayMs: CONFIG.AUTOSAVE_DELAY,  // hydrated from /api/config in loadConfig()
+        _themeRequestId: 0,
         defaultTheme: CONFIG.DEFAULT_THEME,      // hydrated from /api/config in loadConfig()
         uploadMaxNoteMb: CONFIG.UPLOAD_MAX_NOTE_MB, // hydrated from /api/config in loadConfig()
         // Optional public origin for share links; empty keeps window.location.origin.
@@ -358,6 +359,12 @@ function noteApp() {
         currentMatchIndex: 0, // Current match being viewed
         totalMatches: 0, // Total number of matches in the note
         isSaving: false,
+        _savePromise: null,
+        _noteMutation: false,
+        _noteSession: 0,
+        _noteNavigationId: 0,
+        _noteBaseHash: null,
+        _staleServerHash: null,
         lastSaved: false,
         linkCopied: false,
         zenMode: false,
@@ -899,7 +906,7 @@ function noteApp() {
             }
 
             // Listen for browser back/forward navigation
-            window.addEventListener('popstate', (e) => {
+            window.addEventListener('popstate', async (e) => {
                 if (e.state && e.state.notePath) {
                     // Navigating to a note
                     const searchQuery = e.state.searchQuery || '';
@@ -923,6 +930,12 @@ function noteApp() {
                     this.viewMedia(e.state.mediaPath, null, false);
                 } else {
                     // Navigating back to homepage
+                    if (!await this.flushNoteSave()) {
+                        window.history.pushState({ notePath: this.currentNote }, '', '/' + encodeVaultPath(this.currentNote.replace(/\.md$/i, '')));
+                        return;
+                    }
+                    this._noteNavigationId++;
+                    this._noteSession++;
                     this.currentNote = '';
                     this.noteContent = '';
                     this.currentNoteName = '';
@@ -1312,19 +1325,24 @@ function noteApp() {
             }
         },
 
-        // Initialize theme system
+        // The early stylesheet already chose a valid saved/configured theme.
         async initTheme() {
-            // A user's saved preference takes priority over the configured default.
-            const savedTheme = localStorage.getItem('noteDiscoveryTheme') || this.defaultTheme;
-            this.currentTheme = savedTheme;
-            await this.applyTheme(savedTheme);
+            const initial = document.getElementById('initial-theme');
+            const themeId = initial?.dataset.theme || this.defaultTheme;
+            await this.setTheme(themeId);
         },
 
-        // Set and apply theme
         async setTheme(themeId) {
-            this.currentTheme = themeId;
-            localStorage.setItem('noteDiscoveryTheme', themeId);
-            await this.applyTheme(themeId);
+            const previousTheme = document.documentElement.getAttribute('data-theme') || this.defaultTheme;
+            const requestId = this._themeRequestId + 1;
+            const applied = await this.applyTheme(themeId);
+            if (requestId !== this._themeRequestId) return;
+            if (applied) {
+                this.currentTheme = themeId;
+                try { localStorage.setItem('noteDiscoveryTheme', themeId); } catch (e) { /* Storage unavailable. */ }
+            } else {
+                this.currentTheme = previousTheme;
+            }
         },
 
         // Syntax highlighting toggle
@@ -1816,21 +1834,26 @@ function noteApp() {
 
         // Apply theme to document
         async applyTheme(themeId) {
-            // Load theme CSS from file
+            const requestId = ++this._themeRequestId;
             try {
-                const response = await fetch(`/api/themes/${themeId}`);
-                const data = await response.json();
-
-                // Create or update style element
-                let styleEl = document.getElementById('dynamic-theme');
-                if (!styleEl) {
-                    styleEl = document.createElement('style');
-                    styleEl.id = 'dynamic-theme';
-                    document.head.appendChild(styleEl);
+                const initial = document.getElementById('initial-theme');
+                // The parser loaded this stylesheet before Alpine booted. Reuse
+                // it instead of fetching the same CSS again as JSON.
+                if (!initial || initial.dataset.theme !== themeId || !initial.sheet) {
+                    const response = await fetch(`/api/themes/${encodeURIComponent(themeId)}`);
+                    if (!response.ok) throw new Error('Theme not found');
+                    const data = await response.json();
+                    if (requestId !== this._themeRequestId) return false;
+                    if (typeof data.css !== 'string' || !data.css) throw new Error('Empty theme');
+                    let styleEl = document.getElementById('dynamic-theme');
+                    if (!styleEl) {
+                        styleEl = document.createElement('style');
+                        styleEl.id = 'dynamic-theme';
+                        document.head.appendChild(styleEl);
+                    }
+                    styleEl.textContent = data.css;
+                    if (initial) initial.remove();
                 }
-                styleEl.textContent = data.css;
-
-                // Set data attribute for theme-specific selectors
                 document.documentElement.setAttribute('data-theme', themeId);
 
                 // Load appropriate Highlight.js theme for code syntax highlighting
@@ -1883,8 +1906,10 @@ function noteApp() {
                         .getPropertyValue('--accent-primary').trim() || '#667eea';
                     themeColorMeta.setAttribute('content', accentColor);
                 }
+                return true;
             } catch (error) {
                 console.error('Failed to load theme:', error);
+                return false;
             }
         },
 
@@ -2970,10 +2995,17 @@ function noteApp() {
         },
 
         // Close a tab by index; load an adjacent tab or go home
-        closeTab(index) {
+        async closeTab(index) {
             const tab = this.openTabs[index];
             if (!tab) return;
             const wasActive = tab.path === this.currentNote;
+            if (wasActive && (!await this.flushNoteSave() || this._noteMutation)) return;
+            if (wasActive) {
+                this._noteNavigationId++;
+                this._noteSession++;
+            }
+            index = this.openTabs.findIndex(t => t.path === tab.path);
+            if (index === -1) return;
             this.openTabs.splice(index, 1);
             this._persistTabs();
             if (wasActive) {
@@ -2995,9 +3027,10 @@ function noteApp() {
         },
 
         // Close all tabs except the one at the given index
-        closeOtherTabs(index) {
+        async closeOtherTabs(index) {
             const keep = this.openTabs[index];
             if (!keep) return;
+            if (keep.path !== this.currentNote && (!await this.flushNoteSave() || this._noteMutation)) return;
             this.openTabs = [keep];
             this._persistTabs();
             if (keep.path !== this.currentNote) {
@@ -3006,7 +3039,8 @@ function noteApp() {
         },
 
         // Close all tabs to the right of the given index
-        closeTabsToRight(index) {
+        async closeTabsToRight(index) {
+            if (this.openTabs.slice(index + 1).some(t => t.path === this.currentNote) && (!await this.flushNoteSave() || this._noteMutation)) return;
             this.openTabs = this.openTabs.slice(0, index + 1);
             this._persistTabs();
             // If active tab was removed, load the rightmost remaining
@@ -3122,6 +3156,7 @@ function noteApp() {
         // The server says this note is gone. Drop the tab and its cached copy so
         // a reload can't resurrect phantom content out of localStorage.
         _forgetMissingNote(notePath) {
+            if (this.currentNote === notePath && (this.noteContent !== this._savedContent || this.isSaving || this._noteMutation)) return;
             this._removeTabByPath(notePath);
             if (this.currentNote !== notePath) return;
             this.currentNote = '';
@@ -3146,6 +3181,7 @@ function noteApp() {
             try {
                 localStorage.setItem('tabContent:' + notePath, JSON.stringify({
                     content: data.content,
+                    hash: data.hash,
                     backlinks: data.backlinks || [],
                     ts: Date.now()
                 }));
@@ -3158,7 +3194,7 @@ function noteApp() {
                 const raw = localStorage.getItem('tabContent:' + notePath);
                 if (!raw) return null;
                 const cached = JSON.parse(raw);
-                if (Date.now() - cached.ts > 3600000) {
+                if (!cached.hash || Date.now() - cached.ts > 3600000) {
                     localStorage.removeItem('tabContent:' + notePath);
                     return null;
                 }
@@ -3198,7 +3234,7 @@ function noteApp() {
 
         // Background revalidation after a cache hit — keeps cache warm and triggers the stale
         // banner if the server version differs from what the user currently sees.
-        async _revalidateTabBackground(notePath) {
+        async _revalidateTabBackground(notePath, baseHash = this._noteBaseHash) {
             try {
                 const response = await fetch(`/api/notes/${encodeVaultPath(notePath)}`);
                 if (!response.ok) {
@@ -3213,13 +3249,15 @@ function noteApp() {
                 const stillOpen = this.currentNote === notePath
                     || this.openTabs.some(tab => tab.path === notePath);
                 if (!stillOpen) return;
+                if (this.isSaving || this._noteMutation || (this.currentNote === notePath && this._noteBaseHash !== baseHash)) return;
                 this._saveTabCache(notePath, data);
                 if (this.currentNote !== notePath) return;
                 const sig = response.headers.get('etag') || response.headers.get('last-modified') || '';
                 if (sig) this._staleServerSignature = sig;
                 if (data.content !== this._savedContent) {
-                    if (this.acceptServerContentIfPristine(data.content, sig)) return;
+                    if (this.acceptServerContentIfPristine(data.content, sig, data.hash)) return;
                     this.staleServerContent = data.content;
+                    this._staleServerHash = data.hash;
                     this.staleContent = true;
                 }
             } catch (e) { /* network error */ }
@@ -4561,7 +4599,10 @@ function noteApp() {
         },
         
         // View a media file (image, audio, video, PDF) in the main pane
-        viewMedia(mediaPath, mediaType = null, updateHistory = true) {
+        async viewMedia(mediaPath, mediaType = null, updateHistory = true) {
+            if (!await this.flushNoteSave() || this._noteMutation) return;
+            this._noteNavigationId++;
+            this._noteSession++;
             if (this.currentMediaType === 'drawing') {
                 this._drawingDisconnectResizeObserver();
                 this._drawingCancelAutosave();
@@ -5835,135 +5876,97 @@ function noteApp() {
             document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
         },
 
-        async onFolderDrop(targetFolderPath) {
-            // Ignore if we're dropping into the editor
-            if (this.dropTarget === 'editor') {
-                return;
-            }
-
-            // Capture dragged item info immediately (ondragend may clear it)
-            if (!this.draggedItem) return;
-            const { path: draggedPath, type: draggedType } = this.draggedItem;
-
-            // Determine item category for endpoint selection
-            const isFolder = draggedType === 'folder';
-            const isNote = draggedType === 'note';
-            const isMedia = !isFolder && !isNote; // image, audio, video, document
-
-            // Handle folder drop
-            if (isFolder) {
-                // Prevent dropping folder into itself or its subfolders
-                if (targetFolderPath === draggedPath ||
-                    targetFolderPath.startsWith(draggedPath + '/')) {
-                    this.toast(this.t('folders.cannot_move_into_self'), { type: 'warning' });
-                    return;
-                }
-
-                const folderName = draggedPath.split('/').pop();
-                const newPath = targetFolderPath ? `${targetFolderPath}/${folderName}` : folderName;
-
-                if (newPath === draggedPath) return;
-
-                const oldPrefix = draggedPath + '/';
-                const newPrefix = newPath + '/';
-                const wasExpanded = this.expandedFolders.has(draggedPath);
-
-                this._optimisticRenameFolderTree(draggedPath, newPath);
-                this._rebuildTreeAfterMutation();
-
-                const favoritesInFolder = this.favorites.filter(f => f.startsWith(oldPrefix));
-                if (favoritesInFolder.length > 0) {
-                    const newFavorites = this.favorites.map(f =>
-                        f.startsWith(oldPrefix) ? newPrefix + f.substring(oldPrefix.length) : f
-                    );
-                    this.favorites = newFavorites;
-                    this.favoritesSet = new Set(newFavorites);
-                    this.saveFavorites();
-                }
-                if (wasExpanded) {
-                    this.expandedFolders.delete(draggedPath);
-                    this.expandedFolders.add(newPath);
-                    this.saveExpandedFolders();
-                }
-                if (this.currentNote && this.currentNote.startsWith(oldPrefix)) {
-                    this.currentNote = newPrefix + this.currentNote.substring(oldPrefix.length);
-                }
-                this._retargetTabsUnder(draggedPath, newPath);
-
-                try {
-                    const response = await fetch('/api/folders/move', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ oldPath: draggedPath, newPath })
-                    });
-                    if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        throw new Error(errorData.detail || this.t('move.failed_folder'));
-                    }
-                    await this.loadSharedNotePaths();
-                } catch (error) {
-                    console.error('Failed to move folder:', error);
-                    this.toast(error.message || this.t('move.failed_folder'), { type: 'error' });
-                    await this.loadNotes({ silent: true });
-                }
-                return;
-            }
-
-            // Handle note or media drop into folder
-            const item = this.notes.find(n => n.path === draggedPath);
-            if (!item) return;
-
-            const filename = draggedPath.split('/').pop();
-            const newPath = targetFolderPath ? `${targetFolderPath}/${filename}` : filename;
-
-            if (newPath === draggedPath) return;
-
-            const wasFavorited = isNote && this.favoritesSet.has(draggedPath);
-            const wasCurrentNote = this.currentNote === draggedPath;
-            const wasCurrentMedia = this.currentMedia === draggedPath;
-
-            this._optimisticRenameNote(draggedPath, newPath);
-            this._rebuildTreeAfterMutation();
-
-            if (wasFavorited) {
-                this.favorites = this.favorites.map(f => f === draggedPath ? newPath : f);
-                this.favoritesSet = new Set(this.favorites);
-                this.saveFavorites();
-            }
-            if (wasCurrentNote) this.currentNote = newPath;
-            if (wasCurrentMedia) this.currentMedia = newPath;
-            if (isNote) this._updateTabPath(draggedPath, newPath);
-
+        // Wait for the last write before a path changes. Keep editing enabled,
+        // but hold subsequent saves until the server confirms the destination.
+        async mutateNotePath(endpoint, oldPath, newPath, applyLocal) {
+            if (!await this.flushNoteSave() || this._noteMutation) return false;
+            this._noteMutation = true;
+            const activePath = this.currentNote;
             try {
-                const endpoint = isMedia ? '/api/media/move' : '/api/notes/move';
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ oldPath: draggedPath, newPath })
+                    body: JSON.stringify({ oldPath, newPath })
                 });
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    const errorKey = isMedia ? 'move.failed_media' : 'move.failed_note';
-                    throw new Error(errorData.detail || this.t(errorKey));
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || 'Server returned error');
                 }
-                if (isNote) await this.loadSharedNotePaths();
+                applyLocal();
+                if (activePath && this.currentNote !== activePath) {
+                    this.currentNoteName = this._tabName(this.currentNote);
+                    document.title = `${this.currentNoteName} - ${this.appName}`;
+                    window.history.replaceState(
+                        { notePath: this.currentNote, homepageFolder: this.selectedHomepageFolder || '' },
+                        '', '/' + encodeVaultPath(this.currentNote.replace(/\.md$/i, ''))
+                    );
+                }
+                this._noteCache.clear();
+                await this.loadSharedNotePaths();
+                return true;
             } catch (error) {
-                console.error(`Failed to move ${isMedia ? 'media' : 'note'}:`, error);
-                this.toast(error.message || this.t(isMedia ? 'move.failed_media' : 'move.failed_note'), { type: 'error' });
-                await this.loadNotes({ silent: true });
+                ErrorHandler.handle('move or rename', error);
+                return false;
+            } finally {
+                this._noteMutation = false;
+                // Includes keystrokes made while the move was in flight. On a
+                // failed move the original path remains active and can be saved.
+                await this.saveNote();
             }
+        },
+
+        async onFolderDrop(targetFolderPath) {
+            if (this.dropTarget === 'editor' || !this.draggedItem) return;
+            const { path: draggedPath, type: draggedType } = this.draggedItem;
+            const isFolder = draggedType === 'folder';
+            const isNote = draggedType === 'note';
+            const isMedia = !isFolder && !isNote;
+            const filename = draggedPath.split('/').pop();
+            const newPath = targetFolderPath ? `${targetFolderPath}/${filename}` : filename;
+            if (newPath === draggedPath) return;
+            if (isFolder && (targetFolderPath === draggedPath || targetFolderPath.startsWith(draggedPath + '/'))) {
+                this.toast(this.t('folders.cannot_move_into_self'), { type: 'warning' });
+                return;
+            }
+            if (!isFolder && !this.notes.some(n => n.path === draggedPath)) return;
+            const endpoint = isFolder ? '/api/folders/move' : isMedia ? '/api/media/move' : '/api/notes/move';
+            await this.mutateNotePath(endpoint, draggedPath, newPath, () => {
+                if (isFolder) {
+                    this._optimisticRenameFolderTree(draggedPath, newPath);
+                    const prefix = draggedPath + '/';
+                    this.favorites = this.favorites.map(f => f.startsWith(prefix) ? newPath + '/' + f.substring(prefix.length) : f);
+                    this.favoritesSet = new Set(this.favorites);
+                    this.saveFavorites();
+                    if (this.expandedFolders.has(draggedPath)) {
+                        this.expandedFolders.delete(draggedPath);
+                        this.expandedFolders.add(newPath);
+                        this.saveExpandedFolders();
+                    }
+                    if (this.currentNote.startsWith(prefix)) this.currentNote = newPath + '/' + this.currentNote.substring(prefix.length);
+                    this._retargetTabsUnder(draggedPath, newPath);
+                } else {
+                    this._optimisticRenameNote(draggedPath, newPath);
+                    if (isNote && this.favoritesSet.has(draggedPath)) {
+                        this.favorites = this.favorites.map(f => f === draggedPath ? newPath : f);
+                        this.favoritesSet = new Set(this.favorites);
+                        this.saveFavorites();
+                    }
+                    if (this.currentNote === draggedPath) this.currentNote = newPath;
+                    if (this.currentMedia === draggedPath) this.currentMedia = newPath;
+                    if (isNote) this._updateTabPath(draggedPath, newPath);
+                }
+                this._rebuildTreeAfterMutation();
+            });
         },
 
 
         // Load a specific note
         async loadNote(notePath, updateHistory = true, searchQuery = '') {
+            const navigationId = ++this._noteNavigationId;
             try {
-                // Flush any pending autosave for the note we're leaving
-                if (this.saveTimeout) {
-                    clearTimeout(this.saveTimeout);
-                    this.saveTimeout = null;
-                    await this.saveNote();
-                }
+                if (!await this.flushNoteSave() || this._noteMutation || navigationId !== this._noteNavigationId) return false;
+
+                const sourceHash = this._noteBaseHash;
 
                 // Close mobile sidebar when a note is selected
                 this.mobileSidebarOpen = false;
@@ -5981,17 +5984,19 @@ function noteApp() {
                     // Check localStorage tab cache for instant display (stale-while-revalidate)
                     const _tabCached = this._loadTabCache(notePath);
                     if (_tabCached) {
-                        data = { content: _tabCached.content, backlinks: _tabCached.backlinks };
+                        data = { content: _tabCached.content, hash: _tabCached.hash, backlinks: _tabCached.backlinks };
                         this._staleServerSignature = '';
                         // Always revalidate in background to keep cache fresh and detect server changes
-                        this._revalidateTabBackground(notePath);
+                        this._revalidateTabBackground(notePath, data.hash);
                     } else {
                         this.loadingNote = true;
                         const response = await fetch(`/api/notes/${encodeVaultPath(notePath)}`);
 
+                        if (navigationId !== this._noteNavigationId) return false;
                         // Check if note exists
                         if (!response.ok) {
                             if (response.status === 404) {
+                                if (!await this.flushNoteSave() || navigationId !== this._noteNavigationId) return false;
                                 // Note not found - remove any tab pointing at it, then redirect home
                                 this._removeTabByPath(notePath);
                                 window.history.replaceState({ homepageFolder: this.selectedHomepageFolder || '' }, '', '/');
@@ -6012,6 +6017,14 @@ function noteApp() {
                     }
                 }
 
+                // Typing may continue while the target note is fetched.
+                if (navigationId !== this._noteNavigationId) return false;
+                if (this.currentNote === notePath && (this.noteContent !== this._savedContent || this._noteBaseHash !== sourceHash)) return false;
+                if (!await this.flushNoteSave() || this._noteMutation || navigationId !== this._noteNavigationId) return false;
+                this.loadingNote = false;
+                this._noteSession++;
+                this._noteBaseHash = data.hash;
+                this._staleServerHash = null;
                 this.currentNote = notePath;
                 this._lastRenderedContent = ''; // Clear render cache for new note
                 this._lastRenderedNote = '';
@@ -6124,8 +6137,10 @@ function noteApp() {
                 });
 
             } catch (error) {
-                this.loadingNote = false;
                 ErrorHandler.handle('load note', error);
+                return false;
+            } finally {
+                if (navigationId === this._noteNavigationId) this.loadingNote = false;
             }
         },
 
@@ -6944,46 +6959,21 @@ function noteApp() {
         },
 
         async _finalizeRenameFolder(folderPath, newPath) {
-            const folderPrefix = folderPath + '/';
-            const newFolderPrefix = newPath + '/';
-
-            // Optimistic cascade: rewrite folder + every nested folder + every
-            // note path. Sidebar reflects the rename instantly.
-            this._optimisticRenameFolderTree(folderPath, newPath);
-            this._rebuildTreeAfterMutation();
-
-            if (this.expandedFolders.has(folderPath)) {
-                this.expandedFolders.delete(folderPath);
-                this.expandedFolders.add(newPath);
-            }
-            const newFavorites = this.favorites.map(f =>
-                f.startsWith(folderPrefix) ? newFolderPrefix + f.substring(folderPrefix.length) : f
-            );
-            if (JSON.stringify(newFavorites) !== JSON.stringify(this.favorites)) {
-                this.favorites = newFavorites;
-                this.favoritesSet = new Set(newFavorites);
+            return await this.mutateNotePath('/api/folders/rename', folderPath, newPath, () => {
+                const folderPrefix = folderPath + '/';
+                const newFolderPrefix = newPath + '/';
+                this._optimisticRenameFolderTree(folderPath, newPath);
+                this._rebuildTreeAfterMutation();
+                if (this.expandedFolders.has(folderPath)) {
+                    this.expandedFolders.delete(folderPath);
+                    this.expandedFolders.add(newPath);
+                }
+                this.favorites = this.favorites.map(f => f.startsWith(folderPrefix) ? newFolderPrefix + f.substring(folderPrefix.length) : f);
+                this.favoritesSet = new Set(this.favorites);
                 this.saveFavorites();
-            }
-            if (this.currentNote && this.currentNote.startsWith(folderPrefix)) {
-                this.currentNote = newFolderPrefix + this.currentNote.substring(folderPrefix.length);
-            }
-            this._retargetTabsUnder(folderPath, newPath);
-
-            try {
-                const response = await fetch('/api/folders/rename', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ oldPath: folderPath, newPath: newPath })
-                });
-                if (!response.ok) throw new Error('Server returned error');
-                await this.loadSharedNotePaths();
-                return true;
-            } catch (error) {
-                ErrorHandler.handle('rename folder', error);
-                await this.loadNotes({ silent: true });
-                await this.loadSharedNotePaths();
-                return false;
-            }
+                if (this.currentNote.startsWith(folderPrefix)) this.currentNote = newFolderPrefix + this.currentNote.substring(folderPrefix.length);
+                this._retargetTabsUnder(folderPath, newPath);
+            });
         },
 
         // Delete folder (cascade: every nested folder + note)
@@ -6992,6 +6982,7 @@ function noteApp() {
                 message: this.t('folders.confirm_delete', { name: folderName }),
             });
             if (!ok) return;
+            if (!await this.flushNoteSave() || this._noteMutation) return;
 
             const folderPrefix = folderPath + '/';
 
@@ -7061,6 +7052,7 @@ function noteApp() {
                 if (this.hasPendingHistoryChanges) {
                     this.commitToHistory();
                 }
+                this.saveTimeout = null;
                 this.saveNote();
             }, this.autosaveDelayMs);
         },
@@ -7546,60 +7538,97 @@ function noteApp() {
             this.autoSave();
         },
 
-        // Save current note
+        // Drain saves before leaving or moving a note. A failed/conflicted save
+        // leaves the editor intact so the user can retry or resolve the conflict.
+        async flushNoteSave() {
+            if (this._noteMutation) return false;
+            if (this.saveTimeout) {
+                clearTimeout(this.saveTimeout);
+                this.saveTimeout = null;
+            }
+            this.flushHistory();
+            return await this.saveNote();
+        },
+
+        // All callers share one drain promise, including navigation awaiting a
+        // save that autosave already started. New typing is sent on the next pass.
         async saveNote() {
-            if (!this.currentNote) return;
-            if (this.staleContent) return; // Don't overwrite while conflict banner is showing
-
+            if (this._noteMutation) return false;
+            if (this._savePromise) return await this._savePromise;
+            if (!this.currentNote) return true;
+            if (this.staleContent) return false;
+            if (this.noteContent === this._savedContent) return true;
             this.isSaving = true;
-
+            this.lastSaved = false;
+            this._savePromise = this.drainNoteSaves();
             try {
-                const response = await fetch(`/api/notes/${encodeVaultPath(this.currentNote)}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: this.noteContent })
-                });
-
-                if (response.ok) {
-                    this.lastSaved = true;
-                    this._savedContent = this.noteContent;
-                    this._staleServerSignature = '';
-
-                    // Update only the modified timestamp for the current note (no full reload needed)
-                    const note = this.notes.find(n => n.path === this.currentNote);
-                    if (note) {
-                        note.modified = new Date().toISOString();
-                        note.size = new Blob([this.noteContent]).size;
-
-                        // Parse tags from content
-                        note.tags = this.parseTagsFromContent(this.noteContent);
-                    }
-
-                    // Reload tags to update sidebar counts (debounced to prevent spam)
-                    this.loadTagsDebounced();
-
-                    // Rebuild folder tree if tag filters are active
-                    if (this.selectedTags.length > 0) {
-                        this.buildFolderTree();
-                    }
-
-                    // Hide "saved" indicator
-                    setTimeout(() => {
-                        this.lastSaved = false;
-                    }, CONFIG.SAVE_INDICATOR_DURATION);
-                } else {
-                    ErrorHandler.handle('save note', new Error('Server returned error'));
-                }
-            } catch (error) {
-                ErrorHandler.handle('save note', error);
+                return await this._savePromise;
             } finally {
+                this._savePromise = null;
                 this.isSaving = false;
             }
         },
 
+        async drainNoteSaves() {
+            const notePath = this.currentNote;
+            const session = this._noteSession;
+            try {
+                do {
+                    if (this.staleContent) return false;
+                    const submittedContent = this.noteContent;
+                    const response = await fetch(`/api/notes/${encodeVaultPath(notePath)}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: submittedContent, base_hash: this._noteBaseHash })
+                    });
+                    // Never apply an old request's acknowledgment to another
+                    // document, even if the user returned to the same path.
+                    if (this.currentNote !== notePath || this._noteSession !== session) return false;
+                    if (response.status === 409) {
+                        const fresh = await fetch(`/api/notes/${encodeVaultPath(notePath)}`);
+                        if (!fresh.ok) throw new Error('Cannot reload the conflicting note');
+                        const remote = await fresh.json();
+                        if (this.currentNote !== notePath || this._noteSession !== session) return false;
+                        this.staleServerContent = remote.content;
+                        this._staleServerHash = remote.hash;
+                        this.staleContent = true;
+                        this._noteCache.delete(notePath);
+                        this._clearTabCache(notePath);
+                        return false;
+                    }
+                    if (!response.ok) throw new Error('Server returned error');
+                    const saved = await response.json();
+                    if (this.currentNote !== notePath || this._noteSession !== session) return false;
+                    this._savedContent = submittedContent;
+                    this._noteBaseHash = saved.hash;
+                    this._staleServerSignature = '';
+                    this._noteCache.delete(notePath);
+                    this._saveTabCache(notePath, { content: submittedContent, hash: saved.hash, backlinks: this.backlinks });
+
+                    const note = this.notes.find(n => n.path === notePath);
+                    if (note) {
+                        note.modified = new Date().toISOString();
+                        note.size = new Blob([submittedContent]).size;
+                        note.tags = this.parseTagsFromContent(submittedContent);
+                    }
+                    this.loadTagsDebounced();
+                    if (this.selectedTags.length > 0) this.buildFolderTree();
+                } while (this.noteContent !== this._savedContent);
+
+                this.lastSaved = true;
+                setTimeout(() => {
+                    if (this.currentNote === notePath && this._noteSession === session) this.lastSaved = false;
+                }, CONFIG.SAVE_INDICATOR_DURATION);
+                return true;
+            } catch (error) {
+                ErrorHandler.handle('save note', error);
+                return false;
+            }
+        },
+
         // Check if the current note was modified on another device since we last loaded/saved it
-        acceptServerContentIfPristine(serverContent, signature = '') {
-            if (this.noteContent !== this._savedContent) return false;
+        acceptServerContentIfPristine(serverContent, signature = '', hash = null) {
+            if (this.isSaving || this._noteMutation || this.noteContent !== this._savedContent) return false;
 
             // The refresh happens unprompted (a background poll, or returning to
             // the tab), so the reading position and cursor have to survive it —
@@ -7609,6 +7638,10 @@ function noteApp() {
             this.replaceLivePreviewDocument(serverContent, { resetHistory: true });
             this.noteContent = serverContent;
             this._savedContent = serverContent;
+            this._noteBaseHash = hash;
+            this._staleServerHash = null;
+            this._noteCache.delete(this.currentNote);
+            this._saveTabCache(this.currentNote, { content: serverContent, hash, backlinks: this.backlinks });
             this._staleServerSignature = signature || this._staleServerSignature;
             this.staleContent = false;
             this.staleServerContent = '';
@@ -7663,7 +7696,9 @@ function noteApp() {
 
         async checkNoteStale() {
             const notePath = this.currentNote; // snapshot before async gap
-            if (!notePath || this._staleCheckInFlight) return;
+            if (!notePath || this._staleCheckInFlight || this.isSaving || this._noteMutation) return;
+            const baseHash = this._noteBaseHash;
+            const session = this._noteSession;
 
             this._staleCheckInFlight = true;
             try {
@@ -7681,15 +7716,16 @@ function noteApp() {
                 const serverContent = data.content;
 
                 // User navigated away while the request was in-flight — discard result
-                if (this.currentNote !== notePath) return;
+                if (this.currentNote !== notePath || this._noteSession !== session || this.isSaving || this._noteMutation || this._noteBaseHash !== baseHash) return;
 
                 this._staleServerSignature = responseSignature || this._staleServerSignature;
 
                 if (serverContent === this._savedContent) return; // no remote change
-                if (this.acceptServerContentIfPristine(serverContent, responseSignature)) return;
+                if (this.acceptServerContentIfPristine(serverContent, responseSignature, data.hash)) return;
 
                 // Preserve unsaved local edits and ask which version should win.
                 this.staleServerContent = serverContent;
+                this._staleServerHash = data.hash;
                 this.staleContent = true;
             } catch (_) {
                 // Network error — ignore
@@ -7707,6 +7743,10 @@ function noteApp() {
             this.replaceLivePreviewDocument(this.staleServerContent, { resetHistory: true });
             this.noteContent = this.staleServerContent;
             this._savedContent = this.staleServerContent;
+            this._noteBaseHash = this._staleServerHash;
+            this._staleServerHash = null;
+            this._noteCache.delete(this.currentNote);
+            this._saveTabCache(this.currentNote, { content: this.noteContent, hash: this._noteBaseHash, backlinks: this.backlinks });
             this._staleServerSignature = '';
             this.extractOutline(this.staleServerContent);
             // Reset undo history so Ctrl+Z can't walk back to the conflicting local version
@@ -7719,6 +7759,8 @@ function noteApp() {
 
         // Save local version to server, discarding the remote change
         keepMyVersion() {
+            this._noteBaseHash = this._staleServerHash;
+            this._staleServerHash = null;
             this.staleContent = false;
             this.staleServerContent = '';
             this.saveNote();
@@ -7760,54 +7802,18 @@ function noteApp() {
                 return;
             }
 
-            // Optimistic rename: rewrite local path now + favorites + current
-            // note pointer. The file itself moves through /api/notes/move so a
-            // share token follows it. POST-then-DELETE revoked the link, because
-            // delete means the note is gone.
-            this._optimisticRenameNote(oldPath, newPath);
-            this._rebuildTreeAfterMutation();
-
-            if (this.favoritesSet.has(oldPath)) {
-                this.favorites = this.favorites.map(f => f === oldPath ? newPath : f);
-                this.favoritesSet = new Set(this.favorites);
-                this.saveFavorites();
-            }
-            this.currentNote = newPath;
-            this._updateTabPath(oldPath, newPath);
-
-            // A pending autosave targets currentNote, which is already the new
-            // path. Let it fire and it would create the destination before the
-            // move, and the move would refuse to overwrite that file.
-            this.flushHistory();
-            if (this.saveTimeout) {
-                clearTimeout(this.saveTimeout);
-                this.saveTimeout = null;
-            }
-            
-            try {
-                const response = await fetch('/api/notes/move', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ oldPath, newPath })
-                });
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.detail || 'Server returned error');
+            const renamed = await this.mutateNotePath('/api/notes/move', oldPath, newPath, () => {
+                this._optimisticRenameNote(oldPath, newPath);
+                this._rebuildTreeAfterMutation();
+                if (this.favoritesSet.has(oldPath)) {
+                    this.favorites = this.favorites.map(f => f === oldPath ? newPath : f);
+                    this.favoritesSet = new Set(this.favorites);
+                    this.saveFavorites();
                 }
-                // The moved file has the last saved copy. Write the editor
-                // buffer too, so a rename before autosave does not drop keystrokes.
-                const saveResponse = await fetch(`/api/notes/${encodeVaultPath(newPath)}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: this.noteContent })
-                });
-                if (!saveResponse.ok) throw new Error('Server returned error');
-                await this.loadSharedNotePaths();
-            } catch (error) {
-                ErrorHandler.handle('rename note', error);
-                await this.loadNotes({ silent: true });
-                await this.loadSharedNotePaths();
-            }
+                if (this.currentNote === oldPath) this.currentNote = newPath;
+                this._updateTabPath(oldPath, newPath);
+            });
+            if (!renamed && this.currentNote === oldPath) this.currentNoteName = this._tabName(oldPath);
         },
 
         // Delete current note
@@ -7824,6 +7830,7 @@ function noteApp() {
                 message: this.t('notes.confirm_delete', { name: noteName }),
             });
             if (!ok) return;
+            if (!await this.flushNoteSave() || this._noteMutation) return;
 
             // Optimistic: remove locally + clear current note + drop favorite
             // before the network round-trip. Sidebar refreshes in <1ms on any
@@ -10868,7 +10875,10 @@ function noteApp() {
         },
 
         // Homepage folder navigation methods
-        goToHomepageFolder(folderPath) {
+        async goToHomepageFolder(folderPath) {
+            if (!await this.flushNoteSave() || this._noteMutation) return;
+            this._noteNavigationId++;
+            this._noteSession++;
             this.showGraph = false; // Close graph when navigating
             this.selectedHomepageFolder = folderPath || '';
             this.homepageNameQuery = '';
@@ -10894,7 +10904,10 @@ function noteApp() {
         },
 
         // Navigate to homepage root and clear all editor state
-        goHome() {
+        async goHome() {
+            if (!await this.flushNoteSave() || this._noteMutation) return;
+            this._noteNavigationId++;
+            this._noteSession++;
             this.showGraph = false; // Close graph when going home
             this.selectedHomepageFolder = '';
             this.homepageNameQuery = '';

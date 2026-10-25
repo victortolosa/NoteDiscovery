@@ -8,7 +8,8 @@ Quick facts if you read nothing else:
 
 - Working branch is `custom`; **pushing to it deploys** (ghcr image build).
   Commit locally, don't push unless asked.
-- `npm test` covers the editor and Live Preview; there are no backend tests.
+- `npm test` covers the editor, Live Preview, and saves. Backend revision tests:
+  `python -m unittest discover -s tests/backend -v` (development dependencies).
   Verify by running `python run.py` and exercising the app on
   http://localhost:8000 (Swagger at `/api`).
 - Syncing upstream: take upstream unless it removes a fork feature; see

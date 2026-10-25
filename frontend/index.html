@@ -105,9 +105,6 @@
     <script src="/static/vendor/vis-network/vis-network.min.js"></script>
     <script src="/static/vendor/qrcode-generator/qrcode.min.js"></script>
     
-    <!-- Theme styles will be loaded dynamically -->
-    <link rel="stylesheet" id="theme-stylesheet" href="">
-    
     <!-- Shared with HTML export / public shares so they match the live preview -->
     <link rel="stylesheet" href="/static/markdown-preview.css?v=__APP_VERSION__">
     
@@ -1218,42 +1215,23 @@
             }
         }
     </style>
-    <!-- Obsidian theme defaults (patch) -->
-    <script>
-        if (!localStorage.getItem('noteDiscoveryTheme')) {
-            localStorage.setItem('noteDiscoveryTheme', 'obsidian');
-        }
-    </script>
-    <script>
-        if (!localStorage.getItem('theme')) {
-            localStorage.setItem('theme', 'obsidian');
-        }
-    </script>
+    <!-- A normal stylesheet supplies theme colors before first paint. The
+         parser waits for it; no synchronous theme XHR or CSS cache is needed. -->
+    <link rel="stylesheet" id="initial-theme" href="/api/themes/__DEFAULT_THEME__?raw=true&amp;v=__APP_VERSION__" blocking="render">
     <script>
         (function() {
-            var t = localStorage.getItem('noteDiscoveryTheme') || 'obsidian';
-            document.documentElement.setAttribute('data-theme', t);
+            const config = __THEME_BOOTSTRAP__;
+            let themeId = config.defaultTheme;
+            try {
+                const saved = localStorage.getItem('noteDiscoveryTheme');
+                if (config.themes.includes(saved)) themeId = saved;
+            } catch (e) { /* Storage may be unavailable; use the configured default. */ }
+            document.documentElement.setAttribute('data-theme', themeId);
+            const stylesheet = document.getElementById('initial-theme');
+            stylesheet.dataset.theme = themeId;
+            stylesheet.href = '/api/themes/' + encodeURIComponent(themeId) + '?raw=true&v=__APP_VERSION__';
         })();
     </script>
-
-    <!-- Theme critical CSS for initial render (obsidian dark) -->
-    <style id="theme-critical">
-        :root {
-            --bg-primary: #202020;
-            --bg-secondary: #161616;
-            --bg-tertiary: #252525;
-            --bg-hover: #2a2a2a;
-            --bg-active: #2d2d2d;
-            --text-primary: #dcddde;
-            --text-secondary: #999999;
-            --text-tertiary: #5c5c5c;
-            --border-primary: #333333;
-            --border-secondary: #2a2a2a;
-            --accent-primary: #555555;
-            --accent-hover: #666666;
-            --accent-light: rgba(85, 85, 85, 0.15);
-        }
-    </style>
 </head>
 <body x-data="noteApp()" x-init="init()" style="background-color: var(--bg-primary);" :class="{'zen-mode-active': zenMode}"
     @dragenter.window="onUploadDragEnter($event)"

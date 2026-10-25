@@ -511,7 +511,14 @@ def _render_app_name_html(content: str) -> str:
     worker, which breaks the page until a manual reload.
     """
     content = content.replace('__APP_NAME__', html_escape(config['app']['name'], quote=True))
-    return content.replace('__APP_VERSION__', version_token)
+    content = content.replace('__APP_VERSION__', version_token)
+    content = content.replace('__DEFAULT_THEME__', DEFAULT_THEME)
+    theme_config = {
+        'defaultTheme': DEFAULT_THEME,
+        'themes': [theme['id'] for theme in get_available_themes(str(THEMES_DIR))],
+    }
+    # JSON goes in an inline script: a custom theme filename must never end it.
+    return content.replace('__THEME_BOOTSTRAP__', json.dumps(theme_config).replace('<', '\\u003c'))
 
 
 def _render_app_name_json(content: str) -> str:
@@ -808,13 +815,15 @@ async def list_themes():
 
 
 @app.get("/api/themes/{theme_id}", tags=["Themes"]) # Don't use the router here, as we want this route unsecured
-async def get_theme(theme_id: str):
-    """Get CSS for a specific theme"""
+async def get_theme(theme_id: str, raw: bool = False):
+    """Get theme CSS as JSON, or a stylesheet for initial page rendering."""
     css = get_theme_css(str(THEMES_DIR), theme_id)
     
     if not css:
         raise HTTPException(status_code=404, detail="Theme not found")
     
+    if raw:
+        return Response(content=css, media_type="text/css", headers={"Cache-Control": "no-cache"})
     return {"css": css, "theme_id": theme_id}
 
 
@@ -1504,6 +1513,12 @@ async def list_notes(
         raise HTTPException(status_code=500, detail=safe_error_message(e, "Failed to list notes"))
 
 
+def note_content_hash(content: str) -> str:
+    """Hash stored text using the same newline normalization as text-mode reads."""
+    normalized = content.replace('\r\n', '\n').replace('\r', '\n')
+    return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+
+
 @api_router.get("/notes/{note_path:path}", tags=["Notes"])
 async def get_note(note_path: str, include_backlinks: bool = True):
     """Get a specific note's content with optional backlinks"""
@@ -1512,12 +1527,15 @@ async def get_note(note_path: str, include_backlinks: bool = True):
         if content is None:
             raise HTTPException(status_code=404, detail="Note not found")
 
+        stored_hash = note_content_hash(content)
+
         # Run on_note_load hook (can transform content, e.g., decrypt)
         content = plugin_manager.dispatch('on_note_load', note_path=note_path, content=content)
 
         response = {
             "path": note_path,
             "content": content,
+            "hash": stored_hash,
             "metadata": create_note_metadata(config['storage']['notes_dir'], note_path)
         }
         
@@ -1548,6 +1566,20 @@ async def create_or_update_note(request: Request, note_path: str, content: dict)
         # Check if this is a new note (doesn't exist yet)
         existing_content = get_note_content(config['storage']['notes_dir'], note_path)
         is_new_note = existing_content is None
+
+        # Optional revision check for editors. Clients omitting base_hash retain
+        # unconditional writes. A missing file also conflicts: do not resurrect
+        # a note deleted or moved since the editor loaded it.
+        base_hash = content.get('base_hash')
+        if base_hash is not None:
+            if not isinstance(base_hash, str) or not re.fullmatch(r'[0-9a-f]{64}', base_hash):
+                raise HTTPException(status_code=400, detail="Invalid base_hash")
+            current_hash = note_content_hash(existing_content) if existing_content is not None else None
+            if current_hash != base_hash:
+                return JSONResponse(status_code=409, content={
+                    "detail": "Note changed or was removed since it was loaded",
+                    "hash": current_hash,
+                })
         
         # If creating a new note, run on_note_create hook to allow plugins to modify initial content
         if is_new_note:
@@ -1569,7 +1601,8 @@ async def create_or_update_note(request: Request, note_path: str, content: dict)
             "success": True,
             "path": note_path,
             "message": "Note created successfully" if is_new_note else "Note saved successfully",
-            "content": note_content  # Return the (potentially modified) content
+            "content": note_content,  # Return the (potentially modified) content
+            "hash": note_content_hash(transformed_content)
         }
     except HTTPException:
         raise

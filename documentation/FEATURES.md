@@ -5,7 +5,11 @@
 ### Create & Edit
 - **Rich markdown editor** with live preview
 - **Three view modes**: Edit, Split, Preview
-- **Auto-save** - Never lose your work
+- Auto-save sends edits in order and marks only acknowledged content as saved.
+  Navigation waits for pending saves; failures keep unsaved edits in the editor.
+- Save conflict protection checks the loaded revision before writing. If another
+  client or tool changed the file, the existing banner offers Reload or Keep mine.
+  Cached tabs retain their revision alongside their content.
 - **Resume where you left off** - Editor scroll position is remembered per note within the session, so switching back to a long note returns you to the same spot
 - **Undo/Redo** - Ctrl+Z / Ctrl+Y support
 - **Note templates** - Create notes from templates with dynamic placeholders

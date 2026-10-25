@@ -337,11 +337,11 @@ test('external note changes auto-refresh only when the local note is pristine', 
     assert.equal((app.match(/_savedContent: ''/g) || []).length, 1);
     assert.match(
         app,
-        /acceptServerContentIfPristine\(serverContent, signature = ''\)[\s\S]*this\.noteContent !== this\._savedContent/
+        /acceptServerContentIfPristine\(serverContent, signature = '', hash = null\)[\s\S]*this\.noteContent !== this\._savedContent/
     );
     assert.match(app, /this\.replaceLivePreviewDocument\(serverContent, \{ resetHistory: true \}\)/);
-    assert.match(app, /if \(this\.acceptServerContentIfPristine\(serverContent, responseSignature\)\) return/);
-    assert.match(app, /if \(this\.acceptServerContentIfPristine\(data\.content, sig\)\) return/);
+    assert.match(app, /if \(this\.acceptServerContentIfPristine\(serverContent, responseSignature, data\.hash\)\) return/);
+    assert.match(app, /if \(this\.acceptServerContentIfPristine\(data\.content, sig, data\.hash\)\) return/);
 });
 
 test('a pristine auto-refresh preserves the reading position and announces itself', async () => {

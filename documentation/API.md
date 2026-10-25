@@ -953,3 +953,35 @@ All endpoints return JSON responses:
 
 💡 **Tip:** Visit `/api` for interactive Swagger UI documentation where you can try endpoints directly in your browser!
 
+
+## Note revision checks
+
+GET `/api/notes/{path}` returns `hash`, the SHA-256 of stored UTF-8 text with
+CRLF and CR normalized to LF, before `on_note_load` plugin transformations.
+Successful POST saves also return the hash of the stored text after save hooks.
+
+POST accepts optional `base_hash` alongside `content`. A valid hash must be 64
+lowercase hexadecimal characters. If it differs from the current stored text,
+or the file no longer exists, the server returns `409` without writing:
+
+```json
+{"detail": "Note changed or was removed since it was loaded", "hash": null}
+```
+
+The response hash is the current revision, or null when the note is missing.
+
+Fetch the note again before deciding whether to reload or overwrite. An overwrite
+can send the newly fetched hash; another intervening change will conflict again.
+Omitting `base_hash`, or sending null, preserves unconditional writes for scripts
+and existing MCP clients. A malformed hash returns `400`.
+
+This is an optimistic check, not a file lock. External processes can still write
+between the check and the write. PATCH operations and clients omitting a revision
+do not gain conflict protection.
+
+## Theme stylesheets
+
+GET `/api/themes/{theme_id}` retains its JSON response. Adding `?raw=true`
+returns the same CSS with `Content-Type: text/css` for the app and login page's
+early stylesheet. This endpoint remains public so the login screen can load
+its theme before authentication. Unknown or invalid theme IDs return `404`.

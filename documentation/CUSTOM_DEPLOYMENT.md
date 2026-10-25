@@ -97,7 +97,17 @@ Expect conflicts around these on future syncs.
 | D5 | Backlinks panel in `frontend/index.html` | One control per reference, no nested buttons |
 | D6 | `scripts/vendor_assets.py`, `scripts/vendor_lock.json`, `backend/export.py`, `documentation/THIRD_PARTY.md` | DOMPurify 3.4.15 instead of upstream's 3.0.8 (sanitizer bypass fixes). On future syncs keep whichever version is newer |
 | D7 | Homepage cards and list rows in `frontend/index.html` (`.homepage-star`) | A star next to delete: favorites for notes, starred folders for folders. The fork's own homepage redesign was retired for upstream's page in the v0.32.1 sync; this is the remaining glue |
+| D8 | Theme bootstrap in `frontend/index.html`, `frontend/login.html`, `frontend/app.js`, `backend/main.py`, `config.yaml` | Saved/configured theme loaded as an early stylesheet (`?raw=true`); Obsidian is the configuration default. Preserve request ordering and failure handling when syncing theme code |
 
 Fork-only glue with no upstream equivalent: Smart scroll sync is limited to the
 classic editor (Live Preview uses percentage sync), and Live Preview applies
 outside edits as a minimal change (`minimalReplacement`).
+
+### Save and path mutation behavior
+
+The fork sends revision hashes with editor saves, including cached tab loads,
+and reuses its conflict banner when the server rejects a stale write. Saves are
+serialized and acknowledge the submitted content. Navigation waits for pending
+saves and stays in the editor on failure. Rename and move wait for the server
+before changing local paths; typing during the operation is saved afterward.
+Preserve this integration when syncing upstream save or navigation changes.

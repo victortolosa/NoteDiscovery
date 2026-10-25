@@ -32,7 +32,7 @@ dependencies, no over-engineering.
   workflow is disabled on the fork.
 - **Syncing upstream into `custom`** (`git fetch upstream`, then merge `upstream/main`): take upstream by default; keep the fork's
   version only where upstream would remove a fork capability, keep that
-  divergence small, and list the caveats. Current divergences (D1-D7) and the
+  divergence small, and list the caveats. Current divergences (D1-D8) and the
   asset pipeline are recorded in
   [documentation/CUSTOM_DEPLOYMENT.md](documentation/CUSTOM_DEPLOYMENT.md); syncs
   are logged in `documentation/UPSTREAM_SYNC_<version>_PLAN.md` (latest: 0.32.1).
@@ -67,9 +67,10 @@ npm run check:frontend     # tests + minified Live Preview build
 docker-compose up          # build from source (docker-compose.ghcr.yml = prebuilt image)
 ```
 
-- `npm test` covers the editor and Live Preview only; there are no backend
-  tests. Verify behaviour by running the app and exercising the feature, or
-  via curl against the REST API. Swagger UI at `/api`.
+- `npm test` covers editor commands, Live Preview, and save/navigation behavior.
+  `python -m unittest discover -s tests/backend -v` checks note revision and theme handling
+  with a disposable vault (requires the development `httpx` dependency).
+  Also exercise the app or REST API for changed workflows. Swagger UI at `/api`.
 - Point `NOTES_DIR` at a disposable folder when testing destructive changes.
 - Auth is disabled by default locally, so all endpoints are open on :8000.
 - MCP smoke test: `python -m mcp_server` (needs the app running; env

@@ -4,7 +4,9 @@
 
 NoteDiscovery ships with **several built-in themes** (light and dark styles). Open **Settings → Theme** to browse what is available; your choice is saved automatically.
 
-To choose the theme shown to new browsers, set `ui.default_theme` in `config.yaml` to a theme ID (the CSS filename without `.css`). A theme previously selected in the browser is stored in `localStorage` and takes priority over this default.
+To choose the theme shown to new browsers, set `ui.default_theme` in `config.yaml` to a theme ID (the CSS filename without `.css`). This personal fork defaults to `obsidian`. A theme previously selected in the browser is stored in `localStorage` and takes priority over this default.
+
+The app and login page load the selected theme as a stylesheet before their first paint. Missing or removed saved themes fall back to the configured default. Theme startup does not add a synchronous XHR request.
 
 The set can grow over time—see the `themes/` folder in the repository for the current files. You can also add your own (see below) or override themes when self-hosting.
 
