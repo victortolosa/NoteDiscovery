@@ -3200,7 +3200,7 @@ function noteApp() {
         // banner if the server version differs from what the user currently sees.
         async _revalidateTabBackground(notePath) {
             try {
-                const response = await fetch(`/api/notes/${notePath}`);
+                const response = await fetch(`/api/notes/${encodeVaultPath(notePath)}`);
                 if (!response.ok) {
                     // Served from cache, but the note is gone on the server —
                     // deleted or renamed elsewhere since it was last opened.
@@ -3749,7 +3749,7 @@ function noteApp() {
             this._prefetchController = controller;
 
             try {
-                const response = await fetch(`/api/notes/${notePath}`, { signal: controller.signal });
+                const response = await fetch(`/api/notes/${encodeVaultPath(notePath)}`, { signal: controller.signal });
                 if (response.ok) {
                     const signature = response.headers.get('etag') || response.headers.get('last-modified') || '';
                     this._noteCache.set(notePath, { data: await response.json(), timestamp: Date.now(), signature });
@@ -6757,7 +6757,7 @@ function noteApp() {
                         reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
                         reader.readAsText(file, 'utf-8');
                     });
-                    const conflict = this.notes.some(n => n.path === path);
+                    const conflict = this.notePathTaken(path);
                     queue.push({ filename: file.name, path, content, conflict, resolution: 'overwrite' });
                 }
 
@@ -6795,7 +6795,7 @@ function noteApp() {
                 }
 
                 try {
-                    const response = await fetch(`/api/notes/${finalPath}`, {
+                    const response = await fetch(`/api/notes/${encodeVaultPath(finalPath)}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ content: item.content }),
@@ -7667,7 +7667,7 @@ function noteApp() {
 
             this._staleCheckInFlight = true;
             try {
-                const response = await fetch(`/api/notes/${notePath}`);
+                const response = await fetch(`/api/notes/${encodeVaultPath(notePath)}`);
                 if (!response.ok) return;
 
                 if (this.currentNote !== notePath) return;
